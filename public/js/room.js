@@ -168,15 +168,57 @@ function loadMyStream(force = false) {
   if (!force && id === loaded.streamId) return;
   const compat = Boolean(s?.notWebReady);
   loaded = { streamId: id, compat };
+  mediaProblem = null;
   player.load(s, compat ? { forceFallback: true, compat: true } : {});
+  renderCompatButton();
 }
 
 function startCompat() {
   const s = myStream();
   if (!s || loaded.compat) return;
   loaded.compat = true;
+  mediaProblem = null;
   toast('Uyumlu moda geçiliyor…');
   player.load(s, { forceFallback: true, compat: true });
+  renderCompatButton();
+}
+
+function stopCompat() {
+  const s = myStream();
+  if (!s || !loaded.compat) return;
+  loaded.compat = false;
+  mediaProblem = null;
+  toast('Normal moda dönülüyor…');
+  player.load(s, {});
+  renderCompatButton();
+}
+
+// Codec problems often fail silently: unsupported audio (AC3/DTS) plays
+// picture without sound, unsupported video (HEVC) plays sound without picture.
+let mediaProblem = null; // 'audio' | 'video' | null
+function detectMediaProblem() {
+  if (loaded.compat || video.paused || video.readyState < 3 || video.currentTime < 3) return;
+  let problem = null;
+  if (video.videoWidth === 0) problem = 'video';
+  else if ('webkitAudioDecodedByteCount' in video) {
+    if (video.webkitAudioDecodedByteCount === 0 && video.webkitVideoDecodedByteCount > 0) problem = 'audio';
+  } else if ('mozHasAudio' in video && !video.mozHasAudio) problem = 'audio';
+  if (problem === mediaProblem) return;
+  mediaProblem = problem;
+  renderCompatButton();
+  if (problem) toast(problem === 'audio' ? 'Ses gelmiyor gibi görünüyor.' : 'Görüntü gelmiyor gibi görünüyor.', 5000);
+}
+setInterval(detectMediaProblem, 2000);
+
+function renderCompatButton() {
+  const btn = $('#compat-btn');
+  const show = Boolean(player.stream()) && (loaded.compat || mediaProblem);
+  btn.hidden = !show;
+  btn.classList.toggle('active', loaded.compat);
+  btn.textContent = loaded.compat ? 'Normal moda dön' : 'Ses/görüntü sorunu mu?';
+  btn.title = loaded.compat
+    ? 'Dönüştürmeyi kapatıp videoyu doğrudan oynat'
+    : 'Uyumlu moda geç: Stremio videoyu tarayıcının açabileceği biçime dönüştürür';
 }
 
 function sendStatus() {
@@ -342,7 +384,7 @@ function renderControls() {
   $('#btn-play').disabled = !control;
   $('#seek').disabled = !control;
   $('#lock-hint').hidden = control;
-  $('#btn-compat').hidden = !player.stream() || loaded.compat;
+  renderCompatButton();
 }
 
 function updateHostUi() {
@@ -535,7 +577,7 @@ function toggleFullscreen() {
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
-$('#btn-compat').addEventListener('click', startCompat);
+$('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
 $('#banner-skip').addEventListener('click', async () => {
   const res = await request('skipWaiting');
   if (res?.error) toast(errorText(res.error));

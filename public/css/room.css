@@ -95,6 +95,12 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
   padding: 8px 14px; display: flex; gap: 10px; align-items: center; z-index: 3; max-width: calc(100% - 24px);
 }
 .banner button { padding: 4px 10px; font-size: 13px; }
+.compat-btn {
+  position: absolute; right: 12px; bottom: 64px; z-index: 3;
+  background: rgba(20, 20, 28, .92); border: 1px solid var(--warn); color: var(--warn);
+  border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+}
+.compat-btn.active { border-color: var(--line); color: var(--text); font-weight: 500; }
 .notice {
   position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
   background: rgba(0, 0, 0, .7); z-index: 2;

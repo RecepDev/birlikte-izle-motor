@@ -16,6 +16,9 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
   const originals = new WeakMap();
   let size = Number(storage.get('cueSize')) || 1;
   let bg = storage.get('cueBg') ?? '0.6';
+  // Personal vertical position: percent from the top where the cue ends; null = browser default.
+  const savedLine = storage.get('cueLine');
+  let line = savedLine === null || savedLine === '' ? null : Number(savedLine);
 
   function applyStyle() {
     playerEl.style.setProperty('--cue-size', `${size}em`);
@@ -44,6 +47,28 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
     }
   }
 
+  function applyLine() {
+    const cues = trackEl?.track?.cues;
+    if (!cues) return;
+    for (const cue of cues) {
+      if (line === null) {
+        cue.snapToLines = true;
+        cue.line = 'auto';
+      } else {
+        cue.snapToLines = false;
+        cue.line = line;
+        cue.lineAlign = 'end';
+      }
+    }
+  }
+
+  function moveLine(delta) {
+    line = delta === null ? null : Math.min(100, Math.max(10, (line ?? 90) + delta));
+    storage.set('cueLine', line === null ? '' : String(line));
+    applyLine();
+    render();
+  }
+
   function apply() {
     const eff = effective();
     if (eff.subId !== appliedId) {
@@ -52,13 +77,17 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
       appliedId = eff.subId;
       if (eff.subId && findSub(eff.subId)) {
         trackEl = el('track', { kind: 'subtitles', src: srcFor(eff.subId), srclang: 'tr', label: 'Altyazı' });
-        trackEl.addEventListener('load', () => shift(effective().offset));
+        trackEl.addEventListener('load', () => {
+          shift(effective().offset);
+          applyLine();
+        });
         trackEl.addEventListener('error', () => toast('Altyazı yüklenemedi.'));
         video.append(trackEl);
       }
       showOnly();
     }
     shift(eff.offset);
+    applyLine();
     render();
   }
 
@@ -150,6 +179,12 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
         el('button', { type: 'button', text: 'A−', onclick: () => { size = Math.max(0.6, size - 0.1); storage.set('cueSize', size); applyStyle(); } }),
         el('button', { type: 'button', text: 'A+', onclick: () => { size = Math.min(2.5, size + 0.1); storage.set('cueSize', size); applyStyle(); } }),
         el('button', { type: 'button', text: bg === '0' ? 'Arka plan: yok' : 'Arka plan: var', onclick: () => { bg = bg === '0' ? '0.6' : '0'; storage.set('cueBg', bg); applyStyle(); render(); } })),
+      el('div', { class: 'row' },
+        el('span', { class: 'muted small', text: 'Konum' }),
+        el('button', { type: 'button', text: '▲ Yukarı', title: 'Altyazıyı yukarı taşı', onclick: () => moveLine(-5) }),
+        el('button', { type: 'button', text: '▼ Aşağı', title: 'Altyazıyı aşağı taşı', onclick: () => moveLine(5) }),
+        el('span', { class: 'muted small', text: line === null ? 'otomatik' : `%${line}` }),
+        line === null ? null : el('button', { type: 'button', text: 'Sıfırla', onclick: () => moveLine(null) })),
       el('div', { class: 'row' },
         fileInput,
         el('button', { type: 'button', text: '📄 .srt / .vtt yükle', onclick: () => fileInput.click() }),
