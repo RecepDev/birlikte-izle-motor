@@ -337,15 +337,17 @@ function renderPictureInfo() {
   }
   const parts = [];
   const res = resolutionLabel(h);
-  parts.push(el('b', { text: `🎞 ${res}` }));
   const fileRes = s.quality === '2160p' ? '2160p (4K)' : s.quality;
-  if (fileRes && fileRes !== res) parts.push(`dosya ${fileRes}`);
   const srcCodec = s.videoRisk || null;
-  if (loaded.compat) {
-    const cq = compatQuality();
-    parts.push(cq?.reencoded ? `${srcCodec || 'video'} → H.264 (uyumlu mod, dönüştürülüyor)` : `${srcCodec || 'orijinal video'} (uyumlu mod, dönüştürülmeden)`);
-  } else if (srcCodec) {
-    parts.push(srcCodec);
+  const reencoded = loaded.compat && compatQuality()?.reencoded;
+  if (reencoded) {
+    // Converted: show both ends, e.g. "2160p (4K) HEVC → 1080p H.264".
+    parts.push(el('b', { text: `🎞 ${fileRes || '?'}${srcCodec ? ` ${srcCodec}` : ''} → ${res} H.264` }));
+    parts.push('uyumlu mod, dönüştürülüyor');
+  } else {
+    parts.push(el('b', { text: `🎞 ${res}${srcCodec ? ` ${srcCodec}` : ''}` }));
+    if (fileRes && fileRes !== res) parts.push(`dosya ${fileRes}`);
+    if (loaded.compat) parts.push('uyumlu mod, orijinal görüntü');
   }
   const need = requiredMbps(s.sizeBytes, player.duration());
   if (need) parts.push(`~${formatMbps(need)} Mbps`);
