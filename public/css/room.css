@@ -226,7 +226,7 @@ body.resizing video { pointer-events: none; }
 .emoji-panel button { border: none; background: transparent; font-size: 22px; padding: 4px; border-radius: 8px; }
 .emoji-panel button:hover { background: var(--panel); }
 
-.users, .quality { list-style: none; margin: 0; padding: 8px; overflow-y: auto; }
+.users, .quality { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; min-height: 0; }
 .users li, .quality li {
   display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px;
 }
@@ -250,7 +250,7 @@ body.resizing video { pointer-events: none; }
 .quality button { padding: 4px 8px; font-size: 12px; }
 .warning { white-space: pre-line; margin: 10px; padding: 10px; border-radius: 10px; background: #3a2a10; color: var(--warn); font-size: 13px; }
 
-.search-results { list-style: none; margin: 0; padding: 8px; overflow-y: auto; display: grid; gap: 6px; }
+.search-results { list-style: none; margin: 0; padding: 8px; overflow-y: auto; display: grid; gap: 6px; flex: 1; min-height: 0; }
 .search-results li { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
 .search-results li:hover { background: var(--panel-2); }
 .search-results img, .search-results .ph { width: 36px; height: 52px; object-fit: cover; border-radius: 4px; background: var(--panel-2); flex: none; }
@@ -265,7 +265,7 @@ body.resizing video { pointer-events: none; }
 .hdr-profiles button { padding: 4px 10px; font-size: 12px; border-radius: 999px; }
 .hdr-profiles button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-.subs { padding: 12px; overflow-y: auto; display: grid; gap: 12px; align-content: start; }
+.subs { padding: 12px; overflow-y: auto; display: grid; gap: 12px; align-content: start; flex: 1; min-height: 0; }
 .subs .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .subs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .subs li button { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 8px; }
