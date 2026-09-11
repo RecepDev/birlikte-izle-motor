@@ -133,6 +133,18 @@ test('hlsv2 converter requests for room torrents are proxied; playlists rewritte
   assert.equal(seg.status, 206);
 });
 
+test('4K conversion needs the host, or the room permission for guests', async () => {
+  const { room, host, a } = setup();
+  const key = room.requestRelay(a.id).reply.relayKey;
+  const hostKey = room.requestRelay(host.id).reply.relayKey;
+  const caps4k = { ...CAPS, maxWidth: 3840 };
+  assert.equal((await fetch(hlsUrl(room, key, 'master.m3u8', { caps: caps4k }))).status, 403);
+  assert.equal((await fetch(hlsUrl(room, hostKey, 'master.m3u8', { caps: caps4k }))).status, 200);
+  room.updateSettings(host.id, { relay4k: true });
+  assert.equal((await fetch(hlsUrl(room, key, 'master.m3u8', { caps: caps4k }))).status, 200);
+  assert.equal((await fetch(hlsUrl(room, key, 'master.m3u8', { caps: { ...CAPS, maxWidth: 7680 } }))).status, 403);
+});
+
 test('hlsv2 requests that do not match a room torrent never reach Stremio', async () => {
   const { room, a } = setup();
   const key = room.requestRelay(a.id).reply.relayKey;

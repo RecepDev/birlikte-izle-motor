@@ -12,6 +12,7 @@ import {
   hlsV2Query,
   HLS_VIDEO_CODECS,
   HLS_AUDIO_CODECS,
+  HLS_4K_WIDTH,
 } from '../public/js/shared/stream-url.js';
 
 const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'];
@@ -19,11 +20,12 @@ const STATS_EVERY_MS = 2000;
 
 // Paths Stremio's HLS converter serves under /hlsv2/<id>/.
 const HLSV2_TAIL = /^(?:(?:master|video\d+|audio\d+|subtitle\d+)\.m3u8|(?:video|audio)\d+\/init\.mp4|(?:video|audio|subtitle)\d+\/segment\d+\.(?:m4s|vtt))$/;
-const HLSV2_KEYS = new Set(['mediaURL', 'videoCodecs', 'audioCodecs']);
+const HLSV2_KEYS = new Set(['mediaURL', 'videoCodecs', 'audioCodecs', 'maxWidth']);
 
 // Accepts a converter request only when it is exactly the one this app would
-// build for a torrent in this room. Returns { stream, query } or null.
-export function validateHlsV2(room, convertId, tail, rawQuery, stremioBase = STREMIO_BASE) {
+// build for a torrent in this room. 4K conversion (maxWidth) loads the host
+// PC, so it needs allow4k. Returns { stream, query } or null.
+export function validateHlsV2(room, convertId, tail, rawQuery, stremioBase = STREMIO_BASE, { allow4k = false } = {}) {
   if (!HLSV2_TAIL.test(tail || '')) return null;
   const q = new URLSearchParams(rawQuery);
   for (const k of q.keys()) if (!HLSV2_KEYS.has(k)) return null;
@@ -43,7 +45,10 @@ export function validateHlsV2(room, convertId, tail, rawQuery, stremioBase = STR
     (s) => s.kind === 'torrent' && s.infoHash === m[1] && torrentPath(s) === `/${m[1]}/${m[2]}`,
   );
   if (!stream) return null;
+  const maxWidth = q.getAll('maxWidth');
+  if (maxWidth.length > 1 || (maxWidth.length && (maxWidth[0] !== String(HLS_4K_WIDTH) || !allow4k))) return null;
   const caps = { videoCodecs: q.getAll('videoCodecs'), audioCodecs: q.getAll('audioCodecs') };
+  if (maxWidth.length) caps.maxWidth = HLS_4K_WIDTH;
   if (!caps.videoCodecs.length || !caps.videoCodecs.every((c) => HLS_VIDEO_CODECS.includes(c))) return null;
   if (!caps.audioCodecs.length || !caps.audioCodecs.every((c) => HLS_AUDIO_CODECS.includes(c))) return null;
   if (convertId !== hlsConvertId(stream, caps)) return null;
@@ -160,7 +165,9 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
     if (!auth) return;
     const tail = req.params[0];
     const rawQuery = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?') + 1) : '';
-    const ok = validateHlsV2(auth.room, req.params.convertId, tail, rawQuery, stremioBase);
+    // The host converts on its own PC anyway; guests need the host's permission.
+    const allow4k = auth.user.id === auth.room.hostUserId || auth.room.settings.relay4k === true;
+    const ok = validateHlsV2(auth.room, req.params.convertId, tail, rawQuery, stremioBase, { allow4k });
     if (!ok) return res.status(403).end();
     if (tail === 'master.m3u8') warmTorrent(ok.stream);
     const prefix = `/relay/${req.params.roomId}/${req.params.key}/hlsv2/`;

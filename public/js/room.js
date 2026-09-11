@@ -9,7 +9,7 @@ import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
 import { requiredMbps, runSpeedTest, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
-import { STREMIO_BASE, torrentPath, hlsV2Path } from './shared/stream-url.js';
+import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH } from './shared/stream-url.js';
 import { browserCodecs } from './codecs.js';
 
 // ---- identity --------------------------------------------------------------
@@ -115,24 +115,37 @@ async function relayAlive(key) {
 
 // Compatibility mode: Stremio's HLS converter, told which codecs this browser
 // decodes so it only converts what is needed (often just the audio).
+// 4K conversion (instead of Stremio's 1080p cap) runs on whoever's Stremio
+// converts: allowed on your own PC by your choice, on the host PC only with
+// the host's permission.
+let allow4k = storage.get('allow4k') === '1';
+let compat4k = false;
+function capsFor(onHostPc) {
+  const caps = browserCodecs(video);
+  if (allow4k && (!onHostPc || isHost() || state.room.settings.relay4k)) caps.maxWidth = HLS_4K_WIDTH;
+  compat4k = Boolean(caps.maxWidth);
+  return caps;
+}
+
 async function compatSource(stream) {
   const nativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== '';
-  const path = hlsV2Path(stream, browserCodecs(video));
   if (stream.kind === 'http') {
     // Only the viewer's own Stremio can convert a plain link, and only for native HLS players.
-    if (nativeHls && (await isStremioUp())) return { url: `${STREMIO_BASE}${path}`, source: 'http', hls: true, native: true };
+    if (nativeHls && (await isStremioUp())) {
+      return { url: `${STREMIO_BASE}${hlsV2Path(stream, capsFor(false))}`, source: 'http', hls: true, native: true };
+    }
     return null;
   }
   // Native HLS needs no CORS, so guests can use their own Stremio.
   if (!isHost() && nativeHls && (await isStremioUp())) {
-    return { url: `${STREMIO_BASE}${path}`, source: 'local', hls: true, native: true };
+    return { url: `${STREMIO_BASE}${hlsV2Path(stream, capsFor(false))}`, source: 'local', hls: true, native: true };
   }
   // The host's "relay" is its own Stremio, so it only helps when that is running.
   if (isHost() && !(await isStremioUp())) return null;
   const key = await ensureRelay();
   if (!key || (!isHost() && !(await relayAlive(key)))) return null;
   const source = isHost() ? 'local' : 'relay';
-  const url = `/relay/${roomId}/${key}${path}`;
+  const url = `/relay/${roomId}/${key}${hlsV2Path(stream, capsFor(true))}`;
   if (nativeHls) return { url, source, hls: true, native: true };
   await loadHls().catch(() => {});
   return window.Hls?.isSupported() ? { url, source, hls: true } : null;
@@ -232,9 +245,12 @@ function compatQuality() {
   const is4k = s.quality === '2160p';
   const downscaled = is4k && video.videoHeight > 0 && video.videoHeight <= 1100;
   if (!reencoded && !downscaled) return { reencoded: false, text: null };
+  const down = is4k && (downscaled || !compat4k);
   return {
     reencoded: true,
-    text: `ℹ️ Uyumlu mod: görüntü dönüştürülüyor${is4k ? ' (4K → 1080p)' : ''}, kalite biraz düşük. Daha iyi görüntü için ⚠️ işaretsiz (x264) bir dosya seç.`,
+    text: `ℹ️ Uyumlu mod: görüntü dönüştürülüyor${down ? ' (4K → 1080p)' : ''}, kalite biraz düşük. `
+      + (down ? 'Kalite sekmesinden 4K dönüştürmeye izin verebilir ya da ' : 'Daha iyi görüntü için ')
+      + '⚠️ işaretsiz (x264) bir dosya seçebilirsin.',
   };
 }
 
@@ -663,9 +679,13 @@ socket.on('hostSubtitle', (sel) => {
 });
 
 socket.on('settings', (s) => {
+  const relay4kChanged = s.relay4k !== state.room.settings.relay4k;
   state.room.settings = s;
   updateHostUi();
   renderNotice();
+  renderAllow4k();
+  // A relay viewer's 4K conversion depends on the host's permission.
+  if (relay4kChanged && allow4k && player.status().source === 'relay') reloadCompat4k();
 });
 
 socket.on('hostChanged', ({ hostUserId }) => {
@@ -776,6 +796,30 @@ video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
 $('#speedtest-btn').addEventListener('click', startSpeedTest);
 $('#quality-info').addEventListener('click', () => selectTab('quality'));
+
+// ---- 4K conversion option ----
+function reloadCompat4k() {
+  const s = myStream();
+  if (!s || !loaded.compat || s.quality !== '2160p') return;
+  player.load(s, { forceFallback: true, compat: true });
+}
+
+function renderAllow4k() {
+  $('#allow-4k').checked = allow4k;
+  const viaRelay = player.status().source === 'relay';
+  $('#allow-4k-note').textContent = !allow4k
+    ? "Kapalıyken uyumlu modda 4K görüntü 1080p'ye düşürülür. Normal modu etkilemez."
+    : viaRelay && !state.room?.settings.relay4k
+      ? "Relay'den izliyorsun: dönüştürme host'un bilgisayarında yapıldığı için host'un da izin vermesi gerekir. Şimdilik 1080p."
+      : 'Uyumlu modda 4K korunur. Dönüştürme ekran kartını çok yorar; video takılırsa kapat.';
+}
+$('#allow-4k').addEventListener('change', (e) => {
+  allow4k = e.target.checked;
+  storage.set('allow4k', allow4k ? '1' : '0');
+  renderAllow4k();
+  reloadCompat4k();
+});
+renderAllow4k();
 // ---- resizable side panel (desktop) ----
 const SIDE_DEFAULT = 360;
 const SIDE_MIN = 260;
@@ -878,6 +922,7 @@ $('#open-settings').addEventListener('click', () => {
   for (const r of dialog.querySelectorAll('input[name="waitMode"]')) r.checked = r.value === s.waitMode;
   $('#set-relay').checked = s.relayEnabled;
   $('#set-relay-limit').value = String(s.relayLimit);
+  $('#set-relay4k').checked = Boolean(s.relay4k);
   dialog.showModal();
 });
 dialog.addEventListener('change', async () => {
@@ -886,6 +931,7 @@ dialog.addEventListener('change', async () => {
     waitMode: dialog.querySelector('input[name="waitMode"]:checked')?.value,
     relayEnabled: $('#set-relay').checked,
     relayLimit: Math.max(0, Math.min(10, Number($('#set-relay-limit').value) || 0)),
+    relay4k: $('#set-relay4k').checked,
   });
   if (res?.error) toast(errorText(res.error));
 });

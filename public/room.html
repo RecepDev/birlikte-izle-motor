@@ -116,6 +116,10 @@
             <button id="speedtest-btn" type="button">⚡ Hız testi yap</button>
             <p id="speedtest-result" class="muted small">İnternet hızın bu dosyaya yetiyor mu, ölçüp görebilirsin.</p>
           </div>
+          <div class="speedtest">
+            <label class="check"><input type="checkbox" id="allow-4k"> <span>4K dönüştürmeye izin ver</span></label>
+            <p id="allow-4k-note" class="muted small"></p>
+          </div>
           <div id="quality-warning" class="warning" hidden></div>
           <ul id="quality-list" class="quality"></ul>
         </div>
@@ -139,6 +143,7 @@
         <legend>Host üzerinden izle (relay)</legend>
         <label class="check"><input type="checkbox" id="set-relay"> <span>Stremio'su olmayanlar benim bilgisayarımdan izleyebilsin</span></label>
         <label class="field inline"><span>Kişi sınırı</span> <input type="number" id="set-relay-limit" min="0" max="10"></label>
+        <label class="check"><input type="checkbox" id="set-relay4k"> <span>Relay'den izleyenler 4K dönüştürebilsin (uyumlu modda bilgisayarını ve upload'unu çok yorar)</span></label>
         <p class="muted small">Relay senin upload hızını kullanır. 1080p kişi başı yaklaşık 5–10 Mbps ister.</p>
       </fieldset>
       <div class="dialog-actions">

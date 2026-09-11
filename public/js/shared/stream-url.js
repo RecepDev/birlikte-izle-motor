@@ -42,8 +42,10 @@ function fnv1a(text) {
 
 // Converter ids are bound to the stream and codec set, so a relay request can
 // never reach a converter created for something else (e.g. Stremio's own app).
+export const HLS_4K_WIDTH = 3840;
+
 export function hlsConvertId(stream, caps) {
-  const capsKey = fnv1a(`${caps.videoCodecs.join(',')}|${caps.audioCodecs.join(',')}`);
+  const capsKey = fnv1a(`${caps.videoCodecs.join(',')}|${caps.audioCodecs.join(',')}|${caps.maxWidth || ''}`);
   const source = stream.kind === 'torrent'
     ? `${stream.infoHash}-${Number.isInteger(stream.fileIdx) ? stream.fileIdx : 'x'}`
     : `url-${fnv1a(stream.url)}`;
@@ -58,6 +60,8 @@ export function hlsV2Query(stream, caps, base = STREMIO_BASE) {
   const q = new URLSearchParams({ mediaURL: hlsMediaUrl(stream, base) });
   for (const c of caps.videoCodecs) q.append('videoCodecs', c);
   for (const c of caps.audioCodecs) q.append('audioCodecs', c);
+  // Stremio caps converted video at 1920 px wide unless told otherwise.
+  if (caps.maxWidth) q.set('maxWidth', String(caps.maxWidth));
   return q;
 }
 
