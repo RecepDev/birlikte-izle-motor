@@ -7,7 +7,7 @@ import { createPlayer, isStremioUp } from './player.js';
 import { createChat } from './chat.js';
 import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
-import { requiredMbps, runSpeedTest, createDownloadMeter } from './bandwidth.js';
+import { requiredMbps, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
 import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS } from './shared/stream-url.js';
 import { langLabel } from './shared/subtitle-text.js';
@@ -244,6 +244,7 @@ function loadMyStream(force = false) {
   player.load(qualityBlocked ? null : s, compat ? { forceFallback: true, compat: true } : {});
   renderCompatButton();
   renderNotice();
+  applyPic();
 }
 
 function startCompat({ allowReencode = false } = {}) {
@@ -558,9 +559,6 @@ function renderUsersTab() {
 }
 
 let mismatchWarned = false;
-// ---- on-demand speed test vs. file bitrate ----
-let measuredMbps = null;
-let speedTesting = false;
 
 // All streams are the same title, so one duration (ours or the host's) fits all.
 function contentDuration() {
@@ -568,51 +566,6 @@ function contentDuration() {
   if (own) return own;
   const host = state.room?.users.find((u) => u.id === state.room.hostUserId);
   return Number.isFinite(host?.status?.duration) ? host.status.duration : null;
-}
-
-function renderSpeedResult() {
-  const box = $('#speedtest-result');
-  if (speedTesting || measuredMbps === null) return;
-  const need = requiredMbps(myStream()?.sizeBytes, contentDuration());
-  const lines = [`İnternet hızın: ~${formatMbps(measuredMbps)} Mbps`];
-  let cls = '';
-  if (need === null) {
-    lines.push('İzlediğin dosyanın ihtiyacı henüz hesaplanamadı (boyutu ya da süresi bilinmiyor).');
-  } else if (measuredMbps >= need * 1.3) {
-    lines.push(`✅ Yeterli. Bu dosya ~${formatMbps(need)} Mbps istiyor.`);
-    cls = 'ok';
-  } else {
-    lines.push(`⚠️ Yetmeyebilir. Bu dosya ~${formatMbps(need)} Mbps istiyor, video donabilir. ⚠️ işaretli olmayan daha küçük bir dosya seç.`);
-    cls = 'bad';
-  }
-  if (player.status().source === 'relay') lines.push("Host üzerinden izliyorsun: asıl sınır host'un upload hızı olabilir.");
-  else if (myStream()?.kind === 'torrent') lines.push('Torrent\'te hız kaynak (seed) sayısına da bağlıdır.');
-  box.className = `small ${cls || 'muted'}`;
-  box.textContent = lines.join('\n');
-}
-
-async function startSpeedTest() {
-  const btn = $('#speedtest-btn');
-  const box = $('#speedtest-result');
-  speedTesting = true;
-  btn.disabled = true;
-  box.className = 'muted small';
-  box.textContent = 'Ölçülüyor… (~10 sn)';
-  try {
-    measuredMbps = await runSpeedTest({
-      onProgress: (mbps) => { box.textContent = `Ölçülüyor… ~${formatMbps(mbps)} Mbps`; },
-    });
-    speedTesting = false;
-    renderSpeedResult();
-    renderQualityTab();
-  } catch {
-    speedTesting = false;
-    box.className = 'small bad';
-    box.textContent = 'Hız testi yapılamadı. İnternet bağlantını kontrol edip tekrar dene.';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '⚡ Hız testini tekrarla';
-  }
 }
 
 // Whether this browser shows a stream's picture in original quality.
@@ -659,10 +612,8 @@ function renderQualityTab() {
       if (res?.error) toast(errorText(res.error));
     },
     needFor: (s) => requiredMbps(s.sizeBytes, contentDuration()),
-    have: measuredMbps,
     pictureFor: (s) => pictureVerdict(s),
   });
-  renderSpeedResult();
   const host = state.room.users.find((u) => u.id === state.room.hostUserId);
   const mine = me();
   const mismatch = Boolean(mine && host && mine.id !== host.id && durationMismatch(mine, host));
@@ -996,7 +947,6 @@ function toggleFullscreen() {
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
-$('#speedtest-btn').addEventListener('click', startSpeedTest);
 $('#quality-info').addEventListener('click', () => selectTab('quality'));
 
 // ---- 4K conversion option ----
@@ -1051,20 +1001,31 @@ checkHardware().then((result) => {
 });
 
 // ---- picture adjustment (brightness / contrast / colour), per viewer ----
+// Kept as two separate sets (SDR vs HDR): HDR usually needs a different
+// brightness/colour than SDR, so switching content shouldn't fight the other mode's setting.
 const PIC_KEYS = { b: 'brightness', c: 'contrast', s: 'saturate' };
 const pic = {};
-for (const k of Object.keys(PIC_KEYS)) {
-  const saved = Number(storage.get(`pic${k.toUpperCase()}`));
-  pic[k] = Number.isFinite(saved) && saved > 0 ? saved : 1;
+let picMode = null;
+function loadPic(mode) {
+  for (const k of Object.keys(PIC_KEYS)) {
+    const saved = Number(storage.get(`pic${k.toUpperCase()}_${mode}`));
+    pic[k] = Number.isFinite(saved) && saved > 0 ? saved : 1;
+  }
 }
 function applyPic() {
+  const mode = myStream()?.hdr ? 'HDR' : 'SDR';
+  if (mode !== picMode) {
+    picMode = mode;
+    loadPic(picMode);
+  }
   const changed = Object.keys(PIC_KEYS).some((k) => pic[k] !== 1);
   video.style.filter = changed ? Object.entries(PIC_KEYS).map(([k, fn]) => `${fn}(${pic[k]})`).join(' ') : '';
   for (const k of Object.keys(PIC_KEYS)) {
     $(`#pic-${k}`).value = String(pic[k]);
     $(`#pic-${k}-val`).textContent = `%${Math.round(pic[k] * 100)}`;
-    storage.set(`pic${k.toUpperCase()}`, String(pic[k]));
+    storage.set(`pic${k.toUpperCase()}_${picMode}`, String(pic[k]));
   }
+  $('#pic-mode-label').textContent = picMode === 'HDR' ? 'HDR' : 'SDR';
 }
 for (const k of Object.keys(PIC_KEYS)) {
   $(`#pic-${k}`).addEventListener('input', (e) => {

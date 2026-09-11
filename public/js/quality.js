@@ -7,8 +7,8 @@ export function streamLabel(s) {
 
 export const formatMbps = (v) => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toString();
 
-// needFor(stream) -> Mbps the file needs (or null); have -> measured Mbps (or null).
-export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onPickHost, needFor = () => null, have = null, pictureFor = () => null }) {
+// needFor(stream) -> Mbps the file needs (or null).
+export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onPickHost, needFor = () => null, pictureFor = () => null }) {
   const items = room.streams.map((s) => {
     const isHostStream = s.streamId === room.hostStreamId;
     const isMine = s.streamId === myStreamId;
@@ -16,7 +16,6 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
     const title = String(s.title || s.name).split('\n')[0];
     const info = [s.addonName, title].filter(Boolean).join(' · ');
     const need = needFor(s);
-    const heavy = need !== null && have !== null && need > have * 0.95;
     const buttons = [];
     if (!isMine) {
       const label = isHostStream ? "Host'unkine dön" : 'Ben bunu izleyeyim';
@@ -45,7 +44,7 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
       'li',
       { class: isMine ? 'current' : '' },
       el('span', { class: 'q' }, s.quality || '?',
-        need !== null ? el('div', { class: `need${heavy ? ' heavy' : ''}`, text: `~${formatMbps(need)} Mbps${heavy ? ' ⚠️' : ''}`, title: heavy ? 'İndirme hızın bu dosyaya yetmeyebilir' : 'Akıcı izlemek için gereken indirme hızı' }) : null,
+        need !== null ? el('div', { class: 'need', text: `~${formatMbps(need)} Mbps`, title: 'Akıcı izlemek için gereken indirme hızı' }) : null,
         Number.isFinite(s.seeders) ? el('div', { class: 'need', text: `👤 ${s.seeders}`, title: 'Torrent kaynak (seed) sayısı' }) : null,
         s.sizeBytes ? el('div', { class: 'need', text: `💾 ${formatSize(s.sizeBytes)}`, title: 'Dosya boyutu' }) : null),
       el('div', { class: 'info' },

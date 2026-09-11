@@ -131,7 +131,6 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .seek:disabled::-moz-range-thumb { background: #999; }
 .speedtest { display: grid; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .speedtest p { margin: 0; line-height: 1.45; white-space: pre-line; }
-.speedtest .ok { color: var(--ok); }
 .pic-adjust { display: grid; gap: 4px; }
 .slider { display: grid; grid-template-columns: 70px 1fr 46px; align-items: center; gap: 8px; font-size: 13px; }
 .slider span { color: var(--muted); }
@@ -154,9 +153,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .info-i:hover::before, .info-i:focus-visible::before { color: #fff; }
 .quality .pics { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
 .quality .pics span.ic { font-size: 14px; }
-.speedtest .bad { color: var(--warn); }
 .quality .need { font-size: 11px; color: var(--muted); }
-.quality .heavy { color: var(--warn); }
 .quality .okline { color: var(--ok); }
 .volume { width: 80px; accent-color: var(--accent); }
 .banner {
