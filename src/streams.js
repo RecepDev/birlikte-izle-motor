@@ -54,6 +54,11 @@ export function parseMultiAudio(text) {
   if (/dual[\s.-]?audio|multi[\s.-]?audio|\b2\s?audio\b/i.test(t)) return true;
   if (/dublaj/i.test(t)) return true;
   if (/\b(tr|tur)\s*[+/&]\s*(en|eng)\b|\b(en|eng)\s*[+/&]\s*(tr|tur)\b/i.test(t)) return true;
+  // Russian-scene release convention (HDRezka etc.): a named dub/voice-over
+  // track listed alongside "Original" ("MVO + Original") means 2+ audio tracks.
+  if (/\b(mvo|dvo|avo)\b/i.test(t)) return true;
+  if (/\+\s*original\b|\boriginal\s*\+/i.test(t)) return true;
+  if (/дубляж|многоголос|двухголос|одноголос/i.test(t)) return true;
   return false;
 }
 

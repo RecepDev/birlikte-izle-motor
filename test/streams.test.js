@@ -100,6 +100,7 @@ test('parseMultiAudio spots dual-audio / dublaj release names', () => {
   assert.equal(parseMultiAudio('Movie.2024.1080p.Dual.Audio.x264'), true);
   assert.equal(parseMultiAudio('Film 1080p Türkçe Dublaj'), true);
   assert.equal(parseMultiAudio('Movie 1080p TR+EN'), true);
+  assert.equal(parseMultiAudio('Silo / Сезон: 3 [2160p] MVO (HDRezka Studio) + Original + Sub (Rus Ukr Eng Heb)'), true);
   assert.equal(parseMultiAudio('Movie.1080p.WEBRip.x264'), false);
 });
 
