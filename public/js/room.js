@@ -195,9 +195,10 @@ function loadMyStream(force = false) {
   const compat = Boolean(s?.notWebReady) && !(keepQuality && videoNeedsReencode(s));
   loaded = { streamId: id, compat };
   mediaProblem = null;
-  qualityBlocked = false;
   reencodeAllowed = false;
-  player.load(s, compat ? { forceFallback: true, compat: true } : {});
+  // Known undecodable picture in quality mode: ask before downloading anything.
+  qualityBlocked = Boolean(s) && keepQuality && videoNeedsReencode(s);
+  player.load(qualityBlocked ? null : s, compat ? { forceFallback: true, compat: true } : {});
   renderCompatButton();
   renderNotice();
 }

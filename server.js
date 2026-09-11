@@ -200,4 +200,4 @@ log.info('Birlikte İzle çalışıyor', {
   panel: `${PANEL_BASE}/`,
   eklenti: `${PUBLIC_BASE}/manifest.json`,
 });
-tunnel.start();
+if (!process.env.NO_TUNNEL) tunnel.start(); // NO_TUNNEL=1 for local test instances
