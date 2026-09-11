@@ -118,7 +118,7 @@ async function relayAlive(key) {
 // 4K conversion (instead of Stremio's 1080p cap) runs on whoever's Stremio
 // converts: allowed on your own PC by your choice, on the host PC only with
 // the host's permission.
-let allow4k = storage.get('allow4k') === '1';
+let allow4k = storage.get('allow4k') !== '0'; // on unless the viewer turned it off
 let compat4k = false;
 function capsFor(onHostPc) {
   const caps = browserCodecs(video);
