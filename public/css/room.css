@@ -257,6 +257,10 @@ body.resizing video { pointer-events: none; }
 .search-results .info { flex: 1; min-width: 0; font-size: 13px; }
 .search-results .name { font-weight: 600; }
 .search-results .year { color: var(--muted); font-size: 12px; }
+.search-back { margin: 8px; align-self: flex-start; padding: 4px 10px; font-size: 13px; }
+.season-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 8px 8px; }
+.season-tabs button { padding: 4px 10px; font-size: 12px; border-radius: 999px; }
+.season-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 .subs { padding: 12px; overflow-y: auto; display: grid; gap: 12px; align-content: start; }
 .subs .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

@@ -80,5 +80,6 @@ export const ERROR_TEXT = {
   hostStremioDown: 'Host\'un Stremio\'su şu an kapalı.',
   badContent: 'Geçersiz içerik.',
   noStreams: 'Bu içerik için hiç stream bulunamadı.',
+  noEpisodes: 'Bölüm listesi alınamadı.',
 };
 export const errorText = (code) => ERROR_TEXT[code] || `Hata: ${code}`;

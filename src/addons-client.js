@@ -92,6 +92,14 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
       }
     },
 
+    // Season/episode list for a series (Cinemeta's `videos` array), for the episode picker.
+    async seriesEpisodes(id) {
+      const { meta } = await getJson(`${CINEMETA}/meta/series/${id}.json`, metaTimeoutMs);
+      return (meta?.videos || [])
+        .filter((v) => Number.isInteger(v.season) && Number.isInteger(v.episode))
+        .map((v) => ({ season: v.season, episode: v.episode, name: v.name || v.title || `Bölüm ${v.episode}` }));
+    },
+
     async meta(type, id) {
       const [imdbId, season, episode] = id.split(':');
       try {

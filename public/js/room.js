@@ -966,7 +966,67 @@ $('#quality-info').addEventListener('click', () => selectTab('quality'));
 
 // ---- content search (host only): switch the room to a different title ----
 let searchSeq = 0;
+let lastSearchResults = [];
+
+async function pickContent(type, id, item) {
+  if (item.classList.contains('loading')) return;
+  item.classList.add('loading');
+  const prevText = item.querySelector('.name').textContent;
+  item.querySelector('.name').textContent = `${prevText} — yükleniyor…`;
+  const res = await request('changeContent', { type, id });
+  if (res?.error) {
+    toast(errorText(res.error));
+    item.classList.remove('loading');
+    item.querySelector('.name').textContent = prevText;
+  }
+}
+
+async function openEpisodePicker(series) {
+  const box = $('#search-results');
+  box.replaceChildren(el('li', { class: 'muted', text: 'Bölümler yükleniyor…' }));
+  const res = await request('seriesEpisodes', { id: series.id });
+  if (res?.error) {
+    toast(errorText(res.error));
+    return renderSearchResults(lastSearchResults);
+  }
+  const bySeason = new Map();
+  for (const ep of res.episodes) {
+    if (!bySeason.has(ep.season)) bySeason.set(ep.season, []);
+    bySeason.get(ep.season).push(ep);
+  }
+  const seasons = [...bySeason.keys()].sort((a, b) => (a === 0 ? 1 : b === 0 ? -1 : a - b));
+  let currentSeason = seasons.find((s) => s !== 0) ?? seasons[0];
+
+  const back = el('button', { type: 'button', class: 'search-back', text: `◀ ${series.name}` });
+  back.addEventListener('click', () => renderSearchResults(lastSearchResults));
+  const seasonTabs = el('div', { class: 'season-tabs' });
+  const list = el('ul', { class: 'search-results' });
+
+  function renderEpisodes() {
+    for (const b of seasonTabs.children) b.classList.toggle('active', Number(b.dataset.season) === currentSeason);
+    list.replaceChildren(...bySeason.get(currentSeason).map((ep) => {
+      const item = el(
+        'li',
+        {},
+        el('div', { class: 'info' },
+          el('div', { class: 'name', text: `${ep.episode}. ${ep.name}` }),
+          el('div', { class: 'year', text: currentSeason === 0 ? 'Özel' : `Sezon ${currentSeason}` })),
+      );
+      item.addEventListener('click', () => pickContent('series', `${series.id}:${ep.season}:${ep.episode}`, item));
+      return item;
+    }));
+  }
+  seasonTabs.replaceChildren(...seasons.map((s) => {
+    const b = el('button', { type: 'button', text: s === 0 ? 'Özel' : `S${s}`, 'data-season': String(s) });
+    b.addEventListener('click', () => { currentSeason = s; renderEpisodes(); });
+    return b;
+  }));
+  renderEpisodes();
+  box.replaceChildren(back, seasonTabs, list);
+}
+
 function renderSearchResults(results) {
+  lastSearchResults = results;
   const box = $('#search-results');
   if (!results.length) {
     box.replaceChildren(el('li', { class: 'muted', text: $('#search-input').value.trim() ? 'Sonuç yok.' : 'Aramak için yaz.' }));
@@ -981,18 +1041,7 @@ function renderSearchResults(results) {
         el('div', { class: 'name', text: r.name }),
         el('div', { class: 'year', text: [r.type === 'series' ? 'Dizi' : 'Film', r.year].filter(Boolean).join(' · ') })),
     );
-    item.addEventListener('click', async () => {
-      if (item.classList.contains('loading')) return;
-      item.classList.add('loading');
-      const prevText = item.querySelector('.name').textContent;
-      item.querySelector('.name').textContent = `${prevText} — yükleniyor…`;
-      const res = await request('changeContent', { type: r.type, id: r.id });
-      if (res?.error) {
-        toast(errorText(res.error));
-        item.classList.remove('loading');
-        item.querySelector('.name').textContent = prevText;
-      }
-    });
+    item.addEventListener('click', () => (r.type === 'series' ? openEpisodePicker(r) : pickContent(r.type, r.id, item)));
     return item;
   }));
 }
