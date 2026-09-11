@@ -34,6 +34,14 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
   }, STATS_EVERY_MS);
   timer.unref?.();
 
+  // Stremio's transcoder opens the torrent without our trackers; touching the
+  // plain URL first registers the torrent with them.
+  function warmTorrent(stream) {
+    const req = http.get(localTorrentUrl(stream, stremioBase), { headers: { range: 'bytes=0-0' } }, (r) => r.resume());
+    req.on('error', () => {});
+    req.setTimeout(10_000, () => req.destroy());
+  }
+
   function handle(req, res) {
     const { roomId, key, infoHash, fileIdx } = req.params;
     const tail = req.params[0];
@@ -47,6 +55,7 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
     );
     if (!stream) return res.status(403).end();
 
+    if (tail === 'hls.m3u8') warmTorrent(stream);
     const target = tail === undefined ? localTorrentUrl(stream, stremioBase) : `${stremioBase}${torrentPath(stream)}/${tail}`;
     const relayPrefix = `/relay/${roomId}/${key}${torrentPath(stream)}`;
     const headers = {};
@@ -83,6 +92,20 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
     res.on('close', () => upstream.destroy());
     upstream.end();
   }
+
+  // Lets a guest check that the host's Stremio is running before playing.
+  router.get('/relay/:roomId/:key/ping', (req, res) => {
+    const room = rooms.get(req.params.roomId);
+    if (!room?.findRelayUser(req.params.key)) return res.status(403).end();
+    const probe = http.get(`${stremioBase}/settings`, (r) => {
+      r.resume();
+      res.status(r.statusCode === 200 ? 200 : 503).end();
+    });
+    probe.setTimeout(2000, () => probe.destroy(new Error('timeout')));
+    probe.on('error', () => {
+      if (!res.headersSent) res.status(503).end();
+    });
+  });
 
   router.get('/relay/:roomId/:key/:infoHash([0-9a-f]{40})/:fileIdx(-1|\\d+)', handle);
   router.get('/relay/:roomId/:key/:infoHash([0-9a-f]{40})/:fileIdx(-1|\\d+)/*', handle);

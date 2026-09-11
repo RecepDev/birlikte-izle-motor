@@ -133,7 +133,7 @@ test('streams validates ids and returns normalized list', async () => {
 test('room create, list, kick, close', async () => {
   const created = await (await api('/api/rooms', { method: 'POST', body: { type: 'movie', id: 'tt1', streamId: 's1' } })).json();
   assert.match(created.roomId, /^[A-Z0-9]{6}$/);
-  assert.equal(created.roomUrl, `http://127.0.0.1:7000/room/${created.roomId}#host=${created.creatorToken}`);
+  assert.equal(created.roomUrl, `http://127.0.0.1:7000/room/${created.roomId}#host=${created.creatorToken}&name=recep`);
   const room = rooms.get(created.roomId);
   assert.equal(room.meta.name, 'Dune');
   assert.equal(room.settings.waitMode, 'wait');

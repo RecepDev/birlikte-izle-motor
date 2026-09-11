@@ -46,7 +46,9 @@ export function createPanelApp({
 
   const page = (file) => (req, res) => {
     const html = fs.readFileSync(path.join(panelDir, file), 'utf8').replaceAll('%%PANEL_KEY%%', panelKey);
-    res.set('Cache-Control', 'no-store').type('html').send(html);
+    res.set('Cache-Control', 'no-store');
+    res.set('Content-Security-Policy', "default-src 'self'; img-src * data:; frame-ancestors 'none'");
+    res.type('html').send(html);
   };
   app.get('/', page('index.html'));
   app.get('/new', page('new.html'));
@@ -131,7 +133,11 @@ export function createPanelApp({
     });
     log.info('Oda açıldı', { roomId: room.id, content: id });
     onRoomCreated(room);
-    res.json({ roomId: room.id, creatorToken, roomUrl: `${publicBase}/room/${room.id}#host=${creatorToken}` });
+    res.json({
+      roomId: room.id,
+      creatorToken,
+      roomUrl: `${publicBase}/room/${room.id}#${new URLSearchParams({ host: creatorToken, name: config.get().nickname })}`,
+    });
   }));
 
   app.get('/api/rooms', (req, res) => {

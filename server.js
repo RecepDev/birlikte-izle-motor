@@ -18,6 +18,8 @@ import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
 import { createTunnel, installCloudflared } from './src/tunnel.js';
 import { createPanelApp } from './src/panel-api.js';
+import { createSubtitleService, createSubtitleRouter } from './src/subtitles.js';
+import { createRelay } from './src/relay.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(ROOT, 'data');
@@ -31,6 +33,23 @@ const config = createConfigStore(path.join(DATA, 'config.json'), log);
 const addons = createAddonsClient();
 const stremioLocal = createStremioLocal();
 const rooms = createRoomManager();
+const subtitles = createSubtitleService({
+  addons,
+  getAddons: () => config.get().addons,
+  stremioLocal,
+  log,
+});
+const relay = createRelay({ rooms, log });
+
+// Filled in once the socket layer exists; HTTP routes use it to push updates.
+let socketCtl = null;
+const dispatch = (room, msgs) => socketCtl?.dispatch(room, msgs);
+
+function refreshSubtitles(room) {
+  subtitles.refresh(room, (msgs) => dispatch(room, msgs)).catch((err) => {
+    log.warn('Altyazı listesi alınamadı', { roomId: room.id, error: err.message });
+  });
+}
 
 // ---- public server (:7000) ------------------------------------------------
 
@@ -54,6 +73,8 @@ publicApp.use((req, res, next) => {
   next();
 });
 publicApp.use(createAddonRouter({ panelBase: PANEL_BASE }));
+publicApp.use(createSubtitleRouter({ rooms, service: subtitles, dispatch, log }));
+publicApp.use(relay.router);
 publicApp.get('/', (req, res) => res.redirect(302, '/room/'));
 publicApp.get(['/room', '/room/', '/room/:id'], (req, res) => {
   res.set('Content-Security-Policy', ROOM_CSP);
@@ -69,10 +90,19 @@ const publicServer = http.createServer(publicApp);
 const io = new Server(publicServer, { maxHttpBufferSize: 100_000, serveClient: true });
 
 let tunnel = null;
-const socketCtl = attachSocket(io, {
+socketCtl = attachSocket(io, {
   rooms,
   log,
   getPublicUrl: () => tunnel?.status().url ?? null,
+  hooks: {
+    onHostStream: refreshSubtitles,
+    roomEvents: {
+      setHostSubtitle: (room, uid, p) =>
+        room.setHostSubtitle(uid, { subId: p.subId ?? null, offset: Number(p.offset ?? 0) }),
+      requestRelay: (room, uid) => room.requestRelay(uid),
+      releaseRelay: (room, uid) => room.releaseRelay(uid),
+    },
+  },
 });
 
 tunnel = createTunnel({
@@ -99,6 +129,8 @@ const panelServer = http.createServer(
     log,
     onShutdown: shutdown,
     installCloudflared: () => installCloudflared({ log }),
+    onRoomCreated: refreshSubtitles,
+    relayStats: (roomId) => relay.stats(roomId),
   }),
 );
 
@@ -125,6 +157,7 @@ function shutdown() {
   log.info('Sunucu kapatılıyor');
   tunnel.stop();
   socketCtl.stop();
+  relay.stop();
   io.close();
   panelServer.close();
   setTimeout(() => process.exit(0), 500).unref();

@@ -92,6 +92,11 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
       return;
     }
     detach();
+    if (opts.compat) {
+      lastError = 'compat';
+      set('error', 'none');
+      return;
+    }
     set('noStremio', 'none');
     retryTimer = setTimeout(() => {
       if (gen === generation) load(stream, opts);

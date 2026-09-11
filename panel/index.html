@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="panel-key" content="%%PANEL_KEY%%">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%91%A5%3C/text%3E%3C/svg%3E">
+  <title>Birlikte İzle · Panel</title>
+  <link rel="stylesheet" href="/css/panel.css">
+  <script type="module" src="/js/panel.js"></script>
+</head>
+<body>
+  <header class="head">
+    <h1>👥 Birlikte İzle</h1>
+    <button id="shutdown" type="button" class="danger">⏻ Kapat</button>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Durum</h2>
+      <ul class="status">
+        <li><span class="dot ok"></span> Sunucu <span class="muted">çalışıyor</span></li>
+        <li><span id="st-stremio-dot" class="dot"></span> Stremio <span id="st-stremio" class="muted">…</span></li>
+        <li>
+          <span id="st-tunnel-dot" class="dot"></span> Tünel <span id="st-tunnel" class="muted">…</span>
+          <div class="row">
+            <code id="tunnel-url" class="url"></code>
+            <button id="tunnel-copy" type="button" hidden>Kopyala</button>
+            <button id="tunnel-restart" type="button">Yeniden başlat</button>
+            <button id="cf-install" type="button" class="primary" hidden>cloudflared'i kur</button>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Stremio'ya eklentiyi kur</h2>
+      <p class="muted">Bir kere yapman yeterli. Sonra Stremio'da bir film açınca stream listesinde <b>👥 Birlikte İzle</b> çıkar.</p>
+      <div class="row">
+        <code id="addon-url" class="url"></code>
+        <button id="addon-copy" type="button">Kopyala</button>
+        <a id="addon-install" class="button primary" href="#">Stremio'da aç</a>
+      </div>
+      <details>
+        <summary>Elle kurulum</summary>
+        <ol class="muted">
+          <li>Stremio'yu aç, sağ üstteki yapboz simgesine (Eklentiler) tıkla.</li>
+          <li>Arama kutusuna yukarıdaki adresi yapıştır, Enter'a bas.</li>
+          <li><b>Yükle</b> düğmesine bas.</li>
+        </ol>
+      </details>
+    </section>
+
+    <section class="card wide">
+      <h2>Aktif odalar</h2>
+      <div id="rooms"><p class="muted">Henüz oda yok. Stremio'da bir film aç ve <b>👥 Birlikte İzle</b>'yi seç.</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Addon'lar</h2>
+      <p class="muted small">Oda açarken stream ve altyazılar bu addon'lardan alınır. Torrentio gibi eklentilerin manifest adresini ekle (Stremio'da eklentiye sağ tıklayıp "Bağlantıyı kopyala").</p>
+      <ul id="addons" class="addons"></ul>
+      <form id="addon-form" class="row">
+        <input id="addon-input" placeholder="https://…/manifest.json" autocomplete="off">
+        <button type="submit" class="primary">Ekle</button>
+      </form>
+      <p id="addon-error" class="error" hidden></p>
+    </section>
+
+    <section class="card">
+      <h2>Varsayılanlar</h2>
+      <form id="defaults" class="form">
+        <label class="field"><span>Adın (odada görünür)</span><input id="d-nickname" maxlength="30"></label>
+        <label class="check"><input type="checkbox" id="d-locked"> <span>Oynatmayı sadece host kontrol etsin</span></label>
+        <fieldset>
+          <legend>Biri donarsa</legend>
+          <label class="check"><input type="radio" name="d-wait" value="wait"> <span>Herkes beklesin</span></label>
+          <label class="check"><input type="radio" name="d-wait" value="continue"> <span>Beklemeden devam, sonra yetişsin</span></label>
+        </fieldset>
+        <label class="check"><input type="checkbox" id="d-relay"> <span>Host üzerinden izlemeye (relay) izin ver</span></label>
+        <label class="field inline"><span>Relay kişi sınırı</span><input id="d-relay-limit" type="number" min="0" max="10"></label>
+        <p class="muted small">Relay senin upload hızını kullanır: 1080p kişi başı yaklaşık 5–10 Mbps.</p>
+        <div class="row"><button type="submit" class="primary">Kaydet</button><span id="defaults-msg" class="muted small"></span></div>
+      </form>
+    </section>
+
+    <section class="card wide">
+      <h2>Log</h2>
+      <pre id="logs" class="logs"></pre>
+    </section>
+  </main>
+</body>
+</html>

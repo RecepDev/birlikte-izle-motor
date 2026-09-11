@@ -77,5 +77,6 @@ export const ERROR_TEXT = {
   badStream: 'Bu stream seçilemiyor.',
   relayFull: 'Relay dolu, host kişi sınırını artırmalı.',
   relayOff: 'Host relay\'i kapatmış.',
+  hostStremioDown: 'Host\'un Stremio\'su şu an kapalı.',
 };
 export const errorText = (code) => ERROR_TEXT[code] || `Hata: ${code}`;
