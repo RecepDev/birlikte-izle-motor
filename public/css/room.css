@@ -143,7 +143,16 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 /* ---- side panel ---- */
 .side {
   border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0;
+  position: relative;
 }
+.side-resizer {
+  position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; z-index: 4; cursor: col-resize;
+  touch-action: none;
+}
+.side-resizer:hover, .side-resizer:focus-visible, body.resizing .side-resizer { background: linear-gradient(90deg, transparent 3px, var(--accent) 3px 5px, transparent 5px); outline: none; }
+body.resizing { user-select: none; cursor: col-resize; }
+body.resizing video { pointer-events: none; }
+.icon-btn { font-size: 16px; padding: 4px 8px; line-height: 1; }
 .tabs { display: flex; border-bottom: 1px solid var(--line); }
 .tabs button {
   flex: 1; border: none; border-radius: 0; background: transparent; padding: 12px 4px; color: var(--muted);
@@ -222,6 +231,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .player-col { padding: 0; }
   .player { border-radius: 0; flex: none; aspect-ratio: 16 / 9; max-height: 60vh; }
   .side { border-left: none; border-top: 1px solid var(--line); }
+  .side-resizer { display: none; }
   .lock-hint { padding: 4px 12px; }
   .volume, .hide-narrow { display: none; }
   .ctl { min-width: 44px; min-height: 44px; }

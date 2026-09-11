@@ -17,16 +17,27 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
     const heavy = need !== null && have !== null && need > have * 0.95;
     const buttons = [];
     if (!isMine) {
+      const label = isHostStream ? "Host'unkine dön" : 'Ben bunu izleyeyim';
       buttons.push(
         el('button', {
           type: 'button',
-          text: isHostStream ? "Host'unkine dön" : 'Ben bunu izleyeyim',
+          class: 'icon-btn',
+          text: isHostStream ? '↩️' : '👁️',
+          title: label,
+          'aria-label': label,
           onclick: () => onPickOwn(isHostStream ? null : s.streamId),
         }),
       );
     }
     if (isHost && !isHostStream) {
-      buttons.push(el('button', { type: 'button', text: 'Herkes için seç', onclick: () => onPickHost(s.streamId) }));
+      buttons.push(el('button', {
+        type: 'button',
+        class: 'icon-btn',
+        text: '👥',
+        title: 'Herkes için seç',
+        'aria-label': 'Herkes için seç',
+        onclick: () => onPickHost(s.streamId),
+      }));
     }
     return el(
       'li',

@@ -709,6 +709,46 @@ $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
 $('#speedtest-btn').addEventListener('click', startSpeedTest);
+// ---- resizable side panel (desktop) ----
+const SIDE_DEFAULT = 360;
+const SIDE_MIN = 260;
+const MIN_PLAYER = 360;
+function setSideWidth(px, save = true) {
+  const layout = document.querySelector('.layout');
+  // Before the room is shown the layout has no width yet; only clamp once it does.
+  const max = layout.clientWidth ? Math.max(SIDE_MIN, layout.clientWidth - MIN_PLAYER) : Infinity;
+  const w = Math.round(Math.min(max, Math.max(SIDE_MIN, px)));
+  document.documentElement.style.setProperty('--side-w', `${w}px`);
+  if (save) storage.set('sideWidth', String(w));
+}
+{
+  const saved = Number(storage.get('sideWidth'));
+  if (saved) setSideWidth(saved, false);
+  const resizer = $('#side-resizer');
+  resizer.addEventListener('pointerdown', (e) => {
+    resizer.setPointerCapture(e.pointerId);
+    document.body.classList.add('resizing');
+  });
+  resizer.addEventListener('pointermove', (e) => {
+    if (!resizer.hasPointerCapture(e.pointerId)) return;
+    setSideWidth(document.querySelector('.layout').getBoundingClientRect().right - e.clientX);
+  });
+  const stop = (e) => {
+    if (resizer.hasPointerCapture(e.pointerId)) resizer.releasePointerCapture(e.pointerId);
+    document.body.classList.remove('resizing');
+  };
+  resizer.addEventListener('pointerup', stop);
+  resizer.addEventListener('pointercancel', stop);
+  resizer.addEventListener('dblclick', () => setSideWidth(SIDE_DEFAULT));
+  resizer.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    e.stopPropagation(); // arrows would otherwise seek the video
+    const current = $('.side').getBoundingClientRect().width;
+    setSideWidth(current + (e.key === 'ArrowLeft' ? 20 : -20));
+  });
+}
+
 $('#viewers-toggle').addEventListener('click', () => {
   const ov = $('#viewers-ov');
   ov.classList.toggle('collapsed');
