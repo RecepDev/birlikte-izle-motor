@@ -142,7 +142,17 @@
             <label class="check"><input type="checkbox" id="keep-quality"> <span>Görüntü kalitesini koru</span> <span id="keep-quality-note" class="info-i" tabindex="0">ⓘ</span></label>
           </div>
           <div class="speedtest">
-            <label class="check"><input type="checkbox" id="allow-4k"> <span>4K dönüştürmeye izin ver</span> <span id="allow-4k-note" class="info-i" tabindex="0">ⓘ</span></label>
+            <div class="row-line">
+              <span class="muted small">Uyumlu mod</span>
+              <span id="compat-quality-note" class="info-i" tabindex="0">ⓘ</span>
+            </div>
+            <div id="compat-quality" class="hdr-profiles">
+              <button type="button" data-q="normal">Normal</button>
+              <button type="button" data-q="2160p">2K</button>
+              <button type="button" data-q="1080p">1080p</button>
+              <button type="button" data-q="720p">720p</button>
+              <button type="button" data-q="480p">480p</button>
+            </div>
           </div>
           <div id="quality-warning" class="warning" hidden></div>
           <ul id="quality-list" class="quality"></ul>

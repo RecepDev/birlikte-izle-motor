@@ -156,11 +156,12 @@ async function relayAlive(key) {
 }
 
 // Compatibility mode: Stremio's HLS converter, told which codecs this browser
-// decodes so it only converts what is needed (often just the audio).
-// 4K conversion (instead of Stremio's 1080p cap) runs on whoever's Stremio
-// converts: allowed on your own PC by your choice, on the host PC only with
-// the host's permission.
-let allow4k = storage.get('allow4k') !== '0'; // on unless the viewer turned it off
+// decodes so it only converts what is needed (often just the audio), and how
+// wide the picture may be. 2K/4K conversion runs on whoever's Stremio converts:
+// allowed on your own PC by your choice, on the host PC only with its permission.
+const COMPAT_WIDTHS = { '2160p': HLS_4K_WIDTH, '1080p': 1920, '720p': 1280, '480p': 854 };
+const COMPAT_TIERS = Object.keys(COMPAT_WIDTHS);
+let compatTier = COMPAT_TIERS.includes(storage.get('compatTier')) ? storage.get('compatTier') : '2160p';
 let compat4k = false;
 let lastCompatCaps = null;
 let reencodeAllowed = false; // viewer chose "convert anyway" for the current stream
@@ -168,8 +169,12 @@ function capsFor(onHostPc) {
   const caps = browserCodecs(video);
   // Keeping quality: list every copyable video codec so Stremio never re-encodes the picture.
   if (keepQuality && !reencodeAllowed) caps.videoCodecs = [...HLS_VIDEO_CODECS];
-  if (allow4k && (!onHostPc || isHost() || state.room.settings.relay4k)) caps.maxWidth = HLS_4K_WIDTH;
-  compat4k = Boolean(caps.maxWidth);
+  const wants4k = compatTier === '2160p';
+  const allowed4k = wants4k && (!onHostPc || isHost() || state.room.settings.relay4k);
+  if (allowed4k) caps.maxWidth = HLS_4K_WIDTH;
+  else if (!wants4k) caps.maxWidth = COMPAT_WIDTHS[compatTier];
+  // else: wanted 2K but no permission here -> leave unset, Stremio's own ~1920 cap applies
+  compat4k = caps.maxWidth === HLS_4K_WIDTH;
   lastCompatCaps = caps;
   return caps;
 }
@@ -247,6 +252,7 @@ function loadMyStream(force = false) {
   qualityBlocked = Boolean(s) && keepQuality && videoNeedsReencode(s);
   player.load(qualityBlocked ? null : s, compat ? { forceFallback: true, compat: true } : {});
   renderCompatButton();
+  renderCompatTier();
   renderNotice();
   applyPic();
 }
@@ -268,6 +274,7 @@ function startCompat({ allowReencode = false } = {}) {
   toast('Uyumlu moda geçiliyor…');
   player.load(s, { forceFallback: true, compat: true });
   renderCompatButton();
+  renderCompatTier();
   renderNotice();
   subs?.rerender();
 }
@@ -280,6 +287,7 @@ function stopCompat() {
   toast('Normal moda dönülüyor…');
   player.load(s, {});
   renderCompatButton();
+  renderCompatTier();
   subs?.rerender();
 }
 
@@ -341,8 +349,8 @@ function compatQuality() {
   const down = is4k && (downscaled || !compat4k);
   return {
     reencoded: true,
-    text: `ℹ️ Uyumlu mod: görüntü dönüştürülüyor${down ? ' (4K → 1080p)' : ''}, kalite biraz düşük. `
-      + (down ? 'Kalite sekmesinden 4K dönüştürmeye izin verebilir ya da ' : 'Daha iyi görüntü için ')
+    text: `ℹ️ Uyumlu mod: görüntü dönüştürülüyor${down ? ` (4K → ${compat4k ? '4K' : compatTier})` : ''}, kalite biraz düşük. `
+      + (down ? 'Kalite sekmesinden çözünürlüğü değiştirebilir ya da ' : 'Daha iyi görüntü için ')
       + '⚠️ işaretsiz (x264) bir dosya seçebilirsin.',
   };
 }
@@ -863,9 +871,9 @@ socket.on('settings', (s) => {
   state.room.settings = s;
   updateHostUi();
   renderNotice();
-  renderAllow4k();
-  // A relay viewer's 4K conversion depends on the host's permission.
-  if (relay4kChanged && allow4k && player.status().source === 'relay') reloadCompat4k();
+  renderCompatTier();
+  // A relay viewer's 2K/4K conversion depends on the host's permission.
+  if (relay4kChanged && compatTier === '2160p' && player.status().source === 'relay') reloadCompatTier();
 });
 
 socket.on('hostChanged', ({ hostUserId }) => {
@@ -1073,29 +1081,42 @@ $('#search-input').addEventListener('input', () => {
 });
 renderSearchResults([]);
 
-// ---- 4K conversion option ----
-function reloadCompat4k() {
+// ---- compat-mode resolution picker (also switches to/from Uyumlu mod) ----
+function reloadCompatTier() {
+  if (!loaded.compat) return;
   const s = myStream();
-  if (!s || !loaded.compat || s.quality !== '2160p') return;
+  if (!s) return;
   player.load(s, { forceFallback: true, compat: true });
 }
 
-function renderAllow4k() {
-  $('#allow-4k').checked = allow4k;
+function renderCompatTier() {
+  const box = $('#compat-quality');
+  for (const b of box.children) b.classList.toggle('active', b.dataset.q === (loaded.compat ? compatTier : 'normal'));
   const viaRelay = player.status().source === 'relay';
-  $('#allow-4k-note').title = !allow4k
-    ? "Kapalıyken uyumlu modda 4K görüntü 1080p'ye düşürülür. Normal modu etkilemez."
-    : viaRelay && !state.room?.settings.relay4k
-      ? "Relay'den izliyorsun: dönüştürme host'un bilgisayarında yapıldığı için host'un da izin vermesi gerekir. Şimdilik 1080p."
-      : 'Uyumlu modda 4K korunur. Dönüştürme ekran kartını çok yorar; video takılırsa kapat.';
+  $('#compat-quality-note').title = loaded.compat
+    ? compatTier === '2160p'
+      ? (viaRelay && !state.room?.settings.relay4k
+        ? "Relay'den izliyorsun: 2K/4K dönüştürme host'un bilgisayarında yapılır, host izin vermeli. Şimdilik ~1080p."
+        : '2K/4K korunur. Dönüştürme ekran kartını çok yorar; video takılırsa düşür.')
+      : `Görüntü ${compatTier}'e dönüştürülüyor. Daha düşük seçmek internet/veri kullanımını azaltır.`
+    : 'Normal oynatmadan Uyumlu moda (Stremio dönüştürücüsü) geçer; ses dilini değiştirmek ya da 2K/4K yerine düşük çözünürlük istemek için kullan.';
 }
-$('#allow-4k').addEventListener('change', (e) => {
-  allow4k = e.target.checked;
-  storage.set('allow4k', allow4k ? '1' : '0');
-  renderAllow4k();
-  reloadCompat4k();
-});
-renderAllow4k();
+function selectCompatTier(q) {
+  if (q === 'normal') {
+    if (loaded.compat) stopCompat();
+    renderCompatTier();
+    return;
+  }
+  compatTier = q;
+  storage.set('compatTier', q);
+  if (loaded.compat) reloadCompatTier();
+  else startCompat();
+  renderCompatTier();
+}
+for (const b of document.querySelectorAll('#compat-quality button')) {
+  b.addEventListener('click', () => selectCompatTier(b.dataset.q));
+}
+renderCompatTier();
 
 // ---- hardware acceleration check ----
 function renderHw() {
