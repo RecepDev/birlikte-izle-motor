@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>Birlikte İzle</title>
+  <link rel="stylesheet" href="/css/room.css">
+  <script type="module" src="/js/room.js"></script>
+</head>
+<body>
+  <div id="join" class="overlay">
+    <form id="join-form" class="card" autocomplete="off">
+      <img id="join-poster" class="join-poster" alt="" hidden>
+      <h1>Birlikte İzle</h1>
+      <p id="join-sub" class="muted">Odaya katılmak için adını yaz.</p>
+      <label class="field">
+        <span>Adın</span>
+        <input id="join-name" maxlength="30" required autocomplete="nickname" enterkeyhint="go">
+      </label>
+      <button type="submit" class="primary big">Katıl</button>
+      <p id="join-error" class="error" hidden></p>
+      <p class="muted small">Videoyu izlemek için bilgisayarında <b>Stremio</b> açık olmalı.</p>
+    </form>
+  </div>
+
+  <div id="ended" class="overlay" hidden>
+    <div class="card">
+      <h1>Birlikte İzle</h1>
+      <p id="ended-text"></p>
+      <button id="ended-reload" class="primary">Yeniden dene</button>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="room-title">
+        <img id="poster" alt="" hidden>
+        <div>
+          <div id="title" class="title-text"></div>
+          <div id="subtitle" class="muted small"></div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button id="copy-link" type="button">🔗 <span class="hide-narrow">Linki kopyala</span></button>
+        <button id="open-settings" type="button" title="Oda ayarları" hidden>⚙️ <span class="hide-narrow">Ayarlar</span></button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="player-col">
+        <div id="player" class="player">
+          <video id="video" playsinline webkit-playsinline preload="auto"></video>
+          <div id="banner" class="banner" hidden>
+            <span id="banner-text"></span>
+            <button id="banner-skip" type="button" hidden>Beklemeden devam et</button>
+          </div>
+          <div id="notice" class="notice" hidden>
+            <div class="notice-card">
+              <p id="notice-text"></p>
+              <div id="notice-actions" class="notice-actions"></div>
+            </div>
+          </div>
+          <div class="controls">
+            <button id="btn-play" type="button" class="ctl" aria-label="Oynat">▶</button>
+            <span id="time" class="time">0:00 / 0:00</span>
+            <input id="seek" class="seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="Konum">
+            <button id="btn-mute" type="button" class="ctl" aria-label="Sessiz">🔊</button>
+            <input id="volume" class="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="Ses">
+            <button id="btn-compat" type="button" class="ctl" title="Ses yok / oynamıyor: uyumlu mod" hidden>🛠</button>
+            <button id="btn-fs" type="button" class="ctl" aria-label="Tam ekran">⛶</button>
+          </div>
+        </div>
+        <div id="lock-hint" class="muted small lock-hint" hidden>🔒 Oynatmayı sadece host kontrol ediyor.</div>
+      </section>
+
+      <aside class="side">
+        <nav class="tabs" role="tablist">
+          <button type="button" data-tab="chat" class="active">Sohbet</button>
+          <button type="button" data-tab="users">İzleyiciler <span id="user-count" class="pill"></span></button>
+          <button type="button" data-tab="subs">Altyazı</button>
+          <button type="button" data-tab="quality">Kalite</button>
+        </nav>
+
+        <div class="tab-body" data-tab="chat">
+          <ul id="chat-list" class="chat"></ul>
+          <form id="chat-form" class="chat-form">
+            <input id="chat-input" maxlength="500" placeholder="Mesaj yaz…" autocomplete="off" enterkeyhint="send">
+            <button type="submit">Gönder</button>
+          </form>
+        </div>
+
+        <div class="tab-body" data-tab="users" hidden>
+          <ul id="user-list" class="users"></ul>
+        </div>
+
+        <div class="tab-body" data-tab="subs" hidden>
+          <div id="subs-panel" class="subs"></div>
+        </div>
+
+        <div class="tab-body" data-tab="quality" hidden>
+          <div id="quality-warning" class="warning" hidden></div>
+          <ul id="quality-list" class="quality"></ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="settings-dialog">
+    <form method="dialog" class="settings">
+      <h2>Oda ayarları</h2>
+      <label class="check">
+        <input type="checkbox" id="set-locked">
+        <span>Oynatmayı sadece ben kontrol edeyim (host kilidi)</span>
+      </label>
+      <fieldset>
+        <legend>Biri donarsa</legend>
+        <label class="check"><input type="radio" name="waitMode" value="wait"> <span>Herkes beklesin</span></label>
+        <label class="check"><input type="radio" name="waitMode" value="continue"> <span>Beklemeden devam, sonra yetişsin</span></label>
+      </fieldset>
+      <fieldset id="relay-fields">
+        <legend>Host üzerinden izle (relay)</legend>
+        <label class="check"><input type="checkbox" id="set-relay"> <span>Stremio'su olmayanlar benim bilgisayarımdan izleyebilsin</span></label>
+        <label class="field inline"><span>Kişi sınırı</span> <input type="number" id="set-relay-limit" min="0" max="10"></label>
+        <p class="muted small">Relay senin upload hızını kullanır. 1080p kişi başı yaklaşık 5–10 Mbps ister.</p>
+      </fieldset>
+      <div class="dialog-actions">
+        <button value="close" class="primary">Kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+</body>
+</html>

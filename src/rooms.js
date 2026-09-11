@@ -343,6 +343,36 @@ export class Room {
     };
   }
 
+  // ---- subtitles ---------------------------------------------------------
+
+  publicSubtitles() {
+    return this.subtitles.map(({ subId, lang, label, source, matched }) => ({ subId, lang, label, source, matched }));
+  }
+
+  // Replaces the list (entries keep their server-only url/vtt fields).
+  setSubtitles(list) {
+    this.subtitles = list;
+    const msgs = [{ to: 'room', event: 'subtitles', data: { subtitles: this.publicSubtitles() }, urgent: true }];
+    if (this.hostSubtitle && !list.some((s) => s.subId === this.hostSubtitle.subId)) {
+      this.hostSubtitle = null;
+      msgs.push({ to: 'room', event: 'hostSubtitle', data: null, urgent: true });
+    }
+    return msgs;
+  }
+
+  setHostSubtitle(userId, { subId = null, offset = 0 } = {}) {
+    const denied = this.requireHost(userId);
+    if (denied) return denied;
+    const entry = subId === null ? null : this.subtitles.find((s) => s.subId === subId);
+    if (subId !== null && !entry) return { error: 'badSubtitle' };
+    if (!Number.isFinite(offset) || Math.abs(offset) > 600) return { error: 'badOffset' };
+    const changed = (this.hostSubtitle?.subId ?? null) !== subId;
+    this.hostSubtitle = entry ? { subId, offset } : null;
+    const msgs = [{ to: 'room', event: 'hostSubtitle', data: this.hostSubtitle, urgent: true }];
+    if (changed) msgs.push(this.systemChat(entry ? `Host altyazıyı seçti: ${entry.label}` : 'Host altyazıyı kapattı'));
+    return { msgs };
+  }
+
   // ---- chat --------------------------------------------------------------
 
   chat(userId, text) {
@@ -372,7 +402,7 @@ export class Room {
       hostUserId: this.hostUserId,
       hostStreamId: this.hostStreamId,
       streams: this.guestStreams(),
-      subtitles: this.subtitles.map(({ subId, lang, label, source, matched }) => ({ subId, lang, label, source, matched })),
+      subtitles: this.publicSubtitles(),
       hostSubtitle: this.hostSubtitle,
       playback: { ...this.playback },
       autoPaused: this.autoPaused,
