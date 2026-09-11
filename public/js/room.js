@@ -1113,31 +1113,39 @@ checkHardware().then((result) => {
 });
 
 // ---- picture adjustment (brightness / contrast / colour), per viewer ----
-// Kept as two separate sets (SDR vs HDR): HDR usually needs a different
-// brightness/colour than SDR, so switching content shouldn't fight the other mode's setting.
+// SDR gets one set. HDR gets 3 switchable profiles: HDR brightness needs vary a
+// lot by screen/room, so one slider would fight itself across setups.
 const PIC_KEYS = { b: 'brightness', c: 'contrast', s: 'saturate' };
+const HDR_PROFILES = ['1', '2', '3'];
 const pic = {};
-let picMode = null;
-function loadPic(mode) {
+let picMode = null; // 'SDR' | 'HDR'
+let hdrProfile = HDR_PROFILES.includes(storage.get('hdrProfile')) ? storage.get('hdrProfile') : '1';
+const picKey = () => (picMode === 'HDR' ? `HDR_${hdrProfile}` : 'SDR');
+function loadPic() {
   for (const k of Object.keys(PIC_KEYS)) {
-    const saved = Number(storage.get(`pic${k.toUpperCase()}_${mode}`));
+    const saved = Number(storage.get(`pic${k.toUpperCase()}_${picKey()}`));
     pic[k] = Number.isFinite(saved) && saved > 0 ? saved : 1;
   }
+}
+function renderHdrProfiles() {
+  $('#hdr-profiles').hidden = picMode !== 'HDR';
+  for (const b of $('#hdr-profiles').children) b.classList.toggle('active', b.dataset.profile === hdrProfile);
 }
 function applyPic() {
   const mode = myStream()?.hdr ? 'HDR' : 'SDR';
   if (mode !== picMode) {
     picMode = mode;
-    loadPic(picMode);
+    loadPic();
   }
   const changed = Object.keys(PIC_KEYS).some((k) => pic[k] !== 1);
   video.style.filter = changed ? Object.entries(PIC_KEYS).map(([k, fn]) => `${fn}(${pic[k]})`).join(' ') : '';
   for (const k of Object.keys(PIC_KEYS)) {
     $(`#pic-${k}`).value = String(pic[k]);
     $(`#pic-${k}-val`).textContent = `%${Math.round(pic[k] * 100)}`;
-    storage.set(`pic${k.toUpperCase()}_${picMode}`, String(pic[k]));
+    storage.set(`pic${k.toUpperCase()}_${picKey()}`, String(pic[k]));
   }
-  $('#pic-mode-label').textContent = picMode === 'HDR' ? 'HDR' : 'SDR';
+  $('#pic-mode-label').textContent = picMode === 'HDR' ? `HDR · profil ${hdrProfile}` : 'SDR';
+  renderHdrProfiles();
 }
 for (const k of Object.keys(PIC_KEYS)) {
   $(`#pic-${k}`).addEventListener('input', (e) => {
@@ -1149,6 +1157,15 @@ $('#pic-reset').addEventListener('click', () => {
   for (const k of Object.keys(PIC_KEYS)) pic[k] = 1;
   applyPic();
 });
+for (const b of document.querySelectorAll('#hdr-profiles button')) {
+  b.addEventListener('click', () => {
+    if (b.dataset.profile === hdrProfile) return;
+    hdrProfile = b.dataset.profile;
+    storage.set('hdrProfile', hdrProfile);
+    loadPic();
+    applyPic();
+  });
+}
 applyPic();
 
 // Aspect modes for the player button (per viewer).

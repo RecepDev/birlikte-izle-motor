@@ -121,7 +121,12 @@
           <div class="speedtest">
             <div class="row-line">
               <span class="muted small">Görüntü ayarı: <strong id="pic-mode-label">SDR</strong></span>
-              <span class="info-i" tabindex="0" title="SDR ve HDR videolar için parlaklık/kontrast/renk ayrı hatırlanır; içerik türü değişince o türün kendi ayarı yüklenir.">ⓘ</span>
+              <span class="info-i" tabindex="0" title="SDR ve HDR videolar için parlaklık/kontrast/renk ayrı hatırlanır; içerik türü değişince o türün kendi ayarı yüklenir. HDR'de 3 profil arasında geçiş yapabilirsin (ör. farklı ekranlar/ortamlar için).">ⓘ</span>
+            </div>
+            <div id="hdr-profiles" class="hdr-profiles" hidden>
+              <button type="button" data-profile="1">Profil 1</button>
+              <button type="button" data-profile="2">Profil 2</button>
+              <button type="button" data-profile="3">Profil 3</button>
             </div>
             <div class="pic-adjust">
               <label class="slider"><span>Parlaklık</span><input type="range" id="pic-b" min="0.2" max="4" step="0.05"><output id="pic-b-val"></output></label>
