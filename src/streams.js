@@ -12,6 +12,15 @@ export function parseQuality(text) {
   return null;
 }
 
+// Video formats browsers often cannot decode (black picture, sound only).
+export function parseVideoRisk(text) {
+  const t = String(text || '');
+  if (/\b(dv|dovi)\b|dolby.?vision/i.test(t)) return 'Dolby Vision';
+  if (/x\.?265|hevc|h\.?265/i.test(t)) return 'HEVC';
+  if (/\bav1\b/i.test(t)) return 'AV1';
+  return null;
+}
+
 export function parseSizeBytes(raw) {
   const hinted = raw?.behaviorHints?.videoSize;
   if (Number.isFinite(hinted) && hinted > 0) return hinted;
@@ -36,6 +45,7 @@ function normalizeOne(raw, addonName) {
     title: String(raw.title || raw.description || ''),
   };
   base.quality = parseQuality(`${base.name} ${base.title}`);
+  base.videoRisk = parseVideoRisk(`${base.name} ${base.title}`);
   base.sizeBytes = parseSizeBytes(raw);
   const notWebReady = raw.behaviorHints?.notWebReady === true;
   const subtitles = cleanSubtitles(raw.subtitles);

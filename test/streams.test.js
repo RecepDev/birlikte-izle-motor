@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseQuality,
   parseSizeBytes,
+  parseVideoRisk,
   normalizeStreams,
   guestStreamList,
 } from '../src/streams.js';
@@ -16,6 +17,15 @@ test('parseQuality finds common labels', () => {
   assert.equal(parseQuality('720p'), '720p');
   assert.equal(parseQuality('480p'), '480p');
   assert.equal(parseQuality('CAM'), null);
+});
+
+test('parseVideoRisk flags formats browsers often cannot decode', () => {
+  assert.equal(parseVideoRisk('Movie.2160p.DV.HDR.x265'), 'Dolby Vision');
+  assert.equal(parseVideoRisk('Movie 1080p HEVC 10bit'), 'HEVC');
+  assert.equal(parseVideoRisk('Movie.1080p.x.265'), 'HEVC');
+  assert.equal(parseVideoRisk('Movie 1080p AV1'), 'AV1');
+  assert.equal(parseVideoRisk('Movie.1080p.x264'), null);
+  assert.equal(parseVideoRisk('Divx release'), null);
 });
 
 test('parseSizeBytes prefers behaviorHints.videoSize then title', () => {
@@ -46,6 +56,7 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
     name: 'Torrentio\n1080p',
     title: 'Movie.1080p\n💾 2 GB',
     quality: '1080p',
+    videoRisk: null,
     sizeBytes: 2 * 1024 ** 3,
     infoHash: IH.toLowerCase(),
     fileIdx: 1,

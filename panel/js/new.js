@@ -48,7 +48,8 @@ function render() {
         el('div', { class: 'info' },
           el('div', { text: `${formatSize(s.sizeBytes)} ${s.title || s.name}`.trim() }),
           el('span', { class: 'kind', text: s.kind === 'torrent' ? '🧲 torrent' : '🔗 doğrudan link (debrid)' }),
-          s.notWebReady ? el('span', { class: 'kind', text: ' · tarayıcıda dönüştürme gerekebilir' }) : null),
+          s.notWebReady ? el('span', { class: 'kind', text: ' · tarayıcıda dönüştürme gerekebilir' }) : null,
+          s.videoRisk ? el('span', { class: 'kind risk', text: ` · ⚠️ ${s.videoRisk}: tarayıcıda görüntü gelmeyebilir (uyumlu mod devreye girer)` }) : null),
         button,
       );
     }),

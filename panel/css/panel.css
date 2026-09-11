@@ -83,3 +83,4 @@ fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px
 .streams .q { font-weight: 700; min-width: 58px; }
 .streams .info { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: pre-line; }
 .streams .kind { font-size: 11px; }
+.streams .kind.risk { color: var(--warn); }

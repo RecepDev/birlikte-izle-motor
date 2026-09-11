@@ -198,18 +198,29 @@ function stopCompat() {
 // picture without sound, unsupported video (HEVC) plays sound without picture.
 let mediaProblem = null; // 'audio' | 'video' | null
 function detectMediaProblem() {
-  if (loaded.compat || video.paused || video.readyState < 3 || video.currentTime < 3) return;
+  if (loaded.compat || !player.stream() || video.readyState < 1) return;
   let problem = null;
+  // Picture: known as soon as metadata is in, even while paused.
   if (video.videoWidth === 0) problem = 'video';
-  else if ('webkitAudioDecodedByteCount' in video) {
-    if (video.webkitAudioDecodedByteCount === 0 && video.webkitVideoDecodedByteCount > 0) problem = 'audio';
-  } else if ('mozHasAudio' in video && !video.mozHasAudio) problem = 'audio';
+  // Sound: only measurable after a few seconds of real playback.
+  else if (!video.paused && video.readyState >= 3 && video.currentTime >= 3) {
+    if ('webkitAudioDecodedByteCount' in video) {
+      if (video.webkitAudioDecodedByteCount === 0 && video.webkitVideoDecodedByteCount > 0) problem = 'audio';
+    } else if ('mozHasAudio' in video && !video.mozHasAudio) problem = 'audio';
+  } else return;
   if (problem === mediaProblem) return;
   mediaProblem = problem;
+  if (problem === 'video') {
+    // No picture (usually HEVC/Dolby Vision): let Stremio convert it right away.
+    toast('Görüntü gelmiyor (tarayıcı bu video biçimini açamıyor). Uyumlu moda geçiliyor…', 6000);
+    startCompat();
+    return;
+  }
   renderCompatButton();
-  if (problem) toast(problem === 'audio' ? 'Ses gelmiyor gibi görünüyor.' : 'Görüntü gelmiyor gibi görünüyor.', 5000);
+  if (problem) toast('Ses gelmiyor gibi görünüyor.', 5000);
 }
 setInterval(detectMediaProblem, 2000);
+video.addEventListener('loadedmetadata', () => setTimeout(detectMediaProblem, 500));
 
 function renderCompatButton() {
   const btn = $('#compat-btn');

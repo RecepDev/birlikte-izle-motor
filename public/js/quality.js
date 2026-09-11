@@ -44,7 +44,9 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
       { class: isMine ? 'current' : '' },
       el('span', { class: 'q' }, s.quality || '?',
         need !== null ? el('div', { class: `need${heavy ? ' heavy' : ''}`, text: `~${formatMbps(need)} Mbps${heavy ? ' ⚠️' : ''}`, title: heavy ? 'İndirme hızın bu dosyaya yetmeyebilir' : 'Akıcı izlemek için gereken indirme hızı' }) : null),
-      el('div', { class: 'info', text: `${formatSize(s.sizeBytes)} ${info}`.trim() }),
+      el('div', { class: 'info' },
+        s.videoRisk ? el('div', { class: 'heavy', text: `⚠️ ${s.videoRisk}: görüntü gelmeyebilir` }) : null,
+        `${formatSize(s.sizeBytes)} ${info}`.trim()),
       el(
         'div',
         { class: 'btns' },
