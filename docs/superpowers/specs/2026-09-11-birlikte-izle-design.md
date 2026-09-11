@@ -1,7 +1,7 @@
 # Birlikte İzle — Tasarım
 
 Tarih: 2026-09-11
-Durum: Onay bekliyor
+Durum: Uygulandı (tüm aşamalar). Uygulamada verilen kararlar §24'te.
 
 ## 1. Amaç
 
@@ -259,7 +259,7 @@ Host ayarları (`locked`, `waitMode`, `relayEnabled`, `relayLimit`) odada anınd
 
 ### 15.1 Açılış
 
-- `kisayol-olustur.bat` masaüstüne "Birlikte İzle" kısayolu oluşturur. Kısayol `baslat.vbs` dosyasını çalıştırır.
+- `kurulum.bat` paketleri yükler, gerekirse `cloudflared`'i winget ile kurar ve masaüstüne "Birlikte İzle" kısayolu oluşturur. Kısayol `baslat.vbs` dosyasını çalıştırır.
 - `baslat.vbs`:
   1. `http://127.0.0.1:7001/api/ping` yoklanır.
   2. Cevap yoksa `node server.js` konsol penceresi olmadan başlatılır ve ping cevap verene kadar (en fazla 15 sn) beklenir.
@@ -373,7 +373,7 @@ Genel sınırlar:
 - `status` olayları `users` yayınını tetikler. Bu yayın oda başına saniyede en fazla 1 kez gönderilir. `buffering`/`ready` geçişleri ve `waiting` bu sınıra takılmaz.
 - Bağlantı başına saniyede en fazla 20 olay.
 - IP başına (`cf-connecting-ip`, yoksa soket adresi) dakikada en fazla 10 başarısız `join`.
-- Oda id'si 6 karakterdir. 30 harfli alfabeden rastgele üretilir, karışan harfler (0/O, 1/I/L) çıkarılmıştır.
+- Oda id'si 6 karakterdir. 31 karakterlik alfabeden (A–Z ve 2–9) rastgele üretilir, karışan karakterler (0/O, 1/I/L) çıkarılmıştır.
 
 ## 19. Hata durumları
 
@@ -421,7 +421,7 @@ stremio-birlikte-izle/
     js/panel.js  js/new.js
   test/
   baslat.vbs
-  kisayol-olustur.bat
+  kurulum.bat
   docs/superpowers/specs/
 ```
 
@@ -507,3 +507,31 @@ Her aşama tek başına kullanılabilir bir sürüm verir. Tek uygulama planınd
 - Windows ile otomatik başlatma, tepsi ikonu
 - katalog
 - sabit alan adı
+
+## 24. Uygulamada verilen kararlar
+
+Uygulama sırasında spec'ten ayrılan ya da spec'i netleştiren noktalar:
+
+- **Kurulum:** `kisayol-olustur.bat` yerine tek bir `kurulum.bat` var. `npm install` ve `cloudflared` kurulumunu da yapıyor. Panel sayfaları sıkı bir CSP ile sunuluyor.
+- **Host'un adı:** oda linki `#host=<token>&name=<paneldeki ad>` taşıyor. Katılma ekranında ad hazır dolu geliyor.
+- **Relay:**
+  - Host her zaman relay kullanabilir (`relayEnabled` ve `relayLimit`'ten muaf), çünkü host'un relay'i kendi Stremio'su. Ama kendi Stremio'su kapalıyken host relay'e düşmez, "Stremio açık değil" mesajını görür.
+  - Misafir relay'i kullanmadan önce `GET /relay/:roomId/:relayKey/ping` ile host'un Stremio'sunun açık olup olmadığına bakar. Kapalıysa "Host'un Stremio'su şu an kapalı" gösterilir.
+  - Relay, HLS master playlist istendiğinde torrent'i önce tracker'larıyla birlikte düz adresten "ısıtır". Böylece dönüştürücü torrent'i tracker'sız açmaz.
+  - Ayar değişikliği (relay kapatma, sınır düşürme) en yeni izinleri geri alır ve ilgili kişilere `relayRevoked` gönderilir.
+- **Uyumlu mod:**
+  - HTTP (debrid) stream'ler sadece izleyicinin kendi Stremio'su ve tarayıcının yerel HLS desteği varsa dönüştürülür (relay HTTP stream taşımaz).
+  - Uyumlu mod hiç kullanılamıyorsa durum `error`, sebep `compat` olur.
+- **Altyazı "uygun" işareti:** OpenSubtitles hash'li ve hash'siz sorguda aynı listeyi farklı sırayla dönebildiği için:
+  - "✓ bu dosyaya uygun" işareti sadece stream'in kendi altyazılarına ve yalnızca hash'li sorguda gelenlere konur.
+  - Hash'li sonucun sırası liste sıralamasında kullanılır.
+- **Stream normalizasyonu:** özel istek başlığı gerektiren (`behaviorHints.proxyHeaders`) HTTP stream'ler atılıyor, çünkü tarayıcı bunları oynatamaz.
+- **Senkron ayrıntıları:**
+  - Oynarken otomatik ileri sarma en fazla 4 sn'de bir yapılıyor. Böylece yavaş indiren biri sürekli sarma döngüsüne girmiyor.
+  - `buffering` durumu 700 ms gecikmeyle bildiriliyor. Anlık takılmalar odayı durdurmuyor.
+  - Kendi başlattığımız oynat/duraklat/sar olaylarından sonraki 1 sn içindeki medya olayları kullanıcı işlemi sayılmıyor. Diğerleri (PiP, medya tuşları, iOS oynatıcı) kilitli odada geri alınıyor, kilitsiz odada gönderiliyor.
+- **Doğrulama (2026-09-11):**
+  - 121 otomatik test geçiyor.
+  - Gerçek Torrentio + Cinemeta + OpenSubtitles ile uçtan uca denendi: oda açma, katılma, kilit, "herkes beklesin", 39 altyazı, Türkçe karakterler.
+  - Headless Edge'de oda sayfası, panel ve oda açma sayfası JavaScript hatası olmadan çalıştı.
+  - Elle test edilecekler: S5–S8, gerçek Stremio ile oynatma, telefon, tünel.
