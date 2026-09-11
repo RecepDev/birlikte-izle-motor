@@ -13,6 +13,7 @@ import {
   HLS_VIDEO_CODECS,
   HLS_AUDIO_CODECS,
   HLS_4K_WIDTH,
+  COMPAT_WIDTHS,
 } from '../public/js/shared/stream-url.js';
 
 const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'];
@@ -45,10 +46,18 @@ export function validateHlsV2(room, convertId, tail, rawQuery, stremioBase = STR
     (s) => s.kind === 'torrent' && s.infoHash === m[1] && torrentPath(s) === `/${m[1]}/${m[2]}`,
   );
   if (!stream) return null;
+  // Any resolution tier from the picker is fine (720p/480p only ever reduce
+  // load); only the 2160p one needs allow4k, since that's the one that costs
+  // the converting Stremio real CPU/bandwidth.
   const maxWidth = q.getAll('maxWidth');
-  if (maxWidth.length > 1 || (maxWidth.length && (maxWidth[0] !== String(HLS_4K_WIDTH) || !allow4k))) return null;
+  if (maxWidth.length > 1) return null;
+  const width = maxWidth.length ? Number(maxWidth[0]) : null;
+  if (width !== null) {
+    if (!Object.values(COMPAT_WIDTHS).includes(width)) return null;
+    if (width === HLS_4K_WIDTH && !allow4k) return null;
+  }
   const caps = { videoCodecs: q.getAll('videoCodecs'), audioCodecs: q.getAll('audioCodecs') };
-  if (maxWidth.length) caps.maxWidth = HLS_4K_WIDTH;
+  if (width !== null) caps.maxWidth = width;
   if (!caps.videoCodecs.length || !caps.videoCodecs.every((c) => HLS_VIDEO_CODECS.includes(c))) return null;
   if (!caps.audioCodecs.length || !caps.audioCodecs.every((c) => HLS_AUDIO_CODECS.includes(c))) return null;
   if (convertId !== hlsConvertId(stream, caps)) return null;

@@ -145,6 +145,15 @@ test('4K conversion needs the host, or the room permission for guests', async ()
   assert.equal((await fetch(hlsUrl(room, key, 'master.m3u8', { caps: { ...CAPS, maxWidth: 7680 } }))).status, 403);
 });
 
+test('lower resolution tiers (1080p/720p/480p) never need permission, for host or guest', async () => {
+  const { room, a } = setup();
+  const key = room.requestRelay(a.id).reply.relayKey;
+  for (const maxWidth of [1920, 1280, 854]) {
+    const res = await fetch(hlsUrl(room, key, 'master.m3u8', { caps: { ...CAPS, maxWidth } }));
+    assert.equal(res.status, 200, `maxWidth=${maxWidth} should be allowed without relay4k`);
+  }
+});
+
 test('hlsv2 requests that do not match a room torrent never reach Stremio', async () => {
   const { room, a } = setup();
   const key = room.requestRelay(a.id).reply.relayKey;

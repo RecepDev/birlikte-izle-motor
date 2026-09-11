@@ -9,7 +9,7 @@ import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
 import { requiredMbps, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
-import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS } from './shared/stream-url.js';
+import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS, COMPAT_WIDTHS } from './shared/stream-url.js';
 import { langLabel } from './shared/subtitle-text.js';
 import { browserCodecs, isRealSafari } from './codecs.js';
 import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
@@ -159,7 +159,6 @@ async function relayAlive(key) {
 // decodes so it only converts what is needed (often just the audio), and how
 // wide the picture may be. 2K/4K conversion runs on whoever's Stremio converts:
 // allowed on your own PC by your choice, on the host PC only with its permission.
-const COMPAT_WIDTHS = { '2160p': HLS_4K_WIDTH, '1080p': 1920, '720p': 1280, '480p': 854 };
 const COMPAT_TIERS = Object.keys(COMPAT_WIDTHS);
 let compatTier = COMPAT_TIERS.includes(storage.get('compatTier')) ? storage.get('compatTier') : '2160p';
 let compat4k = false;

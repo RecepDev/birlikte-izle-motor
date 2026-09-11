@@ -44,6 +44,11 @@ function fnv1a(text) {
 // never reach a converter created for something else (e.g. Stremio's own app).
 export const HLS_4K_WIDTH = 3840;
 
+// Uyumlu mod resolution picker: only the 2160p tier costs the converting
+// Stremio real CPU/bandwidth, so it alone is gated behind host/relay4k
+// permission (see room.js capsFor and relay.js validateHlsV2).
+export const COMPAT_WIDTHS = { '2160p': HLS_4K_WIDTH, '1080p': 1920, '720p': 1280, '480p': 854 };
+
 export function hlsConvertId(stream, caps) {
   const capsKey = fnv1a(`${caps.videoCodecs.join(',')}|${caps.audioCodecs.join(',')}|${caps.maxWidth || ''}`);
   const source = stream.kind === 'torrent'
