@@ -1,4 +1,16 @@
 import { api, el, $, formatSize } from './api.js';
+import { browserCodecs } from './codecs.js';
+
+// Can this browser show the picture without re-encoding (original quality)?
+const caps = browserCodecs(document.createElement('video'));
+const RISK_CODEC = { HEVC: 'hevc', 'Dolby Vision': 'hevc', AV1: 'av1' };
+function pictureNote(s) {
+  if (!s.videoRisk) return null;
+  const ok = caps.videoCodecs.includes(RISK_CODEC[s.videoRisk]);
+  return ok
+    ? { ok, text: ` · ✅ ${s.videoRisk}: bu tarayıcı açabiliyor (orijinal kalite)` }
+    : { ok, text: ` · ⚠️ ${s.videoRisk}: bu tarayıcı açamıyor (görüntü için dönüştürme gerekir, kalite düşer)` };
+}
 
 const DEBRID_WARNING = 'Bu bir doğrudan link (ör. Real-Debrid).\n\n'
   + 'Linkte debrid hesabının anahtarı var: arkadaşların senin hesabını kullanır. '
@@ -49,7 +61,10 @@ function render() {
           el('div', { text: `${formatSize(s.sizeBytes)} ${s.title || s.name}`.trim() }),
           el('span', { class: 'kind', text: s.kind === 'torrent' ? '🧲 torrent' : '🔗 doğrudan link (debrid)' }),
           s.notWebReady ? el('span', { class: 'kind', text: ' · tarayıcıda dönüştürme gerekebilir' }) : null,
-          s.videoRisk ? el('span', { class: 'kind risk', text: ` · ⚠️ ${s.videoRisk}: tarayıcıda görüntü gelmeyebilir (uyumlu mod devreye girer)` }) : null),
+          (() => {
+            const note = pictureNote(s);
+            return note ? el('span', { class: `kind ${note.ok ? 'fine' : 'risk'}`, text: note.text }) : null;
+          })()),
         button,
       );
     }),

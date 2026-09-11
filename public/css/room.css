@@ -127,6 +127,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .speedtest .bad { color: var(--warn); }
 .quality .need { font-size: 11px; color: var(--muted); }
 .quality .heavy { color: var(--warn); }
+.quality .okline { color: var(--ok); }
 .volume { width: 80px; accent-color: var(--accent); }
 .banner {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);

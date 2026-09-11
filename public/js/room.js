@@ -9,7 +9,7 @@ import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
 import { requiredMbps, runSpeedTest, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
-import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH } from './shared/stream-url.js';
+import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS } from './shared/stream-url.js';
 import { browserCodecs } from './codecs.js';
 
 // ---- identity --------------------------------------------------------------
@@ -120,10 +120,15 @@ async function relayAlive(key) {
 // the host's permission.
 let allow4k = storage.get('allow4k') !== '0'; // on unless the viewer turned it off
 let compat4k = false;
+let lastCompatCaps = null;
+let reencodeAllowed = false; // viewer chose "convert anyway" for the current stream
 function capsFor(onHostPc) {
   const caps = browserCodecs(video);
+  // Keeping quality: list every copyable video codec so Stremio never re-encodes the picture.
+  if (keepQuality && !reencodeAllowed) caps.videoCodecs = [...HLS_VIDEO_CODECS];
   if (allow4k && (!onHostPc || isHost() || state.room.settings.relay4k)) caps.maxWidth = HLS_4K_WIDTH;
   compat4k = Boolean(caps.maxWidth);
+  lastCompatCaps = caps;
   return caps;
 }
 
@@ -171,26 +176,49 @@ const player = createPlayer({
   },
 });
 
+// "Keep picture quality": never let Stremio re-encode the picture. Compat
+// mode then only repackages the file and converts audio.
+let keepQuality = storage.get('keepQuality') !== '0';
+let qualityBlocked = false; // the picture would need re-encoding and keepQuality forbids it
+
+const RISK_CODEC = { HEVC: 'hevc', 'Dolby Vision': 'hevc', AV1: 'av1' };
+function videoNeedsReencode(s) {
+  const codec = RISK_CODEC[s?.videoRisk];
+  return Boolean(codec) && !browserCodecs(video).videoCodecs.includes(codec);
+}
+
 let loaded = { streamId: undefined, compat: false };
 function loadMyStream(force = false) {
   const s = myStream();
   const id = s?.streamId ?? null;
   if (!force && id === loaded.streamId) return;
-  const compat = Boolean(s?.notWebReady);
+  const compat = Boolean(s?.notWebReady) && !(keepQuality && videoNeedsReencode(s));
   loaded = { streamId: id, compat };
   mediaProblem = null;
+  qualityBlocked = false;
+  reencodeAllowed = false;
   player.load(s, compat ? { forceFallback: true, compat: true } : {});
   renderCompatButton();
+  renderNotice();
 }
 
-function startCompat() {
+function startCompat({ allowReencode = false } = {}) {
   const s = myStream();
   if (!s || loaded.compat) return;
+  if (allowReencode) reencodeAllowed = true;
+  // Known undecodable picture: converting would cost quality, so ask first.
+  if (keepQuality && !reencodeAllowed && videoNeedsReencode(s)) {
+    qualityBlocked = true;
+    renderNotice();
+    return;
+  }
   loaded.compat = true;
   mediaProblem = null;
+  qualityBlocked = false;
   toast('Uyumlu moda geçiliyor…');
   player.load(s, { forceFallback: true, compat: true });
   renderCompatButton();
+  renderNotice();
 }
 
 function stopCompat() {
@@ -207,7 +235,15 @@ function stopCompat() {
 // picture without sound, unsupported video (HEVC) plays sound without picture.
 let mediaProblem = null; // 'audio' | 'video' | null
 function detectMediaProblem() {
-  if (loaded.compat || !player.stream() || video.readyState < 1) return;
+  if (!player.stream() || video.readyState < 1) return;
+  if (loaded.compat) {
+    // Copied picture the browser still cannot decode (quality mode): ask the viewer.
+    if (keepQuality && !reencodeAllowed && video.videoWidth === 0 && !qualityBlocked) {
+      qualityBlocked = true;
+      renderNotice();
+    }
+    return;
+  }
   let problem = null;
   // Picture: known as soon as metadata is in, even while paused.
   if (video.videoWidth === 0) problem = 'video';
@@ -219,6 +255,12 @@ function detectMediaProblem() {
   } else return;
   if (problem === mediaProblem) return;
   mediaProblem = problem;
+  if (problem === 'video' && keepQuality) {
+    // The decoder cannot show this picture; only re-encoding would, which costs quality.
+    qualityBlocked = true;
+    renderNotice();
+    return;
+  }
   if (problem) {
     // Stremio converts only the part the browser cannot play, so switching is cheap.
     toast(problem === 'video'
@@ -232,16 +274,15 @@ function detectMediaProblem() {
 setInterval(detectMediaProblem, 2000);
 video.addEventListener('loadedmetadata', () => setTimeout(detectMediaProblem, 500));
 
-// In compat mode Stremio re-encodes the picture only when the browser cannot
-// decode the source codec; that (and 4K -> 1080p downscaling) costs quality.
-const RISK_CODEC = { HEVC: 'hevc', 'Dolby Vision': 'hevc', AV1: 'av1' };
+// In compat mode Stremio re-encodes the picture only when its codec is not in
+// the list we sent; that (and 4K -> 1080p downscaling) costs quality.
 let qualityInfoShownFor = null;
 
 function compatQuality() {
   const s = myStream();
   if (!loaded.compat || !s) return null;
   const codec = RISK_CODEC[s.videoRisk];
-  const reencoded = Boolean(codec) && !browserCodecs(video).videoCodecs.includes(codec);
+  const reencoded = Boolean(codec) && !(lastCompatCaps?.videoCodecs || []).includes(codec);
   const is4k = s.quality === '2160p';
   const downscaled = is4k && video.videoHeight > 0 && video.videoHeight <= 1100;
   if (!reencoded && !downscaled) return { reencoded: false, text: null };
@@ -509,6 +550,20 @@ async function startSpeedTest() {
   }
 }
 
+// Whether this browser shows a stream's picture in original quality.
+function pictureVerdict(s) {
+  if (!s.videoRisk) return { ok: true, text: '✅ orijinal kalitede oynar' };
+  const supported = !videoNeedsReencode(s);
+  if (s.videoRisk === 'Dolby Vision') {
+    return supported
+      ? { ok: true, text: '✅ Dolby Vision: açılır (bazı dosyalarda renkler bozuk olabilir)' }
+      : { ok: false, text: '⚠️ Dolby Vision: tarayıcın açamıyor' };
+  }
+  return supported
+    ? { ok: true, text: `✅ ${s.videoRisk}: tarayıcın açabiliyor, orijinal kalite` }
+    : { ok: false, text: `⚠️ ${s.videoRisk}: tarayıcın açamıyor${keepQuality ? '' : ' (dönüştürülür, kalite düşer)'}` };
+}
+
 function renderQualityTab() {
   renderQuality($('#quality-list'), state.room, {
     myStreamId: myStreamId(),
@@ -525,6 +580,7 @@ function renderQualityTab() {
     },
     needFor: (s) => requiredMbps(s.sizeBytes, contentDuration()),
     have: measuredMbps,
+    pictureFor: (s) => pictureVerdict(s),
   });
   renderSpeedResult();
   const host = state.room.users.find((u) => u.id === state.room.hostUserId);
@@ -552,6 +608,12 @@ function button(text, onclick, primary = false) {
   return el('button', { type: 'button', class: primary ? 'primary' : '', text, onclick });
 }
 
+const HEVC_HELP = 'HEVC (x265) videoyu tarayıcıda açmak için:\n\n'
+  + '• Edge: Microsoft Store\'dan "HEVC Video Uzantıları"nı kur, sonra Edge\'i tamamen kapatıp aç.\n'
+  + '• Chrome: güncel sürümde, ekran kartın destekliyorsa kendiliğinden açar (çoğu 2016 sonrası ekran kartı).\n'
+  + '• Ekran kartı sürücüsünün güncel olması gerekir.\n\n'
+  + 'Sonra sayfayı yenile.';
+
 function renderNotice() {
   const box = $('#notice');
   const actions = [];
@@ -566,6 +628,18 @@ function renderNotice() {
       sync.reapply();
       renderNotice();
     }, true));
+  } else if (qualityBlocked) {
+    const s = myStream();
+    text = `Tarayıcın bu videonun görüntü biçimini${s?.videoRisk ? ` (${s.videoRisk})` : ''} açamıyor.\n`
+      + 'Kalite düşmesin diye görüntü dönüştürülmedi.\n'
+      + 'Kalite sekmesinde ✅ işaretli bir dosyaya geçebilir ya da yine de dönüştürebilirsin.';
+    actions.push(button('✅ Dosya seç', () => selectTab('quality'), true));
+    actions.push(button('HEVC nasıl açılır?', () => alert(HEVC_HELP)));
+    actions.push(button('Yine de dönüştür (kalite düşer)', () => {
+      qualityBlocked = false;
+      loaded.compat = false;
+      startCompat({ allowReencode: true });
+    }));
   } else if (st.state === 'noStremio') {
     text = isTouch
       ? 'Bu cihazda Stremio bulunamadı.\nTelefonda videoyu host üzerinden izleyebilirsin.'
@@ -865,6 +939,24 @@ $('#allow-4k').addEventListener('change', (e) => {
   reloadCompat4k();
 });
 renderAllow4k();
+
+// ---- keep picture quality option ----
+function renderKeepQuality() {
+  $('#keep-quality').checked = keepQuality;
+  $('#keep-quality-note').textContent = keepQuality
+    ? 'Görüntü hep orijinal kalitede. Tarayıcın bir dosyanın görüntüsünü açamazsa dönüştürmek yerine sana sorulur. Ses gerekirse dönüştürülür (görüntüye dokunmaz).'
+    : 'Tarayıcının açamadığı görüntü otomatik dönüştürülür; kalite düşebilir (4K → 1080p gibi).';
+}
+$('#keep-quality').addEventListener('change', (e) => {
+  keepQuality = e.target.checked;
+  storage.set('keepQuality', keepQuality ? '1' : '0');
+  renderKeepQuality();
+  if (state.room) {
+    renderQualityTab();
+    loadMyStream(true); // re-evaluate the current video with the new rule
+  }
+});
+renderKeepQuality();
 // ---- resizable side panel (desktop) ----
 const SIDE_DEFAULT = 360;
 const SIDE_MIN = 260;

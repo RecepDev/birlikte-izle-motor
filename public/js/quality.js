@@ -8,7 +8,7 @@ export function streamLabel(s) {
 export const formatMbps = (v) => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toString();
 
 // needFor(stream) -> Mbps the file needs (or null); have -> measured Mbps (or null).
-export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onPickHost, needFor = () => null, have = null }) {
+export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onPickHost, needFor = () => null, have = null, pictureFor = () => null }) {
   const items = room.streams.map((s) => {
     const isHostStream = s.streamId === room.hostStreamId;
     const isMine = s.streamId === myStreamId;
@@ -45,7 +45,10 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
       el('span', { class: 'q' }, s.quality || '?',
         need !== null ? el('div', { class: `need${heavy ? ' heavy' : ''}`, text: `~${formatMbps(need)} Mbps${heavy ? ' ⚠️' : ''}`, title: heavy ? 'İndirme hızın bu dosyaya yetmeyebilir' : 'Akıcı izlemek için gereken indirme hızı' }) : null),
       el('div', { class: 'info' },
-        s.videoRisk ? el('div', { class: 'heavy', text: `⚠️ ${s.videoRisk}: görüntü gelmeyebilir` }) : null,
+        (() => {
+          const pic = pictureFor(s);
+          return pic ? el('div', { class: pic.ok ? 'okline' : 'heavy', text: pic.text }) : null;
+        })(),
         `${formatSize(s.sizeBytes)} ${info}`.trim()),
       el(
         'div',

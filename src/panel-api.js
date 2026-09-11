@@ -52,6 +52,8 @@ export function createPanelApp({
   };
   app.get('/', page('index.html'));
   app.get('/new', page('new.html'));
+  // Shared with the room page: which codecs this browser decodes.
+  app.get('/js/codecs.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'codecs.js')));
   app.use(express.static(panelDir, { index: false }));
 
   // Every API call needs the key (custom header also forces a CORS preflight
