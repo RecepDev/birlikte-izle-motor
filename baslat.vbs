@@ -42,7 +42,8 @@ If Not Ping() Then
 End If
 
 On Error Resume Next
-shell.Run "msedge --app=http://127.0.0.1:7001/ --window-size=1200,860", 1, False
+' Separate, empty profile: no extensions, and Edge exits when the window closes.
+shell.Run "msedge --app=http://127.0.0.1:7001/ --window-size=1200,860 --user-data-dir=""" & dir & "\data\edge-panel"" --no-first-run --no-default-browser-check", 1, False
 If Err.Number <> 0 Then
   Err.Clear
   shell.Run "http://127.0.0.1:7001/", 1, False

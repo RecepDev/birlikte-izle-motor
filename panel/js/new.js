@@ -67,7 +67,10 @@ try {
     $('#poster').hidden = false;
   }
   if (data.errors.length) {
-    $('#errors').textContent = `Cevap vermeyen addon'lar: ${data.errors.map((e) => `${e.addonName} (${e.message})`).join(', ')}`;
+    $('#errors').replaceChildren(
+      `Cevap vermeyen addon'lar: ${data.errors.map((e) => `${e.addonName} (${e.message})`).join(', ')} `,
+      el('button', { type: 'button', text: '↻ Tekrar dene', onclick: () => location.reload() }),
+    );
     $('#errors').hidden = false;
   }
   streams = data.streams;

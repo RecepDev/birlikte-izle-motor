@@ -4,7 +4,8 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const TUNNEL_URL = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/;
+// cloudflared also prints https://api.trycloudflare.com in its error lines; that is not a tunnel.
+const TUNNEL_URL = /https:\/\/(?!api\.)[a-z0-9-]+\.trycloudflare\.com/;
 
 export function extractTunnelUrl(text) {
   return String(text).match(TUNNEL_URL)?.[0] ?? null;
@@ -56,7 +57,11 @@ export function createTunnel({
 
     const onData = (buf) => {
       if (child !== current) return;
-      const url = extractTunnelUrl(buf.toString());
+      const text = buf.toString();
+      for (const line of text.split('\n')) {
+        if (/\bERR\b/.test(line)) log.warn(`cloudflared: ${line.trim().slice(0, 300)}`);
+      }
+      const url = extractTunnelUrl(text);
       if (url && url !== status.url) {
         attempt = 0;
         log.info('Tünel hazır', { url });

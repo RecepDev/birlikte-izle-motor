@@ -23,10 +23,20 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
     return res.json();
   }
 
+  // One retry: public addons like Torrentio fail or stall now and then.
+  async function getJsonRetry(url) {
+    try {
+      return await getJson(url);
+    } catch (err) {
+      if (/^HTTP 4\d\d$/.test(err.message)) throw err;
+      return getJson(url);
+    }
+  }
+
   // Calls `path` on every addon that supports `resource`, in parallel.
   async function fanOut(addons, resource, path, pick) {
     const targets = addons.filter((a) => supports(a, resource));
-    const settled = await Promise.allSettled(targets.map((a) => getJson(`${addonBase(a.url)}${path}`)));
+    const settled = await Promise.allSettled(targets.map((a) => getJsonRetry(`${addonBase(a.url)}${path}`)));
     const results = [];
     const errors = [];
     settled.forEach((r, i) => {

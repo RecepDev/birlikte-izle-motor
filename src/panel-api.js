@@ -109,6 +109,9 @@ export function createPanelApp({
     const enabled = config.get().addons;
     const [meta, { results, errors }] = await Promise.all([addons.meta(type, id), addons.streams(enabled, type, id)]);
     const entry = { at: Date.now(), meta, streams: normalizeStreams(results), errors };
+    for (const e of errors) log.warn('Addon cevap vermedi', { addon: e.addonName, content: id, error: e.message });
+    // Cached even with errors: room creation must use the exact list the host saw
+    // (stream ids are positions). Reloading /new always refetches.
     streamCache.set(key, entry);
     return entry;
   }

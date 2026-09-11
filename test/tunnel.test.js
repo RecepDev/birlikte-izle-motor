@@ -10,6 +10,7 @@ test('extractTunnelUrl finds the quick tunnel url in cloudflared output', () => 
   const line = '2026-09-11T10:00:00Z INF |  https://brave-owl-seven-cats.trycloudflare.com                        |';
   assert.equal(extractTunnelUrl(line), 'https://brave-owl-seven-cats.trycloudflare.com');
   assert.equal(extractTunnelUrl('INF Starting tunnel'), null);
+  assert.equal(extractTunnelUrl('ERR failed to request quick Tunnel: Post "https://api.trycloudflare.com/tunnel": EOF'), null);
 });
 
 test('findCloudflared searches PATH then known install folders', () => {
