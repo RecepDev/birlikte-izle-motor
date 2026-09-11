@@ -11,7 +11,7 @@ import { requiredMbps, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
 import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS } from './shared/stream-url.js';
 import { langLabel } from './shared/subtitle-text.js';
-import { browserCodecs } from './codecs.js';
+import { browserCodecs, isRealSafari } from './codecs.js';
 import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
 
 // ---- identity --------------------------------------------------------------
@@ -175,7 +175,11 @@ function capsFor(onHostPc) {
 }
 
 async function compatSource(stream) {
-  const nativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== '';
+  // Chromium on Windows reports canPlayType('...mpegurl') as 'maybe' despite not
+  // actually being able to play an HLS playlist via <video src>, so gate on real
+  // Safari first — otherwise this misroutes into a dead <video src> with no hls.js
+  // and the alternate audio tracks (and the picture itself) never show up.
+  const nativeHls = isRealSafari() && video.canPlayType('application/vnd.apple.mpegurl') !== '';
   if (stream.kind === 'http') {
     // Only the viewer's own Stremio can convert a plain link, and only for native HLS players.
     if (nativeHls && (await isStremioUp())) {

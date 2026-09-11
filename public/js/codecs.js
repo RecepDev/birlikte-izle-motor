@@ -14,6 +14,13 @@ const PROBES = {
   ],
 };
 
+// True only for actual Safari. canPlayType('application/vnd.apple.mpegurl') is not
+// a reliable native-HLS signal by itself: Chromium on Windows reports 'maybe' for it
+// too (Media Foundation), even though it cannot actually play an HLS playlist.
+export function isRealSafari() {
+  return /Safari\//.test(navigator.userAgent) && !/Chrome|Chromium|Edg|OPR|Android/.test(navigator.userAgent);
+}
+
 export function browserCodecs(video) {
   const supported = (type) => {
     try {
@@ -24,7 +31,7 @@ export function browserCodecs(video) {
   };
   const pick = (list) => list.filter(([, types]) => types.every(supported)).map(([name]) => name);
   // Stremio packs HEVC as 'hev1', which Safari's HLS player rejects (Apple wants 'hvc1').
-  const safari = /Safari\//.test(navigator.userAgent) && !/Chrome|Chromium|Edg|OPR|Android/.test(navigator.userAgent);
+  const safari = isRealSafari();
   const extraVideo = pick(PROBES.video).filter((c) => !(safari && c === 'hevc'));
   return {
     videoCodecs: ['h264', ...extraVideo],
