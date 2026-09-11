@@ -20,10 +20,15 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
   const savedLine = storage.get('cueLine');
   let line = savedLine === null || savedLine === '' ? null : Number(savedLine);
 
+  // ::cue ignores CSS custom properties in Chromium, so write a concrete rule.
+  // Size is relative to the video height, like the browser's own default.
+  const cueStyle = document.createElement('style');
+  document.head.append(cueStyle);
   function applyStyle() {
-    playerEl.style.setProperty('--cue-size', `${size}em`);
-    playerEl.style.setProperty('--cue-bg', bg);
+    const px = Math.max(12, Math.round(video.clientHeight * 0.045 * size));
+    cueStyle.textContent = `#${video.id}::cue { font-size: ${px}px; background-color: rgba(0, 0, 0, ${bg}); }`;
   }
+  new ResizeObserver(applyStyle).observe(video);
 
   const effective = () => personal || hostSel || { subId: null, offset: 0 };
   const findSub = (id) => localFiles.find((f) => f.subId === id) || list.find((s) => s.subId === id);
@@ -60,6 +65,13 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
         cue.lineAlign = 'end';
       }
     }
+  }
+
+  function resize(delta) {
+    size = Math.round(Math.min(2.5, Math.max(0.6, size + delta)) * 10) / 10;
+    storage.set('cueSize', String(size));
+    applyStyle();
+    render();
   }
 
   function moveLine(delta) {
@@ -176,8 +188,9 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
         el('button', { type: 'button', text: `+${STEP}`, disabled: !eff.subId, onclick: () => nudge(STEP) })),
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: 'Yazı' }),
-        el('button', { type: 'button', text: 'A−', onclick: () => { size = Math.max(0.6, size - 0.1); storage.set('cueSize', size); applyStyle(); } }),
-        el('button', { type: 'button', text: 'A+', onclick: () => { size = Math.min(2.5, size + 0.1); storage.set('cueSize', size); applyStyle(); } }),
+        el('button', { type: 'button', text: 'A−', title: 'Küçült', onclick: () => resize(-0.1) }),
+        el('span', { class: 'muted small', text: `%${Math.round(size * 100)}` }),
+        el('button', { type: 'button', text: 'A+', title: 'Büyüt', onclick: () => resize(0.1) }),
         el('button', { type: 'button', text: bg === '0' ? 'Arka plan: yok' : 'Arka plan: var', onclick: () => { bg = bg === '0' ? '0.6' : '0'; storage.set('cueBg', bg); applyStyle(); render(); } })),
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: 'Konum' }),
