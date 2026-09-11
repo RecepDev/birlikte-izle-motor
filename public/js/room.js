@@ -219,14 +219,52 @@ function detectMediaProblem() {
 setInterval(detectMediaProblem, 2000);
 video.addEventListener('loadedmetadata', () => setTimeout(detectMediaProblem, 500));
 
+// In compat mode Stremio re-encodes the picture only when the browser cannot
+// decode the source codec; that (and 4K -> 1080p downscaling) costs quality.
+const RISK_CODEC = { HEVC: 'hevc', 'Dolby Vision': 'hevc', AV1: 'av1' };
+let qualityInfoShownFor = null;
+
+function compatQuality() {
+  const s = myStream();
+  if (!loaded.compat || !s) return null;
+  const codec = RISK_CODEC[s.videoRisk];
+  const reencoded = Boolean(codec) && !browserCodecs(video).videoCodecs.includes(codec);
+  const is4k = s.quality === '2160p';
+  const downscaled = is4k && video.videoHeight > 0 && video.videoHeight <= 1100;
+  if (!reencoded && !downscaled) return { reencoded: false, text: null };
+  return {
+    reencoded: true,
+    text: `ℹ️ Uyumlu mod: görüntü dönüştürülüyor${is4k ? ' (4K → 1080p)' : ''}, kalite biraz düşük. Daha iyi görüntü için ⚠️ işaretsiz (x264) bir dosya seç.`,
+  };
+}
+
+function renderQualityInfo() {
+  const box = $('#quality-info');
+  const info = compatQuality();
+  box.hidden = !info?.text;
+  if (!info?.text) return;
+  box.textContent = info.text;
+  box.title = 'Kalite sekmesini aç';
+  const key = `${loaded.streamId}|${info.text}`;
+  if (qualityInfoShownFor !== key) {
+    qualityInfoShownFor = key;
+    toast(info.text, 7000);
+  }
+}
+video.addEventListener('resize', renderQualityInfo);
+video.addEventListener('loadedmetadata', renderQualityInfo);
+
 function renderCompatButton() {
+  renderQualityInfo();
   const btn = $('#compat-btn');
   const show = Boolean(player.stream()) && (loaded.compat || mediaProblem);
   btn.hidden = !show;
   btn.classList.toggle('active', loaded.compat);
   btn.textContent = loaded.compat ? 'Normal moda dön' : 'Ses/görüntü sorunu mu?';
   btn.title = loaded.compat
-    ? 'Dönüştürmeyi kapatıp videoyu doğrudan oynat'
+    ? (compatQuality()?.reencoded
+      ? 'Görüntü dönüştürülüyor (kalite biraz düşük). Dönüştürmeyi kapatıp videoyu doğrudan oynat.'
+      : 'Görüntü kalitesi aynı; gerekirse sadece ses dönüştürülüyor. Dönüştürmeyi kapatıp videoyu doğrudan oynat.')
     : 'Uyumlu moda geç: Stremio videoyu tarayıcının açabileceği biçime dönüştürür';
 }
 
@@ -737,6 +775,7 @@ $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
 $('#speedtest-btn').addEventListener('click', startSpeedTest);
+$('#quality-info').addEventListener('click', () => selectTab('quality'));
 // ---- resizable side panel (desktop) ----
 const SIDE_DEFAULT = 360;
 const SIDE_MIN = 260;
