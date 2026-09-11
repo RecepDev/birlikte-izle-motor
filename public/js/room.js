@@ -485,6 +485,7 @@ const subs = createSubs({
   request,
   isHost,
   userToken,
+  embeddedInfo: () => (myStream()?.embeddedSubs ? embeddedSubsText(myStream()) : null),
 });
 
 function renderHeader() {
@@ -571,11 +572,18 @@ async function startSpeedTest() {
 }
 
 // Whether this browser shows a stream's picture in original quality.
+function embeddedSubsText(s) {
+  const langs = s.embeddedSubs?.langs || [];
+  return `Dosyanın içinde gömülü altyazı var${langs.length ? `: ${langs.join(', ')}` : ''} (dosya adına göre). `
+    + 'Tarayıcı gömülü altyazıyı gösteremez; Altyazı sekmesinden aynı dilde bir altyazı seç.';
+}
+
 // Icons for the quality list; the explanation sits behind an ⓘ.
 function pictureVerdict(s) {
   const v = pictureVerdictBase(s);
   const items = [{ icon: v.ok ? '✅' : '⚠️', text: v.text.replace(/^(✅|⚠️)\s*/, '') }];
   if (s.hdr) items.push({ icon: '🌗', text: `${s.hdr}: HDR olmayan ekranda karanlık ya da soluk görünebilir (parlaklık ayarı yukarıda).` });
+  if (s.embeddedSubs) items.push({ icon: '💬', text: embeddedSubsText(s) });
   return items;
 }
 

@@ -65,7 +65,8 @@ function render() {
             const note = pictureNote(s);
             return note ? el('span', { class: `kind ${note.ok ? 'fine' : 'risk'}`, text: note.text }) : null;
           })(),
-          s.hdr ? el('span', { class: 'kind risk', text: ` · 🌗 ${s.hdr}: HDR olmayan ekranda karanlık görünebilir` }) : null),
+          s.hdr ? el('span', { class: 'kind risk', text: ` · 🌗 ${s.hdr}: HDR olmayan ekranda karanlık görünebilir` }) : null,
+          s.embeddedSubs ? el('span', { class: 'kind', text: ` · 💬 gömülü altyazı${s.embeddedSubs.langs.length ? ` (${s.embeddedSubs.langs.join(', ')})` : ''}` }) : null),
         button,
       );
     }),

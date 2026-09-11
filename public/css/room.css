@@ -135,11 +135,19 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .slider output { text-align: right; font-variant-numeric: tabular-nums; }
 .row-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .row-line button, #hw-status button { padding: 3px 10px; font-size: 13px; }
+/* Info badge: a round "i"; the text inside the element is ignored. */
 .info-i {
-  display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
-  border: 1px solid var(--line); color: var(--muted); font-size: 12px; cursor: help; flex: none;
+  display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; flex: none;
+  font-size: 0; cursor: help; vertical-align: middle; user-select: none;
+  background: linear-gradient(145deg, #2c2f3b, #1c1e26); border: 1px solid #3a3f4e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  transition: background .15s, border-color .15s, transform .15s;
 }
-.info-i:hover, .info-i:focus-visible { color: var(--text); border-color: var(--accent); outline: none; }
+.info-i::before { content: 'i'; font: italic 700 11px/1 Georgia, 'Times New Roman', serif; color: #aab0c0; }
+.info-i:hover, .info-i:focus-visible {
+  background: var(--accent); border-color: var(--accent-2); outline: none; transform: scale(1.1);
+}
+.info-i:hover::before, .info-i:focus-visible::before { color: #fff; }
 .quality .pics { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
 .quality .pics span.ic { font-size: 14px; }
 .speedtest .bad { color: var(--warn); }

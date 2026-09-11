@@ -5,6 +5,7 @@ import {
   parseSizeBytes,
   parseVideoRisk,
   parseHdr,
+  parseEmbeddedSubs,
   normalizeStreams,
   guestStreamList,
 } from '../src/streams.js';
@@ -68,6 +69,7 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
     videoRisk: null,
     hdr: null,
     seeders: null,
+    embeddedSubs: null,
     sizeBytes: 2 * 1024 ** 3,
     infoHash: IH.toLowerCase(),
     fileIdx: 1,
@@ -81,6 +83,15 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
   assert.equal(out[1].notWebReady, true);
   assert.equal(out[1].quality, '2160p');
   assert.equal(out[1].streamId, 's2');
+});
+
+test('parseEmbeddedSubs reads subtitle hints from release names', () => {
+  assert.deepEqual(parseEmbeddedSubs('Silo 2160p + Original + Sub (Rus Ukr Eng Heb)'), { langs: ['Rusça', 'Ukraynaca', 'İngilizce', 'İbranice'] });
+  assert.deepEqual(parseEmbeddedSubs('Movie.1080p.WEB.ESub.x264'), { langs: ['İngilizce'] });
+  assert.deepEqual(parseEmbeddedSubs('Film 1080p TR Altyazılı'), { langs: ['Türkçe'] });
+  assert.deepEqual(parseEmbeddedSubs('Movie 2160p Multi Subs'), { langs: [] });
+  assert.equal(parseEmbeddedSubs('Silo.S03E06.2160p.ATVP.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265'), null);
+  assert.equal(parseEmbeddedSubs('Subway Surfers 1080p'), null);
 });
 
 test('normalizeStreams reads Torrentio seeder count', () => {

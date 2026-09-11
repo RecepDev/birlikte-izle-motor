@@ -6,7 +6,7 @@ import { decodeSubtitle, toVtt, langLabel } from './shared/subtitle-text.js';
 const MAX_BYTES = 2 * 1024 * 1024;
 const STEP = 0.5;
 
-export function createSubs({ panel, video, playerEl, roomId, request, isHost, userToken }) {
+export function createSubs({ panel, video, playerEl, roomId, request, isHost, userToken, embeddedInfo = () => null }) {
   let list = [];
   let hostSel = null; // { subId, offset } | null, shared by the host
   let personal = null; // { subId, offset } when this viewer chose on their own
@@ -236,8 +236,11 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
     const fileInput = el('input', { type: 'file', accept: '.srt,.vtt,text/vtt', hidden: true, onchange: (e) => upload(e.target.files[0]) });
     // replaceChildren would print null/false as text, so drop them first.
     const put = (...nodes) => panel.replaceChildren(...nodes.filter((n) => n !== null && n !== undefined && n !== false));
+    const embedded = embeddedInfo();
     put(
       mode,
+      embedded ? el('div', { class: 'row' }, el('span', { text: '💬 Bu dosyada gömülü altyazı var' }),
+        el('span', { class: 'info-i', tabindex: '0', title: embedded }, 'i')) : null,
       trackFailed
         ? el('div', { class: 'row warning-row' },
           el('span', { text: '⚠️ Altyazı yüklenemedi.' }),

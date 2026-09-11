@@ -30,6 +30,22 @@ export function parseHdr(text) {
   return null;
 }
 
+// Subtitles inside the file itself, as release names announce them:
+// "Sub (Rus Ukr Eng)", "Multi Subs", "ESub", "TR Altyazı"... Returns { langs } or null.
+const SUB_LANGS = { eng: 'İngilizce', rus: 'Rusça', ukr: 'Ukraynaca', heb: 'İbranice', tur: 'Türkçe', tr: 'Türkçe', ita: 'İtalyanca', fre: 'Fransızca', fra: 'Fransızca', ger: 'Almanca', deu: 'Almanca', spa: 'İspanyolca', por: 'Portekizce', ara: 'Arapça', pol: 'Lehçe' };
+export function parseEmbeddedSubs(text) {
+  const t = String(text || '');
+  const listed = t.match(/\bsubs?\s*\(([^)]+)\)/i);
+  if (listed) {
+    const langs = listed[1].split(/[\s,/+]+/).map((w) => SUB_LANGS[w.toLowerCase()] || w).filter(Boolean);
+    return { langs };
+  }
+  if (/\besubs?\b/i.test(t)) return { langs: ['İngilizce'] };
+  if (/altyaz[ıi]|\btr\.?sub/i.test(t)) return { langs: ['Türkçe'] };
+  if (/multi.?subs?|\bsubs\b|\bsubbed\b|\bsub\b/i.test(t)) return { langs: [] };
+  return null;
+}
+
 export function parseSizeBytes(raw) {
   const hinted = raw?.behaviorHints?.videoSize;
   if (Number.isFinite(hinted) && hinted > 0) return hinted;
@@ -59,6 +75,7 @@ function normalizeOne(raw, addonName) {
   // Torrentio puts the seeder count in the title as "👤 123".
   const seeders = `${base.title} ${base.name}`.match(/👤\s*(\d+)/);
   base.seeders = seeders ? Number(seeders[1]) : null;
+  base.embeddedSubs = parseEmbeddedSubs(`${base.name} ${base.title}`);
   base.sizeBytes = parseSizeBytes(raw);
   const notWebReady = raw.behaviorHints?.notWebReady === true;
   const subtitles = cleanSubtitles(raw.subtitles);
