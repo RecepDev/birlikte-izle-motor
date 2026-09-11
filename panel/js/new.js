@@ -64,7 +64,8 @@ function render() {
           (() => {
             const note = pictureNote(s);
             return note ? el('span', { class: `kind ${note.ok ? 'fine' : 'risk'}`, text: note.text }) : null;
-          })()),
+          })(),
+          s.hdr ? el('span', { class: 'kind risk', text: ` · 🌗 ${s.hdr}: HDR olmayan ekranda karanlık görünebilir` }) : null),
         button,
       );
     }),

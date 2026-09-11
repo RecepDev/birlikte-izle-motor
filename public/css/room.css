@@ -124,6 +124,10 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .speedtest { display: grid; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
 .speedtest p { margin: 0; line-height: 1.45; white-space: pre-line; }
 .speedtest .ok { color: var(--ok); }
+.pic-adjust { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pic-adjust button { padding: 3px 10px; }
+.pic-adjust span.small { min-width: 38px; text-align: center; }
+#hw-status button { margin-left: 6px; padding: 3px 8px; font-size: 12px; }
 .speedtest .bad { color: var(--warn); }
 .quality .need { font-size: 11px; color: var(--muted); }
 .quality .heavy { color: var(--warn); }

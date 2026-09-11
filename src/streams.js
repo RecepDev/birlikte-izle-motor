@@ -21,6 +21,15 @@ export function parseVideoRisk(text) {
   return null;
 }
 
+// HDR content often looks dark or washed out on SDR screens.
+export function parseHdr(text) {
+  const t = String(text || '');
+  if (/\b(dv|dovi)\b|dolby.?vision/i.test(t)) return 'Dolby Vision';
+  if (/hdr10\+|hdr10plus/i.test(t)) return 'HDR10+';
+  if (/\bhdr(10)?\b|\bhlg\b/i.test(t)) return 'HDR';
+  return null;
+}
+
 export function parseSizeBytes(raw) {
   const hinted = raw?.behaviorHints?.videoSize;
   if (Number.isFinite(hinted) && hinted > 0) return hinted;
@@ -46,6 +55,10 @@ function normalizeOne(raw, addonName) {
   };
   base.quality = parseQuality(`${base.name} ${base.title}`);
   base.videoRisk = parseVideoRisk(`${base.name} ${base.title}`);
+  base.hdr = parseHdr(`${base.name} ${base.title}`);
+  // Torrentio puts the seeder count in the title as "👤 123".
+  const seeders = `${base.title} ${base.name}`.match(/👤\s*(\d+)/);
+  base.seeders = seeders ? Number(seeders[1]) : null;
   base.sizeBytes = parseSizeBytes(raw);
   const notWebReady = raw.behaviorHints?.notWebReady === true;
   const subtitles = cleanSubtitles(raw.subtitles);

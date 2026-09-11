@@ -1,7 +1,7 @@
 // Room page entry point: joins the room, keeps UI and player in sync with it.
 
 import { io } from '/socket.io/socket.io.esm.min.js';
-import { $, el, toast, formatTime, storage, randomToken, copyText, errorText } from './ui.js';
+import { $, el, toast, formatTime, formatSize, storage, randomToken, copyText, errorText } from './ui.js';
 import { createSync } from './sync.js';
 import { createPlayer, isStremioUp } from './player.js';
 import { createChat } from './chat.js';
@@ -11,6 +11,7 @@ import { requiredMbps, runSpeedTest, createDownloadMeter } from './bandwidth.js'
 import { createSubs } from './subs.js';
 import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS } from './shared/stream-url.js';
 import { browserCodecs } from './codecs.js';
+import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
 
 // ---- identity --------------------------------------------------------------
 
@@ -180,6 +181,7 @@ const player = createPlayer({
 // mode then only repackages the file and converts audio.
 let keepQuality = storage.get('keepQuality') !== '0';
 let qualityBlocked = false; // the picture would need re-encoding and keepQuality forbids it
+let hw = null; // hardware acceleration check result (see checkHardware below)
 
 const RISK_CODEC = { HEVC: 'hevc', 'Dolby Vision': 'hevc', AV1: 'av1' };
 function videoNeedsReencode(s) {
@@ -373,8 +375,21 @@ function renderPictureInfo() {
   const box = $('#picture-info');
   const s = myStream();
   const h = video.videoHeight;
-  if (!s || !h) {
+  if (!s) {
     box.hidden = true;
+    return;
+  }
+  // Second line: torrent sources and file size (from the addon's listing).
+  const extra = [];
+  if (Number.isFinite(s.seeders)) extra.push(`👤 ${s.seeders} kaynak`);
+  if (s.sizeBytes) extra.push(`💾 ${formatSize(s.sizeBytes)}`);
+  const ts = state.room?.torrentStats?.[s.streamId];
+  if (ts && (isHost() || player.status().source === 'relay')) extra.push(`🧲 ${ts.peers} bağlı`);
+  if (s.hdr) extra.push(`🌗 ${s.hdr}`);
+  const extraLine = extra.length ? el('div', { text: extra.join(' · ') }) : null;
+  if (!h) {
+    box.replaceChildren(...[extraLine].filter(Boolean));
+    box.hidden = !extraLine;
     return;
   }
   const parts = [];
@@ -398,7 +413,7 @@ function renderPictureInfo() {
     const lost = (q.droppedVideoFrames / q.totalVideoFrames) * 100;
     if (lost >= 1) parts.push(`%${Math.round(lost)} kare kaybı`);
   }
-  box.replaceChildren(...parts.flatMap((p, i) => (i ? [' · ', p] : [p])));
+  box.replaceChildren(el('div', {}, ...parts.flatMap((p, i) => (i ? [' · ', p] : [p]))), extraLine);
   box.hidden = false;
 }
 video.addEventListener('resize', renderPictureInfo);
@@ -553,6 +568,12 @@ async function startSpeedTest() {
 
 // Whether this browser shows a stream's picture in original quality.
 function pictureVerdict(s) {
+  const v = pictureVerdictBase(s);
+  if (s.hdr) v.text += ` · 🌗 ${s.hdr}: ekranında karanlık görünebilir`;
+  return v;
+}
+
+function pictureVerdictBase(s) {
   if (!s.videoRisk) return { ok: true, text: '✅ orijinal kalitede oynar' };
   const supported = !videoNeedsReencode(s);
   if (s.videoRisk === 'Dolby Vision') {
@@ -631,11 +652,14 @@ function renderNotice() {
     }, true));
   } else if (qualityBlocked) {
     const s = myStream();
+    const noGpu = hw && !hw.gpu;
     text = `Tarayıcın bu videonun görüntü biçimini${s?.videoRisk ? ` (${s.videoRisk})` : ''} açamıyor.\n`
+      + (noGpu ? 'Tarayıcında donanım hızlandırma kapalı görünüyor; açınca bu dosya da açılabilir.\n' : '')
       + 'Kalite düşmesin diye görüntü dönüştürülmedi.\n'
       + 'Kalite sekmesinde ✅ işaretli bir dosyaya geçebilir ya da yine de dönüştürebilirsin.';
     actions.push(button('✅ Dosya seç', () => selectTab('quality'), true));
-    actions.push(button('HEVC nasıl açılır?', () => alert(HEVC_HELP)));
+    if (noGpu) actions.push(button('Donanım hızlandırma nasıl açılır?', () => alert(HW_HELP)));
+    else actions.push(button('HEVC nasıl açılır?', () => alert(HEVC_HELP)));
     actions.push(button('Yine de dönüştür (kalite düşer)', () => {
       qualityBlocked = false;
       loaded.compat = false;
@@ -940,6 +964,63 @@ $('#allow-4k').addEventListener('change', (e) => {
   reloadCompat4k();
 });
 renderAllow4k();
+
+// ---- hardware acceleration check ----
+function renderHw() {
+  const box = $('#hw-status');
+  if (!hw) return;
+  if (hw.gpu) {
+    box.className = 'small ok';
+    box.textContent = `✅ Donanım hızlandırma açık${gpuName(hw.renderer) ? ` · ${gpuName(hw.renderer)}` : ''}`
+      + (hw.hevcHardware ? ' · 4K HEVC donanımla çözülüyor' : '');
+  } else {
+    box.className = 'small bad';
+    box.replaceChildren(
+      '⚠️ Donanım hızlandırma kapalı görünüyor. HEVC, Dolby Vision ve 4K videolar açılmayabilir ya da takılabilir.',
+      el('button', { type: 'button', text: 'Nasıl açılır?', onclick: () => alert(HW_HELP) }),
+    );
+  }
+}
+checkHardware().then((result) => {
+  hw = result;
+  renderHw();
+  if (!hw.gpu) toast('Tarayıcında donanım hızlandırma kapalı görünüyor. Ayrıntı: Kalite sekmesi.', 7000);
+  renderNotice();
+});
+
+// ---- picture adjustment (brightness / contrast), per viewer ----
+const pic = { b: Number(storage.get('picB')) || 1, c: Number(storage.get('picC')) || 1 };
+function applyPic() {
+  video.style.filter = pic.b !== 1 || pic.c !== 1 ? `brightness(${pic.b}) contrast(${pic.c})` : '';
+  $('#br-val').textContent = `%${Math.round(pic.b * 100)}`;
+  $('#ct-val').textContent = `%${Math.round(pic.c * 100)}`;
+  storage.set('picB', String(pic.b));
+  storage.set('picC', String(pic.c));
+}
+const nudgePic = (key, delta, min, max) => {
+  pic[key] = Math.round(Math.min(max, Math.max(min, pic[key] + delta)) * 10) / 10;
+  applyPic();
+};
+$('#br-up').addEventListener('click', () => nudgePic('b', 0.1, 0.5, 2.5));
+$('#br-down').addEventListener('click', () => nudgePic('b', -0.1, 0.5, 2.5));
+$('#ct-up').addEventListener('click', () => nudgePic('c', 0.1, 0.5, 2));
+$('#ct-down').addEventListener('click', () => nudgePic('c', -0.1, 0.5, 2));
+$('#pic-reset').addEventListener('click', () => {
+  pic.b = 1;
+  pic.c = 1;
+  applyPic();
+});
+applyPic();
+
+// HDR on an SDR screen often looks dark: point to the brightness control once per stream.
+let hdrHintFor = null;
+video.addEventListener('loadedmetadata', () => {
+  const s = myStream();
+  if (s?.hdr && pic.b === 1 && hdrHintFor !== s.streamId) {
+    hdrHintFor = s.streamId;
+    toast(`${s.hdr} video: görüntü karanlıksa Kalite sekmesinden parlaklığı artırabilirsin.`, 8000);
+  }
+});
 
 // ---- keep picture quality option ----
 function renderKeepQuality() {

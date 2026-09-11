@@ -4,6 +4,7 @@ import {
   parseQuality,
   parseSizeBytes,
   parseVideoRisk,
+  parseHdr,
   normalizeStreams,
   guestStreamList,
 } from '../src/streams.js';
@@ -26,6 +27,14 @@ test('parseVideoRisk flags formats browsers often cannot decode', () => {
   assert.equal(parseVideoRisk('Movie 1080p AV1'), 'AV1');
   assert.equal(parseVideoRisk('Movie.1080p.x264'), null);
   assert.equal(parseVideoRisk('Divx release'), null);
+});
+
+test('parseHdr flags HDR formats', () => {
+  assert.equal(parseHdr('Movie.2160p.DV.HDR.x265'), 'Dolby Vision');
+  assert.equal(parseHdr('Movie 2160p HDR10+ HEVC'), 'HDR10+');
+  assert.equal(parseHdr('Movie.2160p.HDR.x265'), 'HDR');
+  assert.equal(parseHdr('Movie 2160p HDR10'), 'HDR');
+  assert.equal(parseHdr('Movie.1080p.x264'), null);
 });
 
 test('parseSizeBytes prefers behaviorHints.videoSize then title', () => {
@@ -57,6 +66,8 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
     title: 'Movie.1080p\n💾 2 GB',
     quality: '1080p',
     videoRisk: null,
+    hdr: null,
+    seeders: null,
     sizeBytes: 2 * 1024 ** 3,
     infoHash: IH.toLowerCase(),
     fileIdx: 1,
@@ -70,6 +81,11 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
   assert.equal(out[1].notWebReady, true);
   assert.equal(out[1].quality, '2160p');
   assert.equal(out[1].streamId, 's2');
+});
+
+test('normalizeStreams reads Torrentio seeder count', () => {
+  const [s] = normalizeStreams([{ addonName: 'T', streams: [{ infoHash: IH, title: 'Movie.1080p\n👤 186 💾 7.4 GB ⚙️ yts' }] }]);
+  assert.equal(s.seeders, 186);
 });
 
 test('normalizeStreams rejects malformed infoHash and keeps stream subtitles', () => {
