@@ -57,7 +57,7 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
             el('span', { class: 'info-i', tabindex: '0', title: text }, 'ⓘ'),
           ]));
         })(),
-        el('span', { title: String(s.title || s.name) }, info)),
+        el('div', { class: 'title', title: String(s.title || s.name) }, info)),
       el(
         'div',
         { class: 'btns' },

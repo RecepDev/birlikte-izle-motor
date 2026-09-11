@@ -486,6 +486,7 @@ const subs = createSubs({
   isHost,
   userToken,
   embeddedInfo: () => (myStream()?.embeddedSubs ? embeddedSubsText(myStream()) : null),
+  embeddedLangs: () => myStream()?.embeddedSubs?.langs || [],
 });
 
 function renderHeader() {

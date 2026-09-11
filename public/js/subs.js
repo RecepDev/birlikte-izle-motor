@@ -6,7 +6,7 @@ import { decodeSubtitle, toVtt, langLabel } from './shared/subtitle-text.js';
 const MAX_BYTES = 2 * 1024 * 1024;
 const STEP = 0.5;
 
-export function createSubs({ panel, video, playerEl, roomId, request, isHost, userToken, embeddedInfo = () => null }) {
+export function createSubs({ panel, video, playerEl, roomId, request, isHost, userToken, embeddedInfo = () => null, embeddedLangs: embeddedLangsOf = () => [] }) {
   let list = [];
   let hostSel = null; // { subId, offset } | null, shared by the host
   let personal = null; // { subId, offset } when this viewer chose on their own
@@ -232,6 +232,14 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(s);
     }
+    // Languages the file carries inside it (from the release name). The browser
+    // can't show those tracks, so they're listed as info, not as choices.
+    const embeddedLangs = new Set(embeddedLangsOf());
+    for (const lang of embeddedLangs) if (!groups.has(lang)) groups.set(lang, []);
+    const embeddedRow = (lang) => el('li', { class: 'embedded' },
+      el('span', { text: `💬 ${lang} · dosyanın içinde` }),
+      el('span', { class: 'tag-embedded', text: 'gömülü' }),
+      el('span', { class: 'info-i', tabindex: '0', title: 'Bu altyazı video dosyasının içinde. Tarayıcı gömülü altyazıyı gösteremez; bu dilde aşağıdan bir altyazı seç.' }, 'i'));
 
     const fileInput = el('input', { type: 'file', accept: '.srt,.vtt,text/vtt', hidden: true, onchange: (e) => upload(e.target.files[0]) });
     // replaceChildren would print null/false as text, so drop them first.
@@ -272,7 +280,13 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),
         el('button', { type: 'button', text: '↻ Listeyi yenile', title: "Altyazıları addon'lardan yeniden çek", onclick: refreshList })),
-      ...[...groups].flatMap(([name, subs]) => [el('h3', { text: name }), el('ul', {}, ...subs.map((s) => subButton(s, eff.subId)))]),
+      ...[...groups].flatMap(([name, subs]) => {
+        const emb = embeddedLangs.has(name);
+        return [
+          el('h3', {}, name, emb ? el('span', { class: 'tag-embedded', text: 'gömülü' }) : ''),
+          el('ul', {}, ...(emb ? [embeddedRow(name)] : []), ...subs.map((s) => subButton(s, eff.subId))),
+        ];
+      }),
     );
   }
 
