@@ -12,7 +12,9 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
   const items = room.streams.map((s) => {
     const isHostStream = s.streamId === room.hostStreamId;
     const isMine = s.streamId === myStreamId;
-    const info = [s.addonName, s.title || s.name].filter(Boolean).join(' · ');
+    // Seeders and size are shown under the quality label; keep just the name here.
+    const title = String(s.title || s.name).split('\n')[0];
+    const info = [s.addonName, title].filter(Boolean).join(' · ');
     const need = needFor(s);
     const heavy = need !== null && have !== null && need > have * 0.95;
     const buttons = [];
@@ -43,7 +45,9 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
       'li',
       { class: isMine ? 'current' : '' },
       el('span', { class: 'q' }, s.quality || '?',
-        need !== null ? el('div', { class: `need${heavy ? ' heavy' : ''}`, text: `~${formatMbps(need)} Mbps${heavy ? ' ⚠️' : ''}`, title: heavy ? 'İndirme hızın bu dosyaya yetmeyebilir' : 'Akıcı izlemek için gereken indirme hızı' }) : null),
+        need !== null ? el('div', { class: `need${heavy ? ' heavy' : ''}`, text: `~${formatMbps(need)} Mbps${heavy ? ' ⚠️' : ''}`, title: heavy ? 'İndirme hızın bu dosyaya yetmeyebilir' : 'Akıcı izlemek için gereken indirme hızı' }) : null,
+        Number.isFinite(s.seeders) ? el('div', { class: 'need', text: `👤 ${s.seeders}`, title: 'Torrent kaynak (seed) sayısı' }) : null,
+        s.sizeBytes ? el('div', { class: 'need', text: `💾 ${formatSize(s.sizeBytes)}`, title: 'Dosya boyutu' }) : null),
       el('div', { class: 'info' },
         (() => {
           const items = pictureFor(s) || [];
@@ -53,7 +57,7 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
             el('span', { class: 'info-i', tabindex: '0', title: text }, 'ⓘ'),
           ]));
         })(),
-        `${formatSize(s.sizeBytes)} ${info}`.trim()),
+        el('span', { title: String(s.title || s.name) }, info)),
       el(
         'div',
         { class: 'btns' },

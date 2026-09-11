@@ -1026,27 +1026,52 @@ $('#pic-reset').addEventListener('click', () => {
 });
 applyPic();
 
+// Aspect modes for the player button (per viewer).
+const ASPECTS = [
+  ['fit', 'Sığdır'], ['fill', 'Doldur'], ['stretch', 'Uzat'],
+  ['16:9', '16:9'], ['4:3', '4:3'], ['21:9', '21:9'],
+];
+const FIXED_RATIO = { '16:9': 16 / 9, '4:3': 4 / 3, '21:9': 21 / 9 };
+let aspectMode = ASPECTS.some(([m]) => m === storage.get('aspect')) ? storage.get('aspect') : 'fit';
+
 // Size the <video> to the picture itself so filters skip the black bars.
 function fitVideo() {
   const W = playerEl.clientWidth;
   const H = playerEl.clientHeight;
   const vw = video.videoWidth;
   const vh = video.videoHeight;
-  if (!vw || !vh || !W || !H) {
-    video.style.width = '100%';
-    video.style.height = '100%';
+  $('#btn-aspect').textContent = ASPECTS.find(([m]) => m === aspectMode)[1];
+  if (!vw || !vh || !W || !H || aspectMode === 'stretch') {
+    video.style.objectFit = 'fill';
+    video.style.width = `${W || 0}px`;
+    video.style.height = `${H || 0}px`;
+    if (!vw || !vh || !W || !H) {
+      video.style.width = '100%';
+      video.style.height = '100%';
+      video.style.objectFit = 'contain';
+    }
     return;
   }
-  const ratio = vw / vh;
+  const ratio = FIXED_RATIO[aspectMode] || vw / vh;
+  // Forced ratios stretch the picture into that shape; others keep its own.
+  video.style.objectFit = FIXED_RATIO[aspectMode] ? 'fill' : 'contain';
   let w = W;
   let h = W / ratio;
-  if (h > H) {
+  const cover = aspectMode === 'fill';
+  if (cover ? h < H : h > H) {
     h = H;
     w = H * ratio;
   }
   video.style.width = `${Math.floor(w)}px`;
   video.style.height = `${Math.floor(h)}px`;
 }
+$('#btn-aspect').addEventListener('click', () => {
+  const i = ASPECTS.findIndex(([m]) => m === aspectMode);
+  aspectMode = ASPECTS[(i + 1) % ASPECTS.length][0];
+  storage.set('aspect', aspectMode);
+  fitVideo();
+  toast(`Görüntü oranı: ${ASPECTS.find(([m]) => m === aspectMode)[1]}`, 1500);
+});
 new ResizeObserver(fitVideo).observe(playerEl);
 video.addEventListener('loadedmetadata', fitVideo);
 video.addEventListener('resize', fitVideo);
