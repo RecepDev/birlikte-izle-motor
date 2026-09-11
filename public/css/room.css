@@ -152,6 +152,15 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
   padding: 8px 14px; display: flex; gap: 10px; align-items: center; z-index: 3; max-width: calc(100% - 24px);
 }
 .banner button { padding: 4px 10px; font-size: 13px; }
+/* Our own subtitle layer: above the (filtered) video, never affected by it. */
+.sub-overlay {
+  position: absolute; left: 4%; right: 4%; bottom: 8%; z-index: 1; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: .12em; text-align: center; line-height: 1.25;
+}
+.sub-line {
+  background: var(--sub-bg, rgba(0, 0, 0, .6)); color: #fff; padding: .04em .35em; border-radius: .15em;
+  white-space: pre-line; text-shadow: 0 0 3px #000, 0 0 2px #000;
+}
 .compat-btn {
   position: absolute; right: 12px; bottom: 64px; z-index: 3; transition: opacity .2s;
   background: rgba(20, 20, 28, .92); border: 1px solid var(--warn); color: var(--warn);

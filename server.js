@@ -3,6 +3,7 @@
 //   :7001  panel   (GUI, room creation)                   <- 127.0.0.1 only
 
 import http from 'node:http';
+import dns from 'node:dns';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,10 @@ import { createTunnel, installCloudflared } from './src/tunnel.js';
 import { createPanelApp } from './src/panel-api.js';
 import { createSubtitleService, createSubtitleRouter } from './src/subtitles.js';
 import { createRelay } from './src/relay.js';
+
+// Addons like Torrentio resolve to IPv6 first; a flaky IPv6 route shows up as
+// "fetch failed", so try IPv4 first.
+dns.setDefaultResultOrder('ipv4first');
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(ROOT, 'data');

@@ -18,19 +18,34 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
   const originals = new WeakMap();
   let size = Number(storage.get('cueSize')) || 1;
   let bg = storage.get('cueBg') ?? '0.6';
-  // Personal vertical position: percent from the top where the cue ends; null = browser default.
+  // Personal vertical position: percent of the player height where the text ends; null = default.
   const savedLine = storage.get('cueLine');
   let line = savedLine === null || savedLine === '' ? null : Number(savedLine);
+  const DEFAULT_LINE = 92;
 
-  // ::cue ignores CSS custom properties in Chromium, so write a concrete rule.
-  // Size is relative to the video height, like the browser's own default.
-  const cueStyle = document.createElement('style');
-  document.head.append(cueStyle);
+  // Subtitles are drawn in our own layer above the video (not the browser's
+  // ::cue), so picture filters never touch them and size/position always work.
+  const overlay = el('div', { class: 'sub-overlay', 'aria-live': 'off' });
+  playerEl.append(overlay);
+
   function applyStyle() {
-    const px = Math.max(12, Math.round(video.clientHeight * 0.045 * size));
-    cueStyle.textContent = `#${video.id}::cue { font-size: ${px}px; background-color: rgba(0, 0, 0, ${bg}); }`;
+    const px = Math.max(12, Math.round(playerEl.clientHeight * 0.045 * size));
+    overlay.style.fontSize = `${px}px`;
+    overlay.style.setProperty('--sub-bg', `rgba(0, 0, 0, ${bg})`);
+    overlay.style.bottom = `${100 - (line ?? DEFAULT_LINE)}%`;
   }
-  new ResizeObserver(applyStyle).observe(video);
+  new ResizeObserver(applyStyle).observe(playerEl);
+
+  function renderCues() {
+    const cues = trackEl?.track?.activeCues;
+    const lines = [];
+    for (const cue of cues || []) {
+      const span = el('span', { class: 'sub-line' });
+      span.append(cue.getCueAsHTML()); // browser-parsed VTT markup (i, b, u only), never raw HTML
+      lines.push(span);
+    }
+    overlay.replaceChildren(...lines);
+  }
 
   const effective = () => personal || hostSel || { subId: null, offset: 0 };
   const findSub = (id) => localFiles.find((f) => f.subId === id) || list.find((s) => s.subId === id);
@@ -38,8 +53,17 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
     localFiles.find((f) => f.subId === id)?.url
     || `/sub/${roomId}/${encodeURIComponent(id)}.vtt${reloadCount ? `?r=${reloadCount}` : ''}`;
 
+  // iOS's own fullscreen player can only show native subtitles.
+  let nativeFullscreen = false;
+  video.addEventListener('webkitbeginfullscreen', () => { nativeFullscreen = true; showOnly(); });
+  video.addEventListener('webkitendfullscreen', () => { nativeFullscreen = false; showOnly(); });
+
   function showOnly() {
-    for (const t of video.textTracks) t.mode = trackEl && t === trackEl.track ? 'showing' : 'disabled';
+    for (const t of video.textTracks) {
+      const ours = trackEl && t === trackEl.track;
+      t.mode = ours ? (nativeFullscreen ? 'showing' : 'hidden') : 'disabled';
+    }
+    renderCues();
   }
 
   function shift(offset) {
@@ -57,18 +81,7 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
   }
 
   function applyLine() {
-    const cues = trackEl?.track?.cues;
-    if (!cues) return;
-    for (const cue of cues) {
-      if (line === null) {
-        cue.snapToLines = true;
-        cue.line = 'auto';
-      } else {
-        cue.snapToLines = false;
-        cue.line = line;
-        cue.lineAlign = 'end';
-      }
-    }
+    applyStyle();
   }
 
   function resize(delta) {
@@ -79,7 +92,7 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
   }
 
   function moveLine(delta) {
-    line = delta === null ? null : Math.min(100, Math.max(10, (line ?? 90) + delta));
+    line = delta === null ? null : Math.min(100, Math.max(10, (line ?? DEFAULT_LINE) + delta));
     storage.set('cueLine', line === null ? '' : String(line));
     applyLine();
     render();
@@ -96,8 +109,9 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
         trackEl = el('track', { kind: 'subtitles', src: srcFor(eff.subId), srclang: 'tr', label: 'Altyazı' });
         trackEl.addEventListener('load', () => {
           shift(effective().offset);
-          applyLine();
+          renderCues();
         });
+        trackEl.track.addEventListener('cuechange', renderCues);
         trackEl.addEventListener('error', () => {
           trackFailed = true;
           toast('Altyazı yüklenemedi. Altyazı sekmesinden tekrar deneyebilirsin.');
@@ -108,7 +122,7 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
       showOnly();
     }
     shift(eff.offset);
-    applyLine();
+    renderCues();
     render();
   }
 
@@ -201,7 +215,9 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
     }
 
     const fileInput = el('input', { type: 'file', accept: '.srt,.vtt,text/vtt', hidden: true, onchange: (e) => upload(e.target.files[0]) });
-    panel.replaceChildren(
+    // replaceChildren would print null/false as text, so drop them first.
+    const put = (...nodes) => panel.replaceChildren(...nodes.filter((n) => n !== null && n !== undefined && n !== false));
+    put(
       mode,
       trackFailed
         ? el('div', { class: 'row warning-row' },

@@ -13,10 +13,12 @@ function supports(addon, resource) {
 
 function errorMessage(err) {
   if (err?.name === 'TimeoutError' || err?.name === 'AbortError') return 'zaman aşımı';
-  return err?.message || String(err);
+  // fetch hides the real network reason (ECONNRESET, ETIMEDOUT...) in err.cause.
+  const cause = err?.cause?.code || err?.cause?.message;
+  return cause ? `${err.message} (${cause})` : err?.message || String(err);
 }
 
-export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, metaTimeoutMs = 5_000 } = {}) {
+export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, metaTimeoutMs = 5_000, retryDelayMs = 700 } = {}) {
   async function getJson(url, ms = timeoutMs) {
     const res = await fetchImpl(url, { signal: AbortSignal.timeout(ms), headers: { accept: 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -29,6 +31,7 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
       return await getJson(url);
     } catch (err) {
       if (/^HTTP 4\d\d$/.test(err.message)) throw err;
+      await new Promise((r) => setTimeout(r, retryDelayMs));
       return getJson(url);
     }
   }
