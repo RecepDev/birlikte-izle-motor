@@ -48,6 +48,7 @@ export class Room {
     this.chatSeq = 0;
     this.subtitles = [];
     this.hostSubtitle = null;
+    this.torrentStats = {}; // streamId -> { peers, downMbps, progress } from the host's Stremio
     this.emptySince = this.createdAt;
   }
 
@@ -386,6 +387,22 @@ export class Room {
     };
   }
 
+  // ---- torrent stats -----------------------------------------------------
+
+  // Streams whose torrent may be running on the host PC: the host's own and
+  // the ones relay users picked.
+  statsStreamIds() {
+    const ids = new Set([this.hostStreamId]);
+    for (const u of this.users.values()) if (u.connected && u.ownStreamId) ids.add(u.ownStreamId);
+    return [...ids];
+  }
+
+  setTorrentStats(map) {
+    if (JSON.stringify(map) === JSON.stringify(this.torrentStats)) return [];
+    this.torrentStats = map;
+    return [{ to: 'room', event: 'torrentStats', data: map }];
+  }
+
   // ---- subtitles ---------------------------------------------------------
 
   publicSubtitles() {
@@ -447,6 +464,7 @@ export class Room {
       streams: this.guestStreams(),
       subtitles: this.publicSubtitles(),
       hostSubtitle: this.hostSubtitle,
+      torrentStats: this.torrentStats,
       playback: { ...this.playback },
       autoPaused: this.autoPaused,
       waitingUserIds: this.waitingUserIds,
@@ -466,6 +484,7 @@ export class Room {
       settings: { ...this.settings },
       playback: { ...this.playback, position: this.currentPosition() },
       hostStreamId: this.hostStreamId,
+      torrentStats: this.torrentStats,
       users: this.usersView(),
     };
   }

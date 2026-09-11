@@ -63,6 +63,19 @@ function roomLink(room) {
   return status?.tunnel.url ? `${status.tunnel.url}/room/${room.id}` : null;
 }
 
+// Real torrent stats exist for torrents on this PC (host, relay viewers); others report an estimate.
+function downloadText(room, u) {
+  if (!u.connected) return '';
+  const onThisPc = u.status.source === 'relay' || (u.isHost && u.status.source === 'local');
+  const ts = onThisPc ? room.torrentStats?.[u.ownStreamId || room.hostStreamId] : null;
+  const down = ts ? ts.downMbps : u.status.downMbps;
+  return [
+    Number.isFinite(down) ? `↓ ${down} Mbps` : '',
+    ts ? `🧲 ${ts.peers} peer` : '',
+    Number.isFinite(u.status.ahead) ? `${u.status.ahead} sn` : '',
+  ].filter(Boolean).join(' · ');
+}
+
 function renderRoom(room) {
   const relayByUser = new Map((room.relay?.users || []).map((u) => [u.userId, u]));
   const link = roomLink(room);
@@ -75,7 +88,7 @@ function renderRoom(room) {
       el('td', { text: u.connected ? STATE_TEXT[u.status.state] || u.status.state : '🔌 koptu' }),
       el('td', { text: { local: 'kendi Stremio', relay: '📶 relay', http: 'link', none: '—' }[u.status.source] || '' }),
       el('td', { text: u.status.quality || '' }),
-      el('td', { text: Number.isFinite(u.status.downMbps) ? `↓ ${u.status.downMbps} Mbps${Number.isFinite(u.status.ahead) ? ` · ${u.status.ahead} sn` : ''}` : '' }),
+      el('td', { text: downloadText(room, u) }),
       el('td', { text: Number.isFinite(u.status.drift) ? `${Math.round(u.status.drift * 1000)} ms` : '' }),
       el('td', { text: relayByUser.has(u.id) ? `${relayByUser.get(u.id).mbps} Mbps` : '' }),
       el('td', {}, u.isHost ? null : el('button', {

@@ -113,6 +113,27 @@ tunnel = createTunnel({
   },
 });
 
+// Torrent peers/speed from the host's Stremio, pushed to rooms every 3 s.
+let statsBusy = false;
+const statsTimer = setInterval(async () => {
+  if (statsBusy || !rooms.list().length) return;
+  statsBusy = true;
+  try {
+    for (const room of rooms.list()) {
+      const next = {};
+      for (const id of room.statsStreamIds()) {
+        const stream = room.streams.find((s) => s.streamId === id && s.kind === 'torrent');
+        const stats = stream && (await stremioLocal.torrentStats(stream));
+        if (stats) next[id] = stats;
+      }
+      dispatch(room, room.setTorrentStats(next));
+    }
+  } finally {
+    statsBusy = false;
+  }
+}, 3000);
+statsTimer.unref();
+
 // ---- panel server (:7001) -------------------------------------------------
 
 const panelServer = http.createServer(
@@ -158,6 +179,7 @@ function shutdown() {
   tunnel.stop();
   socketCtl.stop();
   relay.stop();
+  clearInterval(statsTimer);
   io.close();
   panelServer.close();
   setTimeout(() => process.exit(0), 500).unref();

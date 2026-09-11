@@ -235,12 +235,24 @@ function liveDownload() {
 }
 
 const STATE_ICON = { ready: '▶', loading: '⏳', buffering: '⏳', error: '⚠️', noStremio: '🚫', idle: '💤' };
-function speedLabel(st) {
+// Torrent stats are only readable for torrents running on the host PC:
+// the host's own and those of viewers watching through the relay.
+function hostPcStats(u, status = u.status) {
+  const onHostPc = status.source === 'relay' || (u.id === state.room.hostUserId && status.source === 'local');
+  if (!onHostPc) return null;
+  return state.room.torrentStats?.[u.ownStreamId || state.room.hostStreamId] || null;
+}
+
+function speedLabel(st, ts = null) {
   if (st.source === 'none' || st.state === 'noStremio' || st.state === 'idle') return '';
-  if (st.complete) return 'tamamı indi';
   const parts = [];
-  if (Number.isFinite(st.downMbps)) parts.push(`↓ ${formatMbps(st.downMbps)} Mbps`);
-  if (Number.isFinite(st.ahead)) parts.push(`${st.ahead} sn`);
+  if (st.complete) parts.push('tamamı indi');
+  else {
+    const down = ts ? ts.downMbps : st.downMbps;
+    if (Number.isFinite(down)) parts.push(`↓ ${formatMbps(down)} Mbps`);
+  }
+  if (ts) parts.push(`🧲 ${ts.peers}`);
+  if (!st.complete && Number.isFinite(st.ahead)) parts.push(`${st.ahead} sn`);
   return parts.join(' · ');
 }
 
@@ -251,10 +263,11 @@ function renderViewersOverlay() {
   $('#viewers-count').textContent = String(users.length);
   $('#viewers-list').replaceChildren(...users.map((u) => {
     const st = u.id === state.me ? { ...u.status, ...mine } : u.status;
-    return el('li', { title: u.id === state.me ? 'Sen' : '' },
+    const ts = hostPcStats(u, st);
+    return el('li', { title: ts ? '🧲 bağlı peer sayısı (host bilgisayarındaki Stremio)' : '' },
       el('span', { text: STATE_ICON[st.state] || '•' }),
       el('span', { class: 'n', text: `${u.name}${u.isHost ? ' 👑' : ''}${u.id === state.me ? ' (sen)' : ''}` }),
-      el('span', { class: 'sp', text: speedLabel(st) }));
+      el('span', { class: 'sp', text: speedLabel(st, ts) }));
   }));
 }
 setInterval(renderViewersOverlay, 2000);
@@ -321,6 +334,7 @@ function renderHeader() {
 function renderUsersTab() {
   const count = renderUsers($('#user-list'), state.room, state.me, {
     streamLabel: (u) => streamLabel(streamById(u.ownStreamId || state.room.hostStreamId)),
+    statsFor: (u) => hostPcStats(u),
     onKick: async (u) => {
       if (!confirm(`${u.name} odadan çıkarılsın mı? Tekrar giremez.`)) return;
       const res = await request('kick', { userId: u.id });
@@ -584,6 +598,12 @@ socket.on('hostStream', ({ hostStreamId, streams }) => {
   renderQualityTab();
   renderUsersTab();
   loadMyStream();
+});
+
+socket.on('torrentStats', (stats) => {
+  state.room.torrentStats = stats;
+  renderViewersOverlay();
+  renderUsersTab();
 });
 
 socket.on('subtitles', ({ subtitles }) => {
