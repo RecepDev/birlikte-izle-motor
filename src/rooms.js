@@ -305,9 +305,50 @@ export class Room {
     return { msgs };
   }
 
-  // Hook for features that react to settings (relay limit). Returns msgs.
+  // Revokes relay grants that the new settings no longer allow. The host is
+  // exempt: its relay is its own Stremio.
   onSettingsChanged() {
-    return [];
+    const grants = this.connectedUsers()
+      .filter((u) => u.relayKey && u.id !== this.hostUserId)
+      .sort((a, b) => a.relayGrantedAt - b.relayGrantedAt);
+    const allowed = this.settings.relayEnabled ? this.settings.relayLimit : 0;
+    const msgs = [];
+    for (const u of grants.slice(allowed)) {
+      u.relayKey = null;
+      msgs.push({ to: u.id, event: 'relayRevoked', data: {}, urgent: true });
+    }
+    if (msgs.length) msgs.push(this.usersMsg(true));
+    return msgs;
+  }
+
+  // ---- relay -------------------------------------------------------------
+
+  requestRelay(userId) {
+    const user = this.users.get(userId);
+    if (!user?.connected) return { error: 'notInRoom' };
+    if (user.relayKey) return { msgs: [], reply: { ok: true, relayKey: user.relayKey } };
+    const isHost = userId === this.hostUserId;
+    if (!isHost) {
+      if (!this.settings.relayEnabled) return { error: 'relayOff' };
+      const used = this.connectedUsers().filter((u) => u.relayKey && u.id !== this.hostUserId).length;
+      if (used >= this.settings.relayLimit) return { error: 'relayFull' };
+    }
+    user.relayKey = crypto.randomBytes(16).toString('hex');
+    user.relayGrantedAt = this.now();
+    return { msgs: [this.usersMsg(true)], reply: { ok: true, relayKey: user.relayKey } };
+  }
+
+  releaseRelay(userId) {
+    const user = this.users.get(userId);
+    if (!user?.relayKey) return { msgs: [] };
+    user.relayKey = null;
+    return { msgs: [this.usersMsg(true)] };
+  }
+
+  findRelayUser(key) {
+    if (typeof key !== 'string' || key.length !== 32) return null;
+    for (const u of this.users.values()) if (u.connected && u.relayKey === key) return u;
+    return null;
   }
 
   // ---- streams -----------------------------------------------------------
