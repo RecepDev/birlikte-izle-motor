@@ -20,7 +20,11 @@
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
 body { font-size: 15px; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
-button, input { font: inherit; color: inherit; }
+button, input, select { font: inherit; color: inherit; }
+select {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+}
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 12px; cursor: pointer;

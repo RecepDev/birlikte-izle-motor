@@ -10,6 +10,7 @@ import { renderQuality, streamLabel, formatMbps } from './quality.js';
 import { requiredMbps, runSpeedTest, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
 import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS } from './shared/stream-url.js';
+import { langLabel } from './shared/subtitle-text.js';
 import { browserCodecs } from './codecs.js';
 import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
 
@@ -84,9 +85,49 @@ function attachSource(url, opts = {}) {
   hls.on(window.Hls.Events.ERROR, (evt, data) => {
     if (data.fatal) player.fail('hls');
   });
+  hls.on(window.Hls.Events.AUDIO_TRACKS_UPDATED, () => subs?.rerender());
+  hls.on(window.Hls.Events.AUDIO_TRACK_SWITCHED, () => subs?.rerender());
   hls.loadSource(url);
   hls.attachMedia(video);
   return true;
+}
+
+// Multi-audio files: hls.js exposes alternate audio renditions (compat mode);
+// native playback exposes them via the browser's own AudioTrackList when the
+// container/browser support it (Safari's native HLS, some local mp4/webm).
+if ('audioTracks' in video) {
+  const onAudioChange = () => subs?.rerender();
+  video.audioTracks.addEventListener('addtrack', onAudioChange);
+  video.audioTracks.addEventListener('removetrack', onAudioChange);
+  video.audioTracks.addEventListener('change', onAudioChange);
+}
+
+function audioTracksList() {
+  if (hls?.audioTracks?.length > 1) {
+    return hls.audioTracks.map((t, i) => ({
+      id: String(i),
+      label: t.name && t.name !== 'main' ? t.name : t.lang ? langLabel(t.lang) : `Ses ${i + 1}`,
+      active: i === hls.audioTrack,
+    }));
+  }
+  if (video.audioTracks?.length > 1) {
+    return [...video.audioTracks].map((t, i) => ({
+      id: t.id,
+      label: t.label || (t.language ? langLabel(t.language) : `Ses ${i + 1}`),
+      active: t.enabled,
+    }));
+  }
+  return [];
+}
+
+function selectAudioTrack(id) {
+  if (hls?.audioTracks?.length > 1) {
+    hls.audioTrack = Number(id);
+    return;
+  }
+  if (video.audioTracks) {
+    for (const t of video.audioTracks) t.enabled = String(t.id) === String(id);
+  }
 }
 
 async function ensureRelay() {
@@ -487,6 +528,8 @@ const subs = createSubs({
   userToken,
   embeddedInfo: () => (myStream()?.embeddedSubs ? embeddedSubsText(myStream()) : null),
   embeddedLangs: () => myStream()?.embeddedSubs?.langs || [],
+  audioTracks: audioTracksList,
+  onSelectAudio: selectAudioTrack,
 });
 
 function renderHeader() {

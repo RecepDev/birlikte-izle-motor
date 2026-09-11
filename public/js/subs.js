@@ -6,7 +6,11 @@ import { decodeSubtitle, toVtt, langLabel } from './shared/subtitle-text.js';
 const MAX_BYTES = 2 * 1024 * 1024;
 const STEP = 0.5;
 
-export function createSubs({ panel, video, playerEl, roomId, request, isHost, userToken, embeddedInfo = () => null, embeddedLangs: embeddedLangsOf = () => [] }) {
+export function createSubs({
+  panel, video, playerEl, roomId, request, isHost, userToken,
+  embeddedInfo = () => null, embeddedLangs: embeddedLangsOf = () => [],
+  audioTracks = () => [], onSelectAudio = () => {},
+}) {
   let list = [];
   let hostSel = null; // { subId, offset } | null, shared by the host
   let personal = null; // { subId, offset } when this viewer chose on their own
@@ -245,7 +249,15 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
     // replaceChildren would print null/false as text, so drop them first.
     const put = (...nodes) => panel.replaceChildren(...nodes.filter((n) => n !== null && n !== undefined && n !== false));
     const embedded = embeddedInfo();
+    const tracks = audioTracks();
+    const audioRow = tracks.length > 1
+      ? el('div', { class: 'row' },
+        el('span', { class: 'muted small', text: '🔊 Ses dili' }),
+        el('select', { onchange: (e) => onSelectAudio(e.target.value) },
+          ...tracks.map((t) => el('option', { value: t.id, selected: t.active || null }, t.label))))
+      : null;
     put(
+      audioRow,
       mode,
       embedded ? el('div', { class: 'row' }, el('span', { text: '💬 Bu dosyada gömülü altyazı var' }),
         el('span', { class: 'info-i', tabindex: '0', title: embedded }, 'i')) : null,
