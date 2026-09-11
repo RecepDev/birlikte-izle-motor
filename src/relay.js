@@ -4,12 +4,51 @@
 
 import http from 'node:http';
 import express from 'express';
-import { STREMIO_BASE, torrentPath, localTorrentUrl } from '../public/js/shared/stream-url.js';
+import {
+  STREMIO_BASE,
+  torrentPath,
+  localTorrentUrl,
+  hlsConvertId,
+  hlsV2Query,
+  HLS_VIDEO_CODECS,
+  HLS_AUDIO_CODECS,
+} from '../public/js/shared/stream-url.js';
 
-// Sub-paths Stremio's HLS transcoder uses under /<infoHash>/<fileIdx>/.
-const HLS_TAIL = /^(hls\.m3u8|(video|audio|subtitle)\d+(\.m3u8)?(\/(init\.mp4|segment\d+\.(m4s|vtt)))?)$/;
 const PASS_HEADERS = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control'];
 const STATS_EVERY_MS = 2000;
+
+// Paths Stremio's HLS converter serves under /hlsv2/<id>/.
+const HLSV2_TAIL = /^(?:(?:master|video\d+|audio\d+|subtitle\d+)\.m3u8|(?:video|audio)\d+\/init\.mp4|(?:video|audio|subtitle)\d+\/segment\d+\.(?:m4s|vtt))$/;
+const HLSV2_KEYS = new Set(['mediaURL', 'videoCodecs', 'audioCodecs']);
+
+// Accepts a converter request only when it is exactly the one this app would
+// build for a torrent in this room. Returns { stream, query } or null.
+export function validateHlsV2(room, convertId, tail, rawQuery, stremioBase = STREMIO_BASE) {
+  if (!HLSV2_TAIL.test(tail || '')) return null;
+  const q = new URLSearchParams(rawQuery);
+  for (const k of q.keys()) if (!HLSV2_KEYS.has(k)) return null;
+  const media = q.getAll('mediaURL');
+  if (media.length !== 1) return null;
+  let u;
+  try {
+    u = new URL(media[0]);
+  } catch {
+    return null;
+  }
+  if (u.origin !== new URL(stremioBase).origin) return null;
+  const m = u.pathname.match(/^\/([0-9a-f]{40})\/(-1|\d+)$/);
+  if (!m) return null;
+  for (const k of u.searchParams.keys()) if (k !== 'tr') return null;
+  const stream = room.streams.find(
+    (s) => s.kind === 'torrent' && s.infoHash === m[1] && torrentPath(s) === `/${m[1]}/${m[2]}`,
+  );
+  if (!stream) return null;
+  const caps = { videoCodecs: q.getAll('videoCodecs'), audioCodecs: q.getAll('audioCodecs') };
+  if (!caps.videoCodecs.length || !caps.videoCodecs.every((c) => HLS_VIDEO_CODECS.includes(c))) return null;
+  if (!caps.audioCodecs.length || !caps.audioCodecs.every((c) => HLS_AUDIO_CODECS.includes(c))) return null;
+  if (convertId !== hlsConvertId(stream, caps)) return null;
+  return { stream, query: hlsV2Query(stream, caps, stremioBase).toString() };
+}
 
 export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
   const router = express.Router();
@@ -34,48 +73,45 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
   }, STATS_EVERY_MS);
   timer.unref?.();
 
-  // Stremio's transcoder opens the torrent without our trackers; touching the
-  // plain URL first registers the torrent with them.
+  // Registers the torrent with its trackers before the converter opens it.
   function warmTorrent(stream) {
     const req = http.get(localTorrentUrl(stream, stremioBase), { headers: { range: 'bytes=0-0' } }, (r) => r.resume());
     req.on('error', () => {});
     req.setTimeout(10_000, () => req.destroy());
   }
 
-  function handle(req, res) {
-    const { roomId, key, infoHash, fileIdx } = req.params;
-    const tail = req.params[0];
-    const room = rooms.get(roomId);
-    if (!room) return res.status(404).end();
-    if (tail !== undefined && !HLS_TAIL.test(tail)) return res.status(404).end();
-    const user = room.findRelayUser(key);
-    if (!user) return res.status(403).end();
-    const stream = room.streams.find(
-      (s) => s.kind === 'torrent' && s.infoHash === infoHash && torrentPath(s) === `/${infoHash}/${fileIdx}`,
-    );
-    if (!stream) return res.status(403).end();
+  // Common room/key check; returns { room, user } or ends the response.
+  function authorize(req, res) {
+    const room = rooms.get(req.params.roomId);
+    if (!room) {
+      res.status(404).end();
+      return null;
+    }
+    const user = room.findRelayUser(req.params.key);
+    if (!user) {
+      res.status(403).end();
+      return null;
+    }
+    return { room, user };
+  }
 
-    if (tail === 'hls.m3u8') warmTorrent(stream);
-    const target = tail === undefined ? localTorrentUrl(stream, stremioBase) : `${stremioBase}${torrentPath(stream)}/${tail}`;
-    const relayPrefix = `/relay/${roomId}/${key}${torrentPath(stream)}`;
+  function proxy(req, res, { room, user, target, rewrite = null }) {
     const headers = {};
     if (req.headers.range) headers.range = req.headers.range;
     if (req.headers.accept) headers.accept = req.headers.accept;
 
     const upstream = http.request(target, { method: req.method === 'HEAD' ? 'HEAD' : 'GET', headers }, (up) => {
-      const type = String(up.headers['content-type'] || '');
-      const isPlaylist = /mpegurl/i.test(type) || tail?.endsWith('.m3u8');
+      const isPlaylist = /mpegurl/i.test(String(up.headers['content-type'] || '')) || new URL(target).pathname.endsWith('.m3u8');
       res.status(up.statusCode || 502);
       for (const h of PASS_HEADERS) {
         if (up.headers[h] && !(isPlaylist && h === 'content-length')) res.setHeader(h, up.headers[h]);
       }
-      if (isPlaylist) {
-        // Playlists normally use relative paths; rewrite absolute ones just in case.
+      if (isPlaylist && rewrite) {
         let text = '';
         up.setEncoding('utf8');
         up.on('data', (chunk) => { text += chunk; });
         up.on('end', () => {
-          const body = text.split(`${stremioBase}${torrentPath(stream)}`).join(relayPrefix);
+          const body = rewrite(text);
           count(room, user, Buffer.byteLength(body));
           res.end(body);
         });
@@ -85,7 +121,7 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
       up.pipe(res);
     });
     upstream.on('error', (err) => {
-      log.warn('Relay isteği başarısız', { roomId, error: err.message });
+      log.warn('Relay isteği başarısız', { roomId: room.id, error: err.message });
       if (!res.headersSent) res.status(502).end();
       else res.destroy();
     });
@@ -95,8 +131,7 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
 
   // Lets a guest check that the host's Stremio is running before playing.
   router.get('/relay/:roomId/:key/ping', (req, res) => {
-    const room = rooms.get(req.params.roomId);
-    if (!room?.findRelayUser(req.params.key)) return res.status(403).end();
+    if (!authorize(req, res)) return;
     const probe = http.get(`${stremioBase}/settings`, (r) => {
       r.resume();
       res.status(r.statusCode === 200 ? 200 : 503).end();
@@ -107,8 +142,35 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
     });
   });
 
-  router.get('/relay/:roomId/:key/:infoHash([0-9a-f]{40})/:fileIdx(-1|\\d+)', handle);
-  router.get('/relay/:roomId/:key/:infoHash([0-9a-f]{40})/:fileIdx(-1|\\d+)/*', handle);
+  // Plain file of a room torrent (trackers come from the server's stream record).
+  router.get('/relay/:roomId/:key/:infoHash([0-9a-f]{40})/:fileIdx(-1|\\d+)', (req, res) => {
+    const auth = authorize(req, res);
+    if (!auth) return;
+    const { infoHash, fileIdx } = req.params;
+    const stream = auth.room.streams.find(
+      (s) => s.kind === 'torrent' && s.infoHash === infoHash && torrentPath(s) === `/${infoHash}/${fileIdx}`,
+    );
+    if (!stream) return res.status(403).end();
+    proxy(req, res, { ...auth, target: localTorrentUrl(stream, stremioBase) });
+  });
+
+  // Compatibility mode: Stremio's HLS converter, only for room torrents.
+  router.get('/relay/:roomId/:key/hlsv2/:convertId/*', (req, res) => {
+    const auth = authorize(req, res);
+    if (!auth) return;
+    const tail = req.params[0];
+    const rawQuery = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?') + 1) : '';
+    const ok = validateHlsV2(auth.room, req.params.convertId, tail, rawQuery, stremioBase);
+    if (!ok) return res.status(403).end();
+    if (tail === 'master.m3u8') warmTorrent(ok.stream);
+    const prefix = `/relay/${req.params.roomId}/${req.params.key}/hlsv2/`;
+    proxy(req, res, {
+      ...auth,
+      target: `${stremioBase}/hlsv2/${req.params.convertId}/${tail}?${ok.query}`,
+      // Playlists use relative paths; rewrite absolute ones just in case.
+      rewrite: (text) => text.split(`${stremioBase}/hlsv2/`).join(prefix),
+    });
+  });
 
   return {
     router,

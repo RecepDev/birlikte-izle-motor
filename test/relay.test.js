@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import express from 'express';
 import { createRelay } from '../src/relay.js';
+import { hlsConvertId, hlsV2Query } from '../public/js/shared/stream-url.js';
 import { createRoomManager } from '../src/rooms.js';
 import { DEFAULT_CONFIG } from '../src/config.js';
 
@@ -24,9 +25,9 @@ let relay;
 before(async () => {
   stremio = http.createServer((req, res) => {
     seen.push({ url: req.url, range: req.headers.range });
-    if (req.url.endsWith('hls.m3u8')) {
+    if (req.url.includes('/master.m3u8')) {
       res.setHeader('content-type', 'application/vnd.apple.mpegurl');
-      return res.end(`#EXTM3U\nhttp://127.0.0.1:${stremio.address().port}/${IH}/2/video0.m3u8\nvideo1.m3u8\n`);
+      return res.end(`#EXTM3U\nhttp://127.0.0.1:${stremio.address().port}/hlsv2/abc/video0.m3u8?x=1\naudio0.m3u8?x=1\n`);
     }
     res.writeHead(206, { 'content-type': 'video/mp4', 'content-range': 'bytes 0-3/100', 'accept-ranges': 'bytes' });
     res.end('abcd');
@@ -111,18 +112,45 @@ test('forbidden requests never reach Stremio', async () => {
   assert.equal(seen.length, 0);
 });
 
-test('hls playlists are proxied and absolute Stremio urls rewritten', async () => {
+const CAPS = { videoCodecs: ['h264', 'hevc'], audioCodecs: ['aac', 'mp3'] };
+const stremioBase = () => `http://127.0.0.1:${stremio.address().port}`;
+const hlsUrl = (room, key, tail, { stream = STREAMS[0], caps = CAPS, id, extra = '' } = {}) =>
+  `${base}/relay/${room.id}/${key}/hlsv2/${id ?? hlsConvertId(stream, caps)}/${tail}?${hlsV2Query(stream, caps, stremioBase())}${extra}`;
+
+test('hlsv2 converter requests for room torrents are proxied; playlists rewritten', async () => {
   const { room, a } = setup();
   const key = room.requestRelay(a.id).reply.relayKey;
   seen = [];
-  const res = await fetch(`${base}/relay/${room.id}/${key}/${IH}/2/hls.m3u8`);
+  const res = await fetch(hlsUrl(room, key, 'master.m3u8'));
   assert.equal(res.status, 200);
   const text = await res.text();
-  assert.match(text, new RegExp(`^/relay/${room.id}/${key}/${IH}/2/video0\\.m3u8$`, 'm'));
-  assert.match(text, /^video1\.m3u8$/m);
-  assert.ok(seen.some((s) => s.url === `/${IH}/2/hls.m3u8`));
-  const seg = await fetch(`${base}/relay/${room.id}/${key}/${IH}/2/video0/segment12.m4s`);
+  assert.match(text, new RegExp(`^/relay/${room.id}/${key}/hlsv2/abc/video0\\.m3u8\\?x=1$`, 'm'));
+  assert.match(text, /^audio0\.m3u8\?x=1$/m);
+  const forwarded = seen.find((s) => s.url.includes('/master.m3u8')).url;
+  assert.ok(forwarded.startsWith(`/hlsv2/${hlsConvertId(STREAMS[0], CAPS)}/master.m3u8?mediaURL=`));
+  assert.ok(forwarded.includes('videoCodecs=hevc'));
+  const seg = await fetch(hlsUrl(room, key, 'video0/segment12.m4s'));
   assert.equal(seg.status, 206);
+});
+
+test('hlsv2 requests that do not match a room torrent never reach Stremio', async () => {
+  const { room, a } = setup();
+  const key = room.requestRelay(a.id).reply.relayKey;
+  const other = { streamId: 'x', kind: 'torrent', infoHash: 'e'.repeat(40), fileIdx: 2, sources: [] };
+  seen = [];
+  const codes = await Promise.all([
+    hlsUrl(room, key, 'master.m3u8', { id: 'stremio-app-converter' }), // someone else's converter
+    hlsUrl(room, key, 'master.m3u8', { id: hlsConvertId(STREAMS[0], { videoCodecs: ['h264'], audioCodecs: ['aac'] }) }),
+    hlsUrl(room, key, 'master.m3u8', { stream: other }), // torrent not in the room
+    hlsUrl(room, key, 'master.m3u8', { extra: '&forceTranscoding=1' }), // unknown parameter
+    hlsUrl(room, key, 'master.m3u8', { caps: { videoCodecs: ['h264', 'prores'], audioCodecs: ['aac'] } }),
+    hlsUrl(room, key, 'destroy'),
+    hlsUrl(room, key, '..%2F..%2Fsettings'),
+    `${base}/relay/${room.id}/${key}/hlsv2/abc/master.m3u8?mediaURL=${encodeURIComponent('file:///C:/secret.mkv')}&videoCodecs=h264&audioCodecs=aac`,
+    `${base}/relay/${room.id}/${key}/${IH}/2/hls.m3u8`, // old converter path is gone
+  ].map((u) => fetch(u).then((r) => r.status)));
+  assert.deepEqual(codes, [403, 403, 403, 403, 403, 403, 403, 403, 404]);
+  assert.equal(seen.length, 0);
 });
 
 test('revoked key stops working', async () => {

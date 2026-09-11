@@ -9,7 +9,8 @@ import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
 import { requiredMbps, runSpeedTest, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
-import { STREMIO_BASE, torrentPath, hlsPath, localTorrentUrl } from './shared/stream-url.js';
+import { STREMIO_BASE, torrentPath, hlsV2Path } from './shared/stream-url.js';
+import { browserCodecs } from './codecs.js';
 
 // ---- identity --------------------------------------------------------------
 
@@ -112,31 +113,26 @@ async function relayAlive(key) {
   return false;
 }
 
-function warm(url) {
-  const ctrl = new AbortController();
-  fetch(url, { mode: 'no-cors', signal: ctrl.signal }).then(() => ctrl.abort(), () => {});
-  setTimeout(() => ctrl.abort(), 15_000);
-}
-
+// Compatibility mode: Stremio's HLS converter, told which codecs this browser
+// decodes so it only converts what is needed (often just the audio).
 async function compatSource(stream) {
   const nativeHls = video.canPlayType('application/vnd.apple.mpegurl') !== '';
+  const path = hlsV2Path(stream, browserCodecs(video));
   if (stream.kind === 'http') {
-    // Only the viewer's own Stremio can transcode a plain link, and only for native HLS players.
-    if (nativeHls && (await isStremioUp())) {
-      return { url: `${STREMIO_BASE}/url/${encodeURIComponent(stream.url)}/hls.m3u8`, source: 'http', hls: true, native: true };
-    }
+    // Only the viewer's own Stremio can convert a plain link, and only for native HLS players.
+    if (nativeHls && (await isStremioUp())) return { url: `${STREMIO_BASE}${path}`, source: 'http', hls: true, native: true };
     return null;
   }
+  // Native HLS needs no CORS, so guests can use their own Stremio.
   if (!isHost() && nativeHls && (await isStremioUp())) {
-    warm(localTorrentUrl(stream));
-    return { url: `${STREMIO_BASE}${hlsPath(stream)}`, source: 'local', hls: true, native: true };
+    return { url: `${STREMIO_BASE}${path}`, source: 'local', hls: true, native: true };
   }
   // The host's "relay" is its own Stremio, so it only helps when that is running.
   if (isHost() && !(await isStremioUp())) return null;
   const key = await ensureRelay();
   if (!key || (!isHost() && !(await relayAlive(key)))) return null;
   const source = isHost() ? 'local' : 'relay';
-  const url = `/relay/${roomId}/${key}${hlsPath(stream)}`;
+  const url = `/relay/${roomId}/${key}${path}`;
   if (nativeHls) return { url, source, hls: true, native: true };
   await loadHls().catch(() => {});
   return window.Hls?.isSupported() ? { url, source, hls: true } : null;
@@ -210,14 +206,15 @@ function detectMediaProblem() {
   } else return;
   if (problem === mediaProblem) return;
   mediaProblem = problem;
-  if (problem === 'video') {
-    // No picture (usually HEVC/Dolby Vision): let Stremio convert it right away.
-    toast('Görüntü gelmiyor (tarayıcı bu video biçimini açamıyor). Uyumlu moda geçiliyor…', 6000);
+  if (problem) {
+    // Stremio converts only the part the browser cannot play, so switching is cheap.
+    toast(problem === 'video'
+      ? 'Görüntü gelmiyor (tarayıcı bu video biçimini açamıyor). Uyumlu moda geçiliyor…'
+      : 'Ses gelmiyor (tarayıcı bu ses biçimini açamıyor). Uyumlu moda geçiliyor…', 6000);
     startCompat();
     return;
   }
   renderCompatButton();
-  if (problem) toast('Ses gelmiyor gibi görünüyor.', 5000);
 }
 setInterval(detectMediaProblem, 2000);
 video.addEventListener('loadedmetadata', () => setTimeout(detectMediaProblem, 500));
