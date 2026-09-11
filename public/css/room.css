@@ -104,16 +104,17 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
   background: rgba(14, 15, 19, .78); border: 1px solid var(--line); border-radius: 12px;
   font-size: 13px; max-width: min(440px, calc(100% - 24px)); overflow: hidden;
 }
-.viewers-ov .pic-info { padding: 7px 10px 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.viewers-ov .pic-info { padding: 7px 10px 0; font-size: 12px; color: var(--muted); line-height: 1.4; cursor: pointer; }
 .viewers-ov .pic-info b { color: var(--text); }
 .viewers-ov > button { background: transparent; border: none; padding: 6px 10px; font-weight: 600; width: 100%; text-align: left; }
 .viewers-ov ul { list-style: none; margin: 0; padding: 0 10px 8px; display: grid; gap: 4px; }
-.viewers-ov.collapsed ul { display: none; }
+.viewers-ov.collapsed ul, .viewers-ov.collapsed .pic-info { display: none; }
 .viewers-ov li { display: flex; gap: 2px 6px; align-items: baseline; flex-wrap: wrap; }
 .viewers-ov .n { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .viewers-ov .sp { margin-left: auto; padding-left: 10px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
 .player.idle { cursor: none; }
 .ctl { background: transparent; border: none; font-size: 18px; padding: 6px 8px; min-width: 40px; }
+.ctl.active { color: var(--accent-2); }
 .time { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
 .aspect-btn { font-size: 12px; min-width: 52px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 6px; padding: 3px 6px; }
 .seek-wrap { position: relative; flex: 1; min-width: 60px; height: 22px; display: flex; align-items: center; }
@@ -208,6 +209,12 @@ body.resizing video { pointer-events: none; }
 }
 .tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
 .tab-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* Kalite/Altyazı/Ara tabs mix several fixed-size cards with a list; scrolling the
+   whole pane (instead of trying to make just the list flex-shrink under them) is
+   simpler and more reliable, especially with mobile browser chrome resizing the viewport. */
+.tab-body[data-tab="quality"], .tab-body[data-tab="subs"], .tab-body[data-tab="search"] {
+  display: block; overflow-y: auto;
+}
 
 .chat { list-style: none; margin: 0; padding: 12px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .chat li { line-height: 1.4; overflow-wrap: anywhere; }

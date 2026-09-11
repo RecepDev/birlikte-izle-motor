@@ -383,6 +383,11 @@ function renderCompatButton() {
       ? 'Görüntü dönüştürülüyor (kalite biraz düşük). Dönüştürmeyi kapatıp videoyu doğrudan oynat.'
       : 'Görüntü kalitesi aynı; gerekirse sadece ses dönüştürülüyor. Dönüştürmeyi kapatıp videoyu doğrudan oynat.')
     : 'Uyumlu moda geç: Stremio videoyu tarayıcının açabileceği biçime dönüştürür';
+
+  // Same toggle, always visible in the control bar (the pill above only shows once compat is on or something's wrong).
+  const inline = $('#btn-compat');
+  inline.classList.toggle('active', loaded.compat);
+  inline.title = loaded.compat ? 'Uyumlu mod açık · normale dönmek için tıkla' : 'Uyumlu moda geç (ses dili, düşük çözünürlük...)';
 }
 
 // ---- live download + viewers overlay on the player ----
@@ -982,6 +987,7 @@ function toggleFullscreen() {
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
+$('#btn-compat').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
 $('#quality-info').addEventListener('click', () => selectTab('quality'));
 
 // ---- content search (host only): switch the room to a different title ----
@@ -1327,11 +1333,15 @@ function setSideWidth(px, save = true) {
   });
 }
 
-$('#viewers-toggle').addEventListener('click', () => {
+function toggleViewersOv() {
   const ov = $('#viewers-ov');
   ov.classList.toggle('collapsed');
   storage.set('viewersCollapsed', ov.classList.contains('collapsed') ? '1' : '0');
-});
+}
+$('#viewers-toggle').addEventListener('click', toggleViewersOv);
+// Tapping the picture-info box itself also collapses it: on phones it sits over
+// the video and blocks it until dismissed.
+$('#picture-info').addEventListener('click', toggleViewersOv);
 $('#viewers-ov').classList.toggle('collapsed', (storage.get('viewersCollapsed') ?? (isTouch ? '1' : '0')) === '1');
 $('#banner-skip').addEventListener('click', async () => {
   const res = await request('skipWaiting');
