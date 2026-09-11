@@ -114,29 +114,31 @@
 
         <div class="tab-body" data-tab="quality" hidden>
           <div class="speedtest">
-            <button id="speedtest-btn" type="button">⚡ Hız testi yap</button>
-            <p id="speedtest-result" class="muted small">İnternet hızın bu dosyaya yetiyor mu, ölçüp görebilirsin.</p>
+            <div class="row-line">
+              <button id="speedtest-btn" type="button">⚡ Hız testi yap</button>
+              <span class="info-i" tabindex="0" title="İnternet hızını ~10 sn ölçer ve izlediğin dosyanın gerektirdiği hızla karşılaştırır.">ⓘ</span>
+            </div>
+            <p id="speedtest-result" class="muted small"></p>
           </div>
           <div class="speedtest">
-            <p id="hw-status" class="muted small">Donanım hızlandırma kontrol ediliyor…</p>
+            <p id="hw-status" class="small">Donanım hızlandırma kontrol ediliyor…</p>
           </div>
           <div class="speedtest">
             <div class="pic-adjust">
-              <span class="muted small">Parlaklık</span>
-              <button type="button" id="br-down" aria-label="Parlaklığı azalt">−</button><span id="br-val" class="small">%100</span><button type="button" id="br-up" aria-label="Parlaklığı artır">+</button>
-              <span class="muted small">Kontrast</span>
-              <button type="button" id="ct-down" aria-label="Kontrastı azalt">−</button><span id="ct-val" class="small">%100</span><button type="button" id="ct-up" aria-label="Kontrastı artır">+</button>
-              <button type="button" id="pic-reset">Sıfırla</button>
+              <label class="slider"><span>Parlaklık</span><input type="range" id="pic-b" min="0.2" max="4" step="0.05"><output id="pic-b-val"></output></label>
+              <label class="slider"><span>Kontrast</span><input type="range" id="pic-c" min="0.2" max="3" step="0.05"><output id="pic-c-val"></output></label>
+              <label class="slider"><span>Renk</span><input type="range" id="pic-s" min="0" max="3" step="0.05"><output id="pic-s-val"></output></label>
             </div>
-            <p class="muted small">HDR / Dolby Vision karanlık görünürse parlaklığı artır. Sadece sende uygulanır.</p>
+            <div class="row-line">
+              <button type="button" id="pic-reset">Sıfırla</button>
+              <span class="info-i" tabindex="0" title="HDR / Dolby Vision karanlık ya da soluk görünürse parlaklığı ve rengi artır. Sadece filme uygulanır, siyah barlara dokunmaz. Sadece sende geçerli.">ⓘ</span>
+            </div>
           </div>
           <div class="speedtest">
-            <label class="check"><input type="checkbox" id="keep-quality"> <span>Görüntü kalitesini koru (görüntüyü asla dönüştürme)</span></label>
-            <p id="keep-quality-note" class="muted small"></p>
+            <label class="check"><input type="checkbox" id="keep-quality"> <span>Görüntü kalitesini koru</span> <span id="keep-quality-note" class="info-i" tabindex="0">ⓘ</span></label>
           </div>
           <div class="speedtest">
-            <label class="check"><input type="checkbox" id="allow-4k"> <span>4K dönüştürmeye izin ver</span></label>
-            <p id="allow-4k-note" class="muted small"></p>
+            <label class="check"><input type="checkbox" id="allow-4k"> <span>4K dönüştürmeye izin ver</span> <span id="allow-4k-note" class="info-i" tabindex="0">ⓘ</span></label>
           </div>
           <div id="quality-warning" class="warning" hidden></div>
           <ul id="quality-list" class="quality"></ul>

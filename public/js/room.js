@@ -384,7 +384,13 @@ function renderPictureInfo() {
   if (Number.isFinite(s.seeders)) extra.push(`👤 ${s.seeders} kaynak`);
   if (s.sizeBytes) extra.push(`💾 ${formatSize(s.sizeBytes)}`);
   const ts = state.room?.torrentStats?.[s.streamId];
-  if (ts && (isHost() || player.status().source === 'relay')) extra.push(`🧲 ${ts.peers} bağlı`);
+  const hostPc = ts && (isHost() || player.status().source === 'relay');
+  if (hostPc) extra.push(`🧲 ${ts.peers} bağlı`);
+  // Live download: real torrent speed on the host PC, the browser's estimate otherwise.
+  const down = hostPc ? ts.downMbps : liveDownload().downMbps;
+  if (Number.isFinite(down)) extra.push(`↓ ${formatMbps(down)} Mbps şu an`);
+  const need = requiredMbps(s.sizeBytes, player.duration());
+  if (need) extra.push(`gereken ~${formatMbps(need)} Mbps`);
   if (s.hdr) extra.push(`🌗 ${s.hdr}`);
   const extraLine = extra.length ? el('div', { text: extra.join(' · ') }) : null;
   if (!h) {
@@ -406,8 +412,6 @@ function renderPictureInfo() {
     if (fileRes && fileRes !== res) parts.push(`dosya ${fileRes}`);
     if (loaded.compat) parts.push('uyumlu mod, orijinal görüntü');
   }
-  const need = requiredMbps(s.sizeBytes, player.duration());
-  if (need) parts.push(`~${formatMbps(need)} Mbps`);
   const q = video.getVideoPlaybackQuality?.();
   if (q && q.totalVideoFrames > 100) {
     const lost = (q.droppedVideoFrames / q.totalVideoFrames) * 100;
@@ -567,10 +571,12 @@ async function startSpeedTest() {
 }
 
 // Whether this browser shows a stream's picture in original quality.
+// Icons for the quality list; the explanation sits behind an ⓘ.
 function pictureVerdict(s) {
   const v = pictureVerdictBase(s);
-  if (s.hdr) v.text += ` · 🌗 ${s.hdr}: ekranında karanlık görünebilir`;
-  return v;
+  const items = [{ icon: v.ok ? '✅' : '⚠️', text: v.text.replace(/^(✅|⚠️)\s*/, '') }];
+  if (s.hdr) items.push({ icon: '🌗', text: `${s.hdr}: HDR olmayan ekranda karanlık ya da soluk görünebilir (parlaklık ayarı yukarıda).` });
+  return items;
 }
 
 function pictureVerdictBase(s) {
@@ -951,7 +957,7 @@ function reloadCompat4k() {
 function renderAllow4k() {
   $('#allow-4k').checked = allow4k;
   const viaRelay = player.status().source === 'relay';
-  $('#allow-4k-note').textContent = !allow4k
+  $('#allow-4k-note').title = !allow4k
     ? "Kapalıyken uyumlu modda 4K görüntü 1080p'ye düşürülür. Normal modu etkilemez."
     : viaRelay && !state.room?.settings.relay4k
       ? "Relay'den izliyorsun: dönüştürme host'un bilgisayarında yapıldığı için host'un da izin vermesi gerekir. Şimdilik 1080p."
@@ -969,15 +975,19 @@ renderAllow4k();
 function renderHw() {
   const box = $('#hw-status');
   if (!hw) return;
+  const info = (text) => el('span', { class: 'info-i', tabindex: '0', title: text }, 'ⓘ');
   if (hw.gpu) {
-    box.className = 'small ok';
-    box.textContent = `✅ Donanım hızlandırma açık${gpuName(hw.renderer) ? ` · ${gpuName(hw.renderer)}` : ''}`
-      + (hw.hevcHardware ? ' · 4K HEVC donanımla çözülüyor' : '');
-  } else {
-    box.className = 'small bad';
+    box.className = 'small ok row-line';
     box.replaceChildren(
-      '⚠️ Donanım hızlandırma kapalı görünüyor. HEVC, Dolby Vision ve 4K videolar açılmayabilir ya da takılabilir.',
+      '✅ Donanım hızlandırma açık',
+      info(`Ekran kartı: ${gpuName(hw.renderer) || 'bilinmiyor'}${hw.hevcHardware ? '\n4K HEVC donanımla çözülüyor.' : ''}`),
+    );
+  } else {
+    box.className = 'small bad row-line';
+    box.replaceChildren(
+      '⚠️ Donanım hızlandırma kapalı',
       el('button', { type: 'button', text: 'Nasıl açılır?', onclick: () => alert(HW_HELP) }),
+      info('HEVC, Dolby Vision ve 4K videolar açılmayabilir ya da takılabilir.'),
     );
   }
 }
@@ -988,35 +998,73 @@ checkHardware().then((result) => {
   renderNotice();
 });
 
-// ---- picture adjustment (brightness / contrast), per viewer ----
-const pic = { b: Number(storage.get('picB')) || 1, c: Number(storage.get('picC')) || 1 };
-function applyPic() {
-  video.style.filter = pic.b !== 1 || pic.c !== 1 ? `brightness(${pic.b}) contrast(${pic.c})` : '';
-  $('#br-val').textContent = `%${Math.round(pic.b * 100)}`;
-  $('#ct-val').textContent = `%${Math.round(pic.c * 100)}`;
-  storage.set('picB', String(pic.b));
-  storage.set('picC', String(pic.c));
+// ---- picture adjustment (brightness / contrast / colour), per viewer ----
+const PIC_KEYS = { b: 'brightness', c: 'contrast', s: 'saturate' };
+const pic = {};
+for (const k of Object.keys(PIC_KEYS)) {
+  const saved = Number(storage.get(`pic${k.toUpperCase()}`));
+  pic[k] = Number.isFinite(saved) && saved > 0 ? saved : 1;
 }
-const nudgePic = (key, delta, min, max) => {
-  pic[key] = Math.round(Math.min(max, Math.max(min, pic[key] + delta)) * 10) / 10;
-  applyPic();
-};
-$('#br-up').addEventListener('click', () => nudgePic('b', 0.1, 0.5, 2.5));
-$('#br-down').addEventListener('click', () => nudgePic('b', -0.1, 0.5, 2.5));
-$('#ct-up').addEventListener('click', () => nudgePic('c', 0.1, 0.5, 2));
-$('#ct-down').addEventListener('click', () => nudgePic('c', -0.1, 0.5, 2));
+function applyPic() {
+  const changed = Object.keys(PIC_KEYS).some((k) => pic[k] !== 1);
+  video.style.filter = changed ? Object.entries(PIC_KEYS).map(([k, fn]) => `${fn}(${pic[k]})`).join(' ') : '';
+  for (const k of Object.keys(PIC_KEYS)) {
+    $(`#pic-${k}`).value = String(pic[k]);
+    $(`#pic-${k}-val`).textContent = `%${Math.round(pic[k] * 100)}`;
+    storage.set(`pic${k.toUpperCase()}`, String(pic[k]));
+  }
+}
+for (const k of Object.keys(PIC_KEYS)) {
+  $(`#pic-${k}`).addEventListener('input', (e) => {
+    pic[k] = Number(e.target.value);
+    applyPic();
+  });
+}
 $('#pic-reset').addEventListener('click', () => {
-  pic.b = 1;
-  pic.c = 1;
+  for (const k of Object.keys(PIC_KEYS)) pic[k] = 1;
   applyPic();
 });
 applyPic();
+
+// Size the <video> to the picture itself so filters skip the black bars.
+function fitVideo() {
+  const W = playerEl.clientWidth;
+  const H = playerEl.clientHeight;
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh || !W || !H) {
+    video.style.width = '100%';
+    video.style.height = '100%';
+    return;
+  }
+  const ratio = vw / vh;
+  let w = W;
+  let h = W / ratio;
+  if (h > H) {
+    h = H;
+    w = H * ratio;
+  }
+  video.style.width = `${Math.floor(w)}px`;
+  video.style.height = `${Math.floor(h)}px`;
+}
+new ResizeObserver(fitVideo).observe(playerEl);
+video.addEventListener('loadedmetadata', fitVideo);
+video.addEventListener('resize', fitVideo);
+video.addEventListener('emptied', fitVideo);
+
+// Info icons: hover shows the text (title); tap/click shows it too (touch screens).
+document.addEventListener('click', (e) => {
+  const icon = e.target.closest('.info-i');
+  if (!icon?.title) return;
+  e.preventDefault();
+  toast(icon.title, 7000);
+});
 
 // HDR on an SDR screen often looks dark: point to the brightness control once per stream.
 let hdrHintFor = null;
 video.addEventListener('loadedmetadata', () => {
   const s = myStream();
-  if (s?.hdr && pic.b === 1 && hdrHintFor !== s.streamId) {
+  if (s?.hdr && pic.b === 1 && pic.s === 1 && hdrHintFor !== s.streamId) {
     hdrHintFor = s.streamId;
     toast(`${s.hdr} video: görüntü karanlıksa Kalite sekmesinden parlaklığı artırabilirsin.`, 8000);
   }
@@ -1025,7 +1073,7 @@ video.addEventListener('loadedmetadata', () => {
 // ---- keep picture quality option ----
 function renderKeepQuality() {
   $('#keep-quality').checked = keepQuality;
-  $('#keep-quality-note').textContent = keepQuality
+  $('#keep-quality-note').title = keepQuality
     ? 'Görüntü hep orijinal kalitede. Tarayıcın bir dosyanın görüntüsünü açamazsa dönüştürmek yerine sana sorulur. Ses gerekirse dönüştürülür (görüntüye dokunmaz).'
     : 'Tarayıcının açamadığı görüntü otomatik dönüştürülür; kalite düşebilir (4K → 1080p gibi).';
 }

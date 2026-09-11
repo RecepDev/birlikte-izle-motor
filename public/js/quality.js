@@ -46,8 +46,12 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
         need !== null ? el('div', { class: `need${heavy ? ' heavy' : ''}`, text: `~${formatMbps(need)} Mbps${heavy ? ' ⚠️' : ''}`, title: heavy ? 'İndirme hızın bu dosyaya yetmeyebilir' : 'Akıcı izlemek için gereken indirme hızı' }) : null),
       el('div', { class: 'info' },
         (() => {
-          const pic = pictureFor(s);
-          return pic ? el('div', { class: pic.ok ? 'okline' : 'heavy', text: pic.text }) : null;
+          const items = pictureFor(s) || [];
+          if (!items.length) return null;
+          return el('div', { class: 'pics' }, ...items.flatMap(({ icon, text }) => [
+            el('span', { class: 'ic', title: text, 'aria-label': text }, icon),
+            el('span', { class: 'info-i', tabindex: '0', title: text }, 'ⓘ'),
+          ]));
         })(),
         `${formatSize(s.sizeBytes)} ${info}`.trim()),
       el(
