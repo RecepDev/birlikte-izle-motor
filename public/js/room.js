@@ -255,6 +255,7 @@ function startCompat({ allowReencode = false } = {}) {
   if (keepQuality && !reencodeAllowed && videoNeedsReencode(s)) {
     qualityBlocked = true;
     renderNotice();
+    subs?.rerender();
     return;
   }
   loaded.compat = true;
@@ -536,6 +537,8 @@ const subs = createSubs({
   multiAudioLikely: () => Boolean(myStream()?.multiAudio),
   compatActive: () => loaded.compat,
   onSwitchCompat: () => startCompat(),
+  reencodeBlocked: () => qualityBlocked && Boolean(myStream()?.multiAudio),
+  onForceCompat: () => startCompat({ allowReencode: true }),
 });
 
 function renderHeader() {

@@ -11,6 +11,7 @@ export function createSubs({
   embeddedInfo = () => null, embeddedLangs: embeddedLangsOf = () => [],
   audioTracks = () => [], onSelectAudio = () => {},
   multiAudioLikely = () => false, compatActive = () => false, onSwitchCompat = () => {},
+  reencodeBlocked = () => false, onForceCompat = () => {},
 }) {
   let list = [];
   let hostSel = null; // { subId, offset } | null, shared by the host
@@ -258,13 +259,21 @@ export function createSubs({
           ...tracks.map((t) => el('option', { value: t.id, selected: t.active || null }, t.label))))
       : null;
     // Normal (non-compat) playback can't see a file's alternate audio tracks at all
-    // (browser limitation for MKV); only hls.js (Uyumlu mod) exposes them.
-    const audioHint = tracks.length <= 1 && !compatActive() && multiAudioLikely()
+    // (browser limitation for MKV); only hls.js (Uyumlu mod) exposes them. And Uyumlu
+    // mod itself can get blocked by "kaliteyi koru" when the picture needs re-encoding
+    // (HEVC/Dolby Vision the browser can't decode) — that trade-off is a banner over
+    // the player, easy to miss from this tab, so spell it out here too.
+    const audioHint = tracks.length <= 1 && !compatActive() && reencodeBlocked()
       ? el('div', { class: 'row' },
-        el('span', { text: '🔊 Bu dosyada birden fazla ses dili olabilir (dosya adına göre).' }),
-        el('button', { type: 'button', text: 'Uyumlu moda geç', onclick: onSwitchCompat }),
-        el('span', { class: 'info-i', tabindex: '0', title: 'Tarayıcı normal oynatmada dosyanın alternatif ses parçalarını göremiyor. Uyumlu mod (hls.js) bazı dosyalarda bunları listeleyebilir; hepsinde çalışmayabilir.' }, 'i'))
-      : null;
+        el('span', { text: '🔊 Ses dilini görmek için görüntü dönüştürülmesi gerekiyor, "Görüntü kalitesini koru" bunu engelliyor.' }),
+        el('button', { type: 'button', text: 'Yine de dönüştür (kalite düşer)', onclick: onForceCompat }),
+        el('span', { class: 'info-i', tabindex: '0', title: 'Bu dosyanın görüntü biçimini (HEVC/Dolby Vision) tarayıcı açamıyor. Kalite sekmesindeki "Görüntü kalitesini koru" açıkken bu yüzden dönüştürme yapılmıyor.' }, 'i'))
+      : tracks.length <= 1 && !compatActive() && multiAudioLikely()
+        ? el('div', { class: 'row' },
+          el('span', { text: '🔊 Bu dosyada birden fazla ses dili olabilir (dosya adına göre).' }),
+          el('button', { type: 'button', text: 'Uyumlu moda geç', onclick: onSwitchCompat }),
+          el('span', { class: 'info-i', tabindex: '0', title: 'Tarayıcı normal oynatmada dosyanın alternatif ses parçalarını göremiyor. Uyumlu mod (hls.js) bazı dosyalarda bunları listeleyebilir; hepsinde çalışmayabilir.' }, 'i'))
+        : null;
     put(
       audioRow,
       audioHint,
