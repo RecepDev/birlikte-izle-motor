@@ -29,6 +29,9 @@ export function renderUsers(listEl, room, meId, { onKick, streamLabel }) {
     ...visible.map((u) => {
       const [icon, text] = u.connected ? STATE[u.status.state] || STATE.idle : ['🔌', 'bağlantı koptu'];
       const parts = [text, SOURCE[u.status.source], streamLabel(u)];
+      if (u.connected && Number.isFinite(u.status.downMbps)) {
+        parts.push(`↓ ${u.status.downMbps >= 10 ? Math.round(u.status.downMbps) : u.status.downMbps} Mbps`);
+      }
       if (Number.isFinite(u.status.drift) && u.status.state === 'ready') {
         parts.push(`sapma ${Math.round(u.status.drift * 1000)} ms`);
       }

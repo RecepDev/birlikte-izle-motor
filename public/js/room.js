@@ -7,7 +7,7 @@ import { createPlayer, isStremioUp } from './player.js';
 import { createChat } from './chat.js';
 import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
-import { requiredMbps, runSpeedTest } from './bandwidth.js';
+import { requiredMbps, runSpeedTest, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
 import { STREMIO_BASE, torrentPath, hlsPath, localTorrentUrl } from './shared/stream-url.js';
 
@@ -222,6 +222,43 @@ function renderCompatButton() {
     : 'Uyumlu moda geç: Stremio videoyu tarayıcının açabileceği biçime dönüştürür';
 }
 
+// ---- live download + viewers overlay on the player ----
+const downloadMeter = createDownloadMeter(video, () => requiredMbps(myStream()?.sizeBytes, player.duration()));
+
+function liveDownload() {
+  const r = downloadMeter.read();
+  return {
+    downMbps: r.mbps === null ? null : Math.round(r.mbps * 10) / 10,
+    ahead: Math.round(r.ahead),
+    complete: r.complete,
+  };
+}
+
+const STATE_ICON = { ready: '▶', loading: '⏳', buffering: '⏳', error: '⚠️', noStremio: '🚫', idle: '💤' };
+function speedLabel(st) {
+  if (st.source === 'none' || st.state === 'noStremio' || st.state === 'idle') return '';
+  if (st.complete) return 'tamamı indi';
+  const parts = [];
+  if (Number.isFinite(st.downMbps)) parts.push(`↓ ${formatMbps(st.downMbps)} Mbps`);
+  if (Number.isFinite(st.ahead)) parts.push(`${st.ahead} sn`);
+  return parts.join(' · ');
+}
+
+function renderViewersOverlay() {
+  if (!state.room) return;
+  const users = state.room.users.filter((u) => u.connected);
+  const mine = { ...player.status(), ...liveDownload() };
+  $('#viewers-count').textContent = String(users.length);
+  $('#viewers-list').replaceChildren(...users.map((u) => {
+    const st = u.id === state.me ? { ...u.status, ...mine } : u.status;
+    return el('li', { title: u.id === state.me ? 'Sen' : '' },
+      el('span', { text: STATE_ICON[st.state] || '•' }),
+      el('span', { class: 'n', text: `${u.name}${u.isHost ? ' 👑' : ''}${u.id === state.me ? ' (sen)' : ''}` }),
+      el('span', { class: 'sp', text: speedLabel(st) }));
+  }));
+}
+setInterval(renderViewersOverlay, 2000);
+
 function sendStatus() {
   if (!state.room || state.ended || !socket.connected) return;
   const st = player.status();
@@ -231,6 +268,7 @@ function sendStatus() {
     drift: sync.drift(),
     duration: player.duration(),
     quality: myStream()?.quality ?? null,
+    ...liveDownload(),
   });
 }
 setInterval(sendStatus, 2000);
@@ -531,6 +569,7 @@ socket.on('waiting', ({ userIds }) => {
 socket.on('users', ({ users }) => {
   state.room.users = users;
   renderUsersTab();
+  renderViewersOverlay();
   renderQualityTab();
   renderBanner();
   renderHeader();
@@ -670,6 +709,12 @@ $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
 $('#speedtest-btn').addEventListener('click', startSpeedTest);
+$('#viewers-toggle').addEventListener('click', () => {
+  const ov = $('#viewers-ov');
+  ov.classList.toggle('collapsed');
+  storage.set('viewersCollapsed', ov.classList.contains('collapsed') ? '1' : '0');
+});
+$('#viewers-ov').classList.toggle('collapsed', (storage.get('viewersCollapsed') ?? (isTouch ? '1' : '0')) === '1');
 $('#banner-skip').addEventListener('click', async () => {
   const res = await request('skipWaiting');
   if (res?.error) toast(errorText(res.error));

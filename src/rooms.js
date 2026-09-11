@@ -181,7 +181,7 @@ export class Room {
         disconnectedAt: null,
         ownStreamId: null,
         relayKey: null,
-        status: { state: 'idle', source: 'none', drift: null, duration: null, quality: null },
+        status: { state: 'idle', source: 'none', drift: null, duration: null, quality: null, downMbps: null, ahead: null },
         chatTimes: [],
       };
       this.users.set(user.id, user);
@@ -279,6 +279,8 @@ export class Room {
       drift: num(st.drift),
       duration: num(st.duration) !== null && st.duration >= 0 ? st.duration : null,
       quality: typeof st.quality === 'string' ? st.quality.slice(0, 10) : null,
+      downMbps: num(st.downMbps) !== null && st.downMbps >= 0 ? Math.min(st.downMbps, 100_000) : null,
+      ahead: num(st.ahead) !== null && st.ahead >= 0 ? Math.min(st.ahead, 100_000) : null,
     };
     if (st.state === 'ready') this.skippedUserIds.delete(userId);
     const changed = prev !== st.state;

@@ -75,6 +75,7 @@ function renderRoom(room) {
       el('td', { text: u.connected ? STATE_TEXT[u.status.state] || u.status.state : '🔌 koptu' }),
       el('td', { text: { local: 'kendi Stremio', relay: '📶 relay', http: 'link', none: '—' }[u.status.source] || '' }),
       el('td', { text: u.status.quality || '' }),
+      el('td', { text: Number.isFinite(u.status.downMbps) ? `↓ ${u.status.downMbps} Mbps${Number.isFinite(u.status.ahead) ? ` · ${u.status.ahead} sn` : ''}` : '' }),
       el('td', { text: Number.isFinite(u.status.drift) ? `${Math.round(u.status.drift * 1000)} ms` : '' }),
       el('td', { text: relayByUser.has(u.id) ? `${relayByUser.get(u.id).mbps} Mbps` : '' }),
       el('td', {}, u.isHost ? null : el('button', {
@@ -111,7 +112,7 @@ function renderRoom(room) {
       }),
     ),
     el('div', { class: 'table-wrap' }, el('table', {},
-      el('tr', {}, ...['Kişi', 'Durum', 'Kaynak', 'Kalite', 'Sapma', 'Relay', ''].map((h) => el('th', { text: h }))),
+      el('tr', {}, ...['Kişi', 'Durum', 'Kaynak', 'Kalite', 'İndirme', 'Sapma', 'Relay', ''].map((h) => el('th', { text: h }))),
       ...rows)),
   );
 }
