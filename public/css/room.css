@@ -160,7 +160,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 }
 .sub-line {
   background: var(--sub-bg, rgba(0, 0, 0, .6)); color: #fff; padding: .04em .35em; border-radius: .15em;
-  white-space: pre-line; text-shadow: 0 0 3px #000, 0 0 2px #000;
+  white-space: pre-line; text-shadow: var(--sub-shadow, none);
 }
 .compat-btn {
   position: absolute; right: 12px; bottom: 64px; z-index: 3; transition: opacity .2s;

@@ -28,10 +28,29 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
   const overlay = el('div', { class: 'sub-overlay', 'aria-live': 'off' });
   playerEl.append(overlay);
 
+  // Text outline around the letters (text-shadow in em, so it scales with size).
+  const ring = (w) => [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1.4], [0, 1.4], [-1.4, 0], [1.4, 0]]
+    .map(([x, y]) => `${x * w}em ${y * w}em 0 #000`).join(', ');
+  const OUTLINES = {
+    none: ['Yok', 'none'],
+    thin: ['İnce', ring(0.035)],
+    thick: ['Kalın', `${ring(0.07)}, 0 0 0.12em #000`],
+    shadow: ['Gölge', '0.07em 0.07em 0.14em rgba(0, 0, 0, .95), 0 0 0.25em rgba(0, 0, 0, .6)'],
+  };
+  let outline = OUTLINES[storage.get('cueOutline')] ? storage.get('cueOutline') : 'thin';
+  function cycleOutline() {
+    const keys = Object.keys(OUTLINES);
+    outline = keys[(keys.indexOf(outline) + 1) % keys.length];
+    storage.set('cueOutline', outline);
+    applyStyle();
+    render();
+  }
+
   function applyStyle() {
     const px = Math.max(12, Math.round(playerEl.clientHeight * 0.045 * size));
     overlay.style.fontSize = `${px}px`;
     overlay.style.setProperty('--sub-bg', `rgba(0, 0, 0, ${bg})`);
+    overlay.style.setProperty('--sub-shadow', OUTLINES[outline][1]);
     overlay.style.bottom = `${100 - (line ?? DEFAULT_LINE)}%`;
   }
   new ResizeObserver(applyStyle).observe(playerEl);
@@ -234,7 +253,8 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
         el('button', { type: 'button', text: 'A−', title: 'Küçült', onclick: () => resize(-0.1) }),
         el('span', { class: 'muted small', text: `%${Math.round(size * 100)}` }),
         el('button', { type: 'button', text: 'A+', title: 'Büyüt', onclick: () => resize(0.1) }),
-        el('button', { type: 'button', text: bg === '0' ? 'Arka plan: yok' : 'Arka plan: var', onclick: () => { bg = bg === '0' ? '0.6' : '0'; storage.set('cueBg', bg); applyStyle(); render(); } })),
+        el('button', { type: 'button', text: bg === '0' ? 'Arka plan: yok' : 'Arka plan: var', onclick: () => { bg = bg === '0' ? '0.6' : '0'; storage.set('cueBg', bg); applyStyle(); render(); } }),
+        el('button', { type: 'button', text: `Kenarlık: ${OUTLINES[outline][0]}`, title: 'Harflerin etrafındaki çizgi: Yok / İnce / Kalın / Gölge', onclick: cycleOutline })),
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: 'Konum' }),
         el('button', { type: 'button', text: '▲ Yukarı', title: 'Altyazıyı yukarı taşı', onclick: () => moveLine(-5) }),
