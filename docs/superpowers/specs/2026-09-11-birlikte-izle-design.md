@@ -91,10 +91,12 @@ Manifest (`/manifest.json`):
 
 ### 7.1 Kaynak seçimi
 
+**CORS kısıtı (spike ile doğrulandı):** Stremio streaming server CORS başlığını sadece kendi alan adlarına ve `peario.xyz`'ye veriyor. Bu yüzden sayfamız 11470'ten `fetch` ile veri **okuyamaz**. `<video src>` CORS gerektirmediği için oynatma çalışır. Tasarımın bu bölümü buna göre kurulmuştur: sayfa 11470'e sadece `no-cors` yoklama ve `<video src>` ile erişir. Yanıtı okunması gereken her çağrı (altyazı hash'i, relay) host PC'deki bizim sunucumuzdan yapılır.
+
 Torrent stream için sırasıyla denenir:
 
-1. **Yerel Stremio:** `GET http://127.0.0.1:11470/settings` 2 sn zaman aşımıyla yoklanır. Cevap gelirse torrent yerel sunucuya kaydedilir, ardından dosya oynatılır (kesin uçlar S2'de netleşir, bkz. §17).
-2. **Relay:** yerel Stremio yoksa ve odada relay açıksa kullanıcı relay ister. İzin verilirse `https://<tünel>/relay/<roomId>/<relayKey>/<infoHash>/<fileIdx>` kullanılır.
+1. **Yerel Stremio:** `fetch('http://127.0.0.1:11470/settings', {mode: 'no-cors'})` 2 sn zaman aşımıyla yoklanır. İstek hatasız dönerse (opak yanıt) Stremio açık kabul edilir. Video adresi `http://127.0.0.1:11470/<infoHash>/<fileIdx>?tr=<source>&tr=<source>...` olur. Stremio bu istekte torrent'i kendisi başlatır, ayrı kayıt çağrısı gerekmez. `fileIdx` yoksa `-1` gönderilir. `tr` değerleri stream'in `sources` dizisindeki `tracker:`/`dht:` ile başlayan girdilerdir.
+2. **Relay:** yerel Stremio yoksa ve odada relay açıksa kullanıcı relay ister. İzin verilirse `/relay/<roomId>/<relayKey>/<infoHash>/<fileIdx>` kullanılır. Oda sayfasıyla aynı origin olduğu için CORS sorunu yoktur.
 3. **Hiçbiri:** sadece sohbet ve durum çalışır. "Stremio'yu aç" uyarısı çıkar ve 3 sn'de bir yeniden yoklanır. Relay kapalıysa "host'tan relay iste" butonu gösterilir.
 
 HTTP stream'ler doğrudan `url` ile oynatılır.
@@ -103,7 +105,16 @@ Chrome/Edge, internetteki bir sayfanın localhost'a erişmesi için "yerel ağ e
 
 ### 7.2 Uyumlu mod (dönüştürme)
 
-- Önce doğrudan oynatılır. `<video>` hata verirse (`MEDIA_ERR_SRC_NOT_SUPPORTED`/`MEDIA_ERR_DECODE`) ya da stream `notWebReady` ise Stremio'nun HLS dönüştürme ucu `hls.js` ile kullanılır (Safari'de yerel HLS). Kaynak yerel Stremio ya da relay olabilir.
+- Önce doğrudan oynatılır. `<video>` hata verirse (`MEDIA_ERR_SRC_NOT_SUPPORTED`/`MEDIA_ERR_DECODE`) ya da stream `notWebReady` ise Stremio'nun HLS dönüştürme ucu kullanılır.
+- Uç biçimleri (spike ile doğrulandı):
+  - torrent: `<taban>/<infoHash>/<fileIdx>/hls.m3u8`
+  - HTTP: `<taban>/url/<encodeURIComponent(url)>/hls.m3u8`
+
+  Alt playlist ve segment yolları göreli olduğu için aynı yapı `/relay/...` öneki arkasında da çalışır.
+- Oynatıcı seçimi:
+  - Kaynak aynı origin'deyse (relay) `hls.js` kullanılır.
+  - Kaynak misafirin yerel Stremio'suysa `hls.js` CORS yüzünden çalışamaz. Bu durumda tarayıcı HLS'i yerel olarak destekliyorsa (`video.canPlayType('application/vnd.apple.mpegurl')`: Safari, iOS, Android Chrome) doğrudan `<video src>` kullanılır. Desteklemiyorsa relay'e geçilir. Relay yoksa "Tarayıcın bu dosyayı açamıyor, başka stream seç" mesajı gösterilir.
+  - Host kendi PC'sindeki Stremio için de relay yolunu kullanır. Host'un relay kullanımı `relayLimit`'e sayılmaz.
 - Desteklenmeyen ses codec'i (AC3/DTS) hata üretmeden sessiz oynayabildiği için elle kullanılacak bir "Ses yok / oynamıyor → uyumlu mod" butonu da vardır.
 
 ### 7.3 Durum raporu
@@ -173,7 +184,7 @@ Host ayarları (`locked`, `waitMode`, `relayEnabled`, `relayLimit`) odada anınd
 
 - **Addon'lar:** ayarlı addon'lardan manifest'inde `subtitles` kaynağı olanlar kullanılır. OpenSubtitles v3 (`https://opensubtitles-v3.strem.io/manifest.json`) varsayılan ayarda eklidir.
   - Oda oluşturulurken `/subtitles/<type>/<id>.json` çekilir.
-  - Host'un videosu yüklenince host istemcisi kendi Stremio'sundan video hash'ini alır (uç S4'te doğrulanır) ve sunucuya gönderir. Sunucu `/subtitles/<type>/<id>/videoHash=<hash>&videoSize=<size>.json` ile yeniden çeker. Eşleşen altyazılar "✓ bu dosyaya uygun" olarak işaretlenip üste alınır.
+  - Oda oluşturulunca ve host stream değişince sunucu, host'un stream'i için video hash'ini host PC'deki Stremio'dan alır: `GET http://127.0.0.1:11470/opensubHash?videoUrl=<video adresi>` → `{error, result: {hash, size}}`. Torrent için video adresi §7.1'deki yerel adrestir, HTTP için `url`'dir. Sunucu sonra `/subtitles/<type>/<id>/videoHash=<hash>&videoSize=<size>.json` ile yeniden çeker. Eşleşen altyazılar "✓ bu dosyaya uygun" olarak işaretlenip üste alınır. Stremio kapalıysa ya da hash alınamazsa hash'siz liste kalır.
 - **Stream'in kendi altyazıları:** host'un stream nesnesindeki `subtitles` dizisi listeye eklenir.
 - **Dosya yükleme:** `.srt`/`.vtt`, en fazla 2 MB.
   - Host yüklerse dosya :7000 üzerindeki `POST /room/<roomId>/subtitles` ucuna `X-User-Token` başlığıyla gider. Sunucu token sahibinin o anki host olduğunu kontrol eder. Dosya oda silinene kadar RAM'de kalır ve herkese sunulabilir.
@@ -221,18 +232,16 @@ Host ayarları (`locked`, `waitMode`, `relayEnabled`, `relayLimit`) odada anınd
 ## 13. Relay: host üzerinden izle (`src/relay.js`)
 
 - Adresler:
-  - `/relay/:roomId/:relayKey/:infoHash/:fileIdx`
-  - `/relay/:roomId/:relayKey/hls/...` (uyumlu mod)
-
-  Hepsi `127.0.0.1:11470` adresine aktarılır.
+  - `/relay/:roomId/:relayKey/:infoHash/:fileIdx` → `127.0.0.1:11470/<infoHash>/<fileIdx>?tr=...` (`tr` değerleri sunucudaki stream kaydından eklenir, istemciden alınmaz)
+  - `/relay/:roomId/:relayKey/:infoHash/:fileIdx/<hls yolu>` (uyumlu mod). `<hls yolu>` şu kalıplardan biri olmalıdır: `hls.m3u8`, `(video|audio|subtitle)\d+(\.m3u8)?`, bunların altında `init.mp4` veya `segment\d+\.(m4s|vtt)`.
+  - HTTP stream'ler relay'den geçmez.
 - **Kurallar:**
   - Oda relay'e açık olmalıdır (`relayEnabled`).
   - `relayKey` o odadaki relay izni verilmiş bir kullanıcıya ait olmalıdır. Anahtar kişiye özeldir, kullanıcı ayrılınca ya da atılınca geçersiz olur.
-  - `infoHash` odanın stream listesinde bulunmalıdır.
-  - HLS isteklerindeki kaynak parametresi yalnızca `127.0.0.1:11470/<izinli infoHash>/...` adresine işaret edebilir.
-  - Stremio'nun diğer uçları (ayarlar, yerel dosya vb.) hiçbir koşulda aktarılmaz.
-- **Kişi sınırı:** aynı anda relay izni olan kullanıcı sayısı `relayLimit` ile sınırlıdır (varsayılan 2). Sınır doluysa istek reddedilir, arayüzde "relay dolu" yazar.
-- `Range` başlıkları aynen aktarılır, ileri sarma çalışır. Torrent host'un Stremio'sunda henüz kayıtlı değilse relay önce onu kaydeder.
+  - `infoHash` + `fileIdx` odanın stream listesindeki bir torrent stream'e ait olmalıdır.
+  - Yol yukarıdaki kalıpların dışındaysa 404 döner. Stremio'nun diğer uçları (ayarlar, yerel dosya, `/proxy`, `/url/...` vb.) hiçbir koşulda aktarılmaz.
+- **Kişi sınırı:** aynı anda relay izni olan kullanıcı sayısı `relayLimit` ile sınırlıdır (varsayılan 2). Host bu sayıya dahil değildir (§7.2). Sınır doluysa istek reddedilir, arayüzde "relay dolu" yazar.
+- `Range` başlıkları aynen aktarılır, ileri sarma çalışır.
 - Aktarılan bayt sayılır ve panelde oda/kişi bazında anlık Mbps olarak gösterilir.
 - **Varsayılan:** `relayEnabled: true`, `relayLimit: 2`.
 - **Uyarılar (arayüzde):**
@@ -353,7 +362,6 @@ NormalizedStream = {
 | `setOwnStream` | `{streamId \| null}` | |
 | `setHostStream` | `{streamId}` | sadece host |
 | `setHostSubtitle` | `{subId \| null, offset}` | sadece host |
-| `subtitleHash` | `{hash, size}` | sadece host |
 | `settings` | kısmi `settings` | sadece host |
 | `skipWaiting` | — | sadece host |
 | `kick` | `{userId}` | sadece host |
@@ -421,20 +429,20 @@ stremio-birlikte-izle/
 
 ## 21. Test
 
-### 21.1 Spike (atılacak kod, uygulamadan önce)
+### 21.1 Spike
 
-Gerçek Stremio ile doğrulanacaklar. Sonuçlar spec'e işlenir, tasarım gerekirse güncellenir.
+Stremio masaüstünün kurulu `server.js` kaynağı incelenerek yapıldı (2026-09-11).
 
-| # | Soru |
-|---|---|
-| S1 | `https://` bir sayfadan `http://127.0.0.1:11470` fetch ve `<video>` erişimi: CORS başlıkları, Chrome/Edge/Firefox'ta yerel ağ erişimi izni davranışı. |
-| S2 | Torrent oynatma uçları: kayıt isteği (`/<infoHash>/create` + sources) gerekli mi, `/<infoHash>/<fileIdx>` Range destekliyor mu, fileIdx yoksa ne olur. |
-| S3 | HLS dönüştürme ucunun biçimi, `hls.js` ile oynaması, `/relay/...` önekli proxy arkasında çalışması (göreli segment yolları). |
-| S4 | Video hash ucu (OpenSubtitles hash + boyut). |
-| S5 | Stremio masaüstünün `externalUrl: http://127.0.0.1:7001/...` adresini tarayıcıda açması; `stremio://127.0.0.1:7000/manifest.json` kurulum linki. |
-| S6 | Stremio'nun `http://127.0.0.1:7000/manifest.json` eklenti adresini kabul etmesi. |
-| S7 | Android Stremio uygulamasının yerel sunucusuna telefondaki Chrome'dan erişim (uygulama ön/arka planda). |
-| S8 | trycloudflare üzerinden WebSocket ve uzun süreli Range'li video aktarımı. |
+| # | Soru | Sonuç |
+|---|---|---|
+| S1 | 11470'e tarayıcıdan CORS'lu erişim | **Yok.** CORS sadece Stremio alan adları ve `peario.xyz` için açık. Tasarım `no-cors` yoklama + `<video src>` + sunucu tarafı çağrılar olarak düzeltildi (§7.1). Yerel ağ erişimi izni davranışı elle testte görülecek. |
+| S2 | Torrent oynatma uçları | `GET /<infoHash>/<fileIdx>?tr=...` torrent'i kendisi başlatır. `fileIdx` yoksa `-1`. Ayrı `create` gerekmez. |
+| S3 | HLS dönüştürme | `/<infoHash>/<fileIdx>/hls.m3u8` ve `/url/<url>/hls.m3u8`, göreli alt yollar. Relay öneki arkasında çalışır. `hls.js` sadece aynı origin'de (§7.2). |
+| S4 | Video hash ucu | `GET /opensubHash?videoUrl=<url>` → `{error, result}`. Sunucu tarafından çağrılır (§10.1). |
+| S5 | `externalUrl: http://127.0.0.1:7001/...` tarayıcıda açılıyor mu, `stremio://` kurulum linki | Elle testte doğrulanacak. |
+| S6 | Stremio'nun `http://127.0.0.1:7000/manifest.json` adresini kabul etmesi | Elle testte doğrulanacak. |
+| S7 | Android Stremio uygulamasının yerel sunucusu | Elle testte doğrulanacak. Yoksa relay kullanılır. |
+| S8 | trycloudflare üzerinden WebSocket ve Range'li video | Elle testte doğrulanacak. |
 
 ### 21.2 Otomatik testler (`node:test`, `npm test`)
 
@@ -475,7 +483,7 @@ Gerçek Stremio + masaüstü tarayıcı (normal + gizli pencere) + tünel + tele
 
 Her aşama tek başına kullanılabilir bir sürüm verir. Tek uygulama planında aşamalar halinde yazılır.
 
-0. **Spike** (§21.1). Sonuçlar spec'e işlenir.
+0. **Spike** (§21.1). Tamamlandı.
 1. **Çekirdek:**
    - config, log, addon, streams, addons-client
    - rooms + socket: senkron, kilit, iki donma modu, host devri, sohbet, izleyici listesi
