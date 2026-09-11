@@ -318,7 +318,50 @@ function speedLabel(st, ts = null) {
   return parts.join(' · ');
 }
 
+// What is actually on screen: resolution, codec path, file bitrate, dropped frames.
+function resolutionLabel(h) {
+  if (h >= 2000) return '2160p (4K)';
+  if (h >= 1400) return '1440p';
+  if (h >= 1000) return '1080p';
+  if (h >= 700) return '720p';
+  return `${h}p`;
+}
+
+function renderPictureInfo() {
+  const box = $('#picture-info');
+  const s = myStream();
+  const h = video.videoHeight;
+  if (!s || !h) {
+    box.hidden = true;
+    return;
+  }
+  const parts = [];
+  const res = resolutionLabel(h);
+  parts.push(el('b', { text: `🎞 ${res}` }));
+  const fileRes = s.quality === '2160p' ? '2160p (4K)' : s.quality;
+  if (fileRes && fileRes !== res) parts.push(`dosya ${fileRes}`);
+  const srcCodec = s.videoRisk || null;
+  if (loaded.compat) {
+    const cq = compatQuality();
+    parts.push(cq?.reencoded ? `${srcCodec || 'video'} → H.264 (uyumlu mod, dönüştürülüyor)` : `${srcCodec || 'orijinal video'} (uyumlu mod, dönüştürülmeden)`);
+  } else if (srcCodec) {
+    parts.push(srcCodec);
+  }
+  const need = requiredMbps(s.sizeBytes, player.duration());
+  if (need) parts.push(`~${formatMbps(need)} Mbps`);
+  const q = video.getVideoPlaybackQuality?.();
+  if (q && q.totalVideoFrames > 100) {
+    const lost = (q.droppedVideoFrames / q.totalVideoFrames) * 100;
+    if (lost >= 1) parts.push(`%${Math.round(lost)} kare kaybı`);
+  }
+  box.replaceChildren(...parts.flatMap((p, i) => (i ? [' · ', p] : [p])));
+  box.hidden = false;
+}
+video.addEventListener('resize', renderPictureInfo);
+video.addEventListener('emptied', renderPictureInfo);
+
 function renderViewersOverlay() {
+  renderPictureInfo();
   if (!state.room) return;
   const users = state.room.users.filter((u) => u.connected);
   const mine = { ...player.status(), ...liveDownload() };
