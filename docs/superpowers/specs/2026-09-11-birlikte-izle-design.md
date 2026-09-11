@@ -535,3 +535,42 @@ Uygulama sırasında spec'ten ayrılan ya da spec'i netleştiren noktalar:
   - Gerçek Torrentio + Cinemeta + OpenSubtitles ile uçtan uca denendi: oda açma, katılma, kilit, "herkes beklesin", 39 altyazı, Türkçe karakterler.
   - Headless Edge'de oda sayfası, panel ve oda açma sayfası JavaScript hatası olmadan çalıştı.
   - Elle test edilecekler: S5–S8, gerçek Stremio ile oynatma, telefon, tünel.
+
+## 25. Sonradan eklenenler (2026-09-11, kullanıcı geri bildirimiyle)
+
+**Oynatma ve kalite**
+- **Akıllı uyumlu mod:** Stremio'nun `/hlsv2/<id>/master.m3u8?mediaURL=…&videoCodecs=…&audioCodecs=…[&maxWidth=3840]` dönüştürücüsü kullanılıyor.
+  - Tarayıcının açabildiği codec'ler `public/js/codecs.js` ile ölçülüp gönderiliyor. Stremio listede olanı olduğu gibi aktarıyor, olmayanı dönüştürüyor. Varsayılanları: video `h264`, ses `aac,mp3`, genişlik sınırı 1920.
+  - Gerçek Stremio ile doğrulandı: HEVC → `hev1` olarak aktarıldı, AC3 → AAC'ye dönüştü.
+  - Safari'de HEVC gönderilmiyor, çünkü Apple `hev1` biçimini kabul etmiyor.
+- **Görüntü kalitesini koru** (varsayılan açık): görüntü asla yeniden kodlanmıyor, `videoCodecs` listesine H.264, HEVC ve AV1'in hepsi yazılıyor.
+  - Tarayıcı görüntüyü çözemezse bir açıklama ekranı çıkıyor: "✅ dosya seç", "HEVC / donanım hızlandırma nasıl açılır" ya da "yine de dönüştür".
+  - Tarayıcının açamadığı bilinen bir codec'te dosya hiç indirilmiyor.
+- **4K dönüştürme izni:** izleyicide varsayılan açık. Relay'den izleyenler için oda ayarındaki `relay4k` gerekiyor, varsayılan kapalı. Relay bu kuralı kendisi uyguluyor.
+- **Otomatik geçiş:** görüntü ya da ses gelmezse (ölçüm: `videoWidth`, `webkitAudioDecodedByteCount`) kurallara göre uyumlu moda geçiliyor.
+
+**Relay**
+- Dönüştürücü istekleri `/relay/:room/:key/hlsv2/:convertId/*` üzerinden geçiyor.
+- Sunucu `convertId`'yi (akış + codec listesi + maxWidth özeti) ve `mediaURL`'yi kendisi yeniden hesaplıyor. Bilinmeyen parametreler reddediliyor (`validateHlsV2`).
+- Eski `/<ih>/<idx>/hls.m3u8` yolu kaldırıldı.
+
+**Bilgi**
+- **Stream bilgisi:** `videoRisk` (HEVC/Dolby Vision/AV1), `hdr`, `seeders` (Torrentio 👤) ve `embeddedSubs` (dosya adındaki "Sub (…)", "ESub", "Multi Subs") ayrıştırılıyor.
+- **Torrent istatistikleri:** host PC'deki Stremio'dan 3 sn'de bir `/<ih>/<idx>/stats.json` okunuyor (peer sayısı, gerçek hız) ve `torrentStats` olayıyla odaya yayılıyor. Diğer izleyicilerin hızı tarayıcı tahmini (tampon büyümesi × dosya bit hızı).
+- **Oynatıcı sol üstü:** ekrandaki çözünürlük, dönüşüm ("2160p HEVC → 1080p H.264"), kaynak sayısı, boyut, bağlı peer, anlık ve gereken hız. Altında izleyici listesi.
+- **Kalite listesi:** "2160p" altında gereken Mbps, 👤 kaynak ve 💾 boyut. Tarayıcıya göre ✅/⚠️, 🌗 HDR ve 💬 gömülü altyazı simgeleri. Açıklamalar ⓘ rozetinin arkasında.
+- **Donanım hızlandırma kontrolü:** WebGL renderer adı ve `mediaCapabilities` ile yapılıyor (`public/js/hwaccel.js`).
+- **Hız testi:** isteğe bağlı, `speed.cloudflare.com` üzerinden (CSP `connect-src`'ye eklendi).
+
+**Görüntü ve arayüz**
+- **Görüntü ayarı:** parlaklık %20–400, kontrast %20–300, renk %0–300. Sadece filme uygulanıyor: `<video>` elemanı görüntü boyutuna oturtuluyor, barlar etkilenmiyor. Oran butonu: Sığdır / Doldur / Uzat / 16:9 / 4:3 / 21:9.
+- **Altyazı:** tarayıcının kendi `::cue` sistemi yerine oynatıcı üstündeki ayrı bir katmanda çiziliyor (`getCueAsHTML`), filtrelerden etkilenmiyor. iOS'un kendi tam ekranında tarayıcı altyazısı kullanılıyor. Ayarlar: boyut, konum, arka plan, kenarlık (Yok/İnce/Kalın/Gölge), gecikme. "Listeyi yenile" ve "Tekrar yükle" butonları var.
+- **Diğer:** sohbette emoji seçici, yeniden boyutlanan yan panel, mobil taşma düzeltmesi, uyumlu mod butonu kontrollerle birlikte kayboluyor.
+
+**Kararlılık**
+- Tünel: `api.trycloudflare.com` artık tünel adresi sanılmıyor, cloudflared hata satırları log'a yazılıyor.
+- Addon istekleri: önce IPv4, bekleyerek bir kez tekrar deneme, ağ hatasının sebebi log'da.
+- Panel ayrı bir boş Edge profilinde (`data\edge-panel`) açılıyor. `NO_TUNNEL=1` yerel test sunucusu için.
+
+**Açık konular**
+- Dolby Vision profil 5 renkleri ve HDR→SDR'nin karanlık görünmesi tarayıcıda kökten çözülemiyor. Stremio uygulaması bunu mpv'nin ton eşlemesiyle yapıyor. Tam çözüm mpv tabanlı bir yardımcı oynatıcı olur, bu ayrı ve büyük bir iş.
