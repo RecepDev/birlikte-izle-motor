@@ -10,6 +10,7 @@ export function createSubs({
   panel, video, playerEl, roomId, request, isHost, userToken,
   embeddedInfo = () => null, embeddedLangs: embeddedLangsOf = () => [],
   audioTracks = () => [], onSelectAudio = () => {},
+  multiAudioLikely = () => false, compatActive = () => false, onSwitchCompat = () => {},
 }) {
   let list = [];
   let hostSel = null; // { subId, offset } | null, shared by the host
@@ -256,8 +257,17 @@ export function createSubs({
         el('select', { onchange: (e) => onSelectAudio(e.target.value) },
           ...tracks.map((t) => el('option', { value: t.id, selected: t.active || null }, t.label))))
       : null;
+    // Normal (non-compat) playback can't see a file's alternate audio tracks at all
+    // (browser limitation for MKV); only hls.js (Uyumlu mod) exposes them.
+    const audioHint = tracks.length <= 1 && !compatActive() && multiAudioLikely()
+      ? el('div', { class: 'row' },
+        el('span', { text: '🔊 Bu dosyada birden fazla ses dili olabilir (dosya adına göre).' }),
+        el('button', { type: 'button', text: 'Uyumlu moda geç', onclick: onSwitchCompat }),
+        el('span', { class: 'info-i', tabindex: '0', title: 'Tarayıcı normal oynatmada dosyanın alternatif ses parçalarını göremiyor. Uyumlu mod (hls.js) bazı dosyalarda bunları listeleyebilir; hepsinde çalışmayabilir.' }, 'i'))
+      : null;
     put(
       audioRow,
+      audioHint,
       mode,
       embedded ? el('div', { class: 'row' }, el('span', { text: '💬 Bu dosyada gömülü altyazı var' }),
         el('span', { class: 'info-i', tabindex: '0', title: embedded }, 'i')) : null,

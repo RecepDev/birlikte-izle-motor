@@ -264,6 +264,7 @@ function startCompat({ allowReencode = false } = {}) {
   player.load(s, { forceFallback: true, compat: true });
   renderCompatButton();
   renderNotice();
+  subs?.rerender();
 }
 
 function stopCompat() {
@@ -274,6 +275,7 @@ function stopCompat() {
   toast('Normal moda dönülüyor…');
   player.load(s, {});
   renderCompatButton();
+  subs?.rerender();
 }
 
 // Codec problems often fail silently: unsupported audio (AC3/DTS) plays
@@ -531,6 +533,9 @@ const subs = createSubs({
   embeddedLangs: () => myStream()?.embeddedSubs?.langs || [],
   audioTracks: audioTracksList,
   onSelectAudio: selectAudioTrack,
+  multiAudioLikely: () => Boolean(myStream()?.multiAudio),
+  compatActive: () => loaded.compat,
+  onSwitchCompat: () => startCompat(),
 });
 
 function renderHeader() {

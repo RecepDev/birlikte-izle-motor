@@ -46,6 +46,17 @@ export function parseEmbeddedSubs(text) {
   return null;
 }
 
+// Release names announcing more than one audio language: "Dual Audio",
+// "Türkçe Dublaj", "TR+EN"... The browser needs Uyumlu mod (hls.js) to ever
+// expose alternate audio tracks for MKV, so this is just a heads-up to try it.
+export function parseMultiAudio(text) {
+  const t = String(text || '');
+  if (/dual[\s.-]?audio|multi[\s.-]?audio|\b2\s?audio\b/i.test(t)) return true;
+  if (/dublaj/i.test(t)) return true;
+  if (/\b(tr|tur)\s*[+/&]\s*(en|eng)\b|\b(en|eng)\s*[+/&]\s*(tr|tur)\b/i.test(t)) return true;
+  return false;
+}
+
 export function parseSizeBytes(raw) {
   const hinted = raw?.behaviorHints?.videoSize;
   if (Number.isFinite(hinted) && hinted > 0) return hinted;
@@ -76,6 +87,7 @@ function normalizeOne(raw, addonName) {
   const seeders = `${base.title} ${base.name}`.match(/👤\s*(\d+)/);
   base.seeders = seeders ? Number(seeders[1]) : null;
   base.embeddedSubs = parseEmbeddedSubs(`${base.name} ${base.title}`);
+  base.multiAudio = parseMultiAudio(`${base.name} ${base.title}`);
   base.sizeBytes = parseSizeBytes(raw);
   const notWebReady = raw.behaviorHints?.notWebReady === true;
   const subtitles = cleanSubtitles(raw.subtitles);
