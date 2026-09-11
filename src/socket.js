@@ -90,12 +90,12 @@ export function attachSocket(io, {
       });
     }
 
-    // Room-bound event: fn(room, userId, payload) returns { msgs } or { error }.
+    // Room-bound event: fn(room, userId, payload) returns { msgs } or { error } (fn may be async).
     function onRoom(event, fn) {
-      on(event, (payload, reply) => {
+      on(event, async (payload, reply) => {
         const ctx = context(socket);
         if (!ctx) return reply({ error: 'notJoined' });
-        const res = fn(ctx.room, ctx.userId, payload);
+        const res = await fn(ctx.room, ctx.userId, payload);
         if (res.error) return reply({ error: res.error });
         reply(res.reply ?? { ok: true });
         dispatch(ctx.room, res.msgs);

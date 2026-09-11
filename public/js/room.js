@@ -717,6 +717,7 @@ function renderControls() {
 
 function updateHostUi() {
   $('#open-settings').hidden = !isHost();
+  $('#tab-search').hidden = !isHost();
   renderHeader();
   renderControls();
   renderBanner();
@@ -813,6 +814,20 @@ socket.on('hostStream', ({ hostStreamId, streams }) => {
   renderQualityTab();
   renderUsersTab();
   loadMyStream();
+});
+
+socket.on('content', (d) => {
+  state.room.type = d.type;
+  state.room.contentId = d.contentId;
+  state.room.meta = d.meta;
+  state.room.hostStreamId = d.hostStreamId;
+  state.room.streams = d.streams;
+  mismatchWarned = false;
+  renderHeader();
+  renderQualityTab();
+  renderUsersTab();
+  loadMyStream(true);
+  selectTab('quality');
 });
 
 socket.on('torrentStats', (stats) => {
@@ -948,6 +963,54 @@ $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
 $('#quality-info').addEventListener('click', () => selectTab('quality'));
+
+// ---- content search (host only): switch the room to a different title ----
+let searchSeq = 0;
+function renderSearchResults(results) {
+  const box = $('#search-results');
+  if (!results.length) {
+    box.replaceChildren(el('li', { class: 'muted', text: $('#search-input').value.trim() ? 'Sonuç yok.' : 'Aramak için yaz.' }));
+    return;
+  }
+  box.replaceChildren(...results.map((r) => {
+    const item = el(
+      'li',
+      {},
+      r.poster ? el('img', { src: r.poster, alt: '' }) : el('div', { class: 'ph' }),
+      el('div', { class: 'info' },
+        el('div', { class: 'name', text: r.name }),
+        el('div', { class: 'year', text: [r.type === 'series' ? 'Dizi' : 'Film', r.year].filter(Boolean).join(' · ') })),
+    );
+    item.addEventListener('click', async () => {
+      if (item.classList.contains('loading')) return;
+      item.classList.add('loading');
+      const prevText = item.querySelector('.name').textContent;
+      item.querySelector('.name').textContent = `${prevText} — yükleniyor…`;
+      const res = await request('changeContent', { type: r.type, id: r.id });
+      if (res?.error) {
+        toast(errorText(res.error));
+        item.classList.remove('loading');
+        item.querySelector('.name').textContent = prevText;
+      }
+    });
+    return item;
+  }));
+}
+async function runSearch() {
+  const q = $('#search-input').value.trim();
+  const seq = ++searchSeq;
+  if (q.length < 2) return renderSearchResults([]);
+  $('#search-results').replaceChildren(el('li', { class: 'muted', text: 'Aranıyor…' }));
+  const res = await request('searchContent', { query: q });
+  if (seq !== searchSeq) return; // a newer search started meanwhile
+  renderSearchResults(res?.results || []);
+}
+let searchDebounce = null;
+$('#search-input').addEventListener('input', () => {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(runSearch, 400);
+});
+renderSearchResults([]);
 
 // ---- 4K conversion option ----
 function reloadCompat4k() {

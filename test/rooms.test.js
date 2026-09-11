@@ -333,6 +333,33 @@ test('host stream change moves followers, keeps own-stream users, drops hidden h
   assert.equal(room.users.get(bob.id).ownStreamId, null, 'no longer visible');
 });
 
+test('setContent switches the room to a new title, resets playback/subs/own-stream picks, host only', () => {
+  const { room, host, join } = setup();
+  const ali = join('ali');
+  room.setOwnStream(ali.id, 's2');
+  room.control(host.id, { action: 'play', position: 42 });
+  room.setSubtitles([{ subId: 'sub1', lang: 'tr', label: 'TR', source: 'x', matched: true }]);
+  room.setHostSubtitle(host.id, { subId: 'sub1' });
+
+  assert.deepEqual(
+    room.setContent(ali.id, { type: 'movie', contentId: 'tt999', meta: {}, streams: STREAMS, hostStreamId: 's1' }),
+    { error: 'notHost' },
+  );
+
+  const newStreams = [{ streamId: 'n1', kind: 'torrent', infoHash: 'c'.repeat(40), fileIdx: 0, quality: '1080p', addonName: 'T' }];
+  const res = room.setContent(host.id, { type: 'series', contentId: 'tt999:1:2', meta: { name: 'Other Show' }, streams: newStreams, hostStreamId: 'n1' });
+  const ev = events(res.msgs, 'content')[0].data;
+  assert.equal(ev.contentId, 'tt999:1:2');
+  assert.equal(ev.hostStreamId, 'n1');
+  assert.equal(room.type, 'series');
+  assert.equal(room.meta.name, 'Other Show');
+  assert.equal(room.users.get(ali.id).ownStreamId, null, 'old own-stream pick is gone');
+  assert.equal(room.playback.paused, true);
+  assert.equal(room.playback.position, 0);
+  assert.deepEqual(room.subtitles, []);
+  assert.equal(room.hostSubtitle, null);
+});
+
 test('snapshot hides other http streams and user tokens', () => {
   const { room, host } = setup();
   const snap = room.snapshot(host.id);

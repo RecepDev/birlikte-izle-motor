@@ -77,6 +77,21 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
       return { subtitles, errors };
     },
 
+    // Title search via Cinemeta's own catalog (not the configured stream addons).
+    async search(type, query) {
+      const q = String(query || '').trim();
+      if (!q) return [];
+      try {
+        const { metas } = await getJson(`${CINEMETA}/catalog/${type}/top/search=${encodeURIComponent(q)}.json`, metaTimeoutMs);
+        return (Array.isArray(metas) ? metas : []).map((m) => ({
+          id: String(m.id), type, name: String(m.name || m.id),
+          poster: m.poster || null, year: m.releaseInfo || (m.year ? String(m.year) : null),
+        }));
+      } catch {
+        return [];
+      }
+    },
+
     async meta(type, id) {
       const [imdbId, season, episode] = id.split(':');
       try {

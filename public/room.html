@@ -93,6 +93,7 @@
           <button type="button" data-tab="users">İzleyiciler <span id="user-count" class="pill"></span></button>
           <button type="button" data-tab="subs">Altyazı / Dil</button>
           <button type="button" data-tab="quality">Kalite</button>
+          <button type="button" data-tab="search" id="tab-search" hidden>🔎 Film ara</button>
         </nav>
 
         <div class="tab-body" data-tab="chat">
@@ -140,6 +141,16 @@
           </div>
           <div id="quality-warning" class="warning" hidden></div>
           <ul id="quality-list" class="quality"></ul>
+        </div>
+
+        <div class="tab-body" data-tab="search" hidden>
+          <div class="speedtest">
+            <div class="row-line">
+              <input id="search-input" placeholder="Film ya da dizi ara…" autocomplete="off">
+              <span class="info-i" tabindex="0" title="Bulduğun içeriği seçince oda aynı linkte kalır, herkes yeni filme geçer.">ⓘ</span>
+            </div>
+          </div>
+          <ul id="search-results" class="search-results"></ul>
         </div>
       </aside>
     </main>

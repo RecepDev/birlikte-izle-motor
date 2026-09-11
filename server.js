@@ -13,7 +13,8 @@ import { Server } from 'socket.io';
 import { createLogger } from './src/log.js';
 import { createConfigStore } from './src/config.js';
 import { createAddonsClient } from './src/addons-client.js';
-import { createAddonRouter } from './src/addon.js';
+import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
+import { normalizeStreams } from './src/streams.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
@@ -112,6 +113,31 @@ socketCtl = attachSocket(io, {
       },
       requestRelay: (room, uid) => room.requestRelay(uid),
       releaseRelay: (room, uid) => room.releaseRelay(uid),
+      // Host searches Cinemeta's catalog for a different title to switch the room to.
+      searchContent: async (room, uid, p) => {
+        const denied = room.requireHost(uid);
+        if (denied) return denied;
+        const q = String(p?.query || '').trim();
+        if (q.length < 2) return { reply: { ok: true, results: [] }, msgs: [] };
+        const [movies, series] = await Promise.all([addons.search('movie', q), addons.search('series', q)]);
+        return { reply: { ok: true, results: [...movies, ...series].slice(0, 24) }, msgs: [] };
+      },
+      // Host picks a search result: fetch its streams and switch the room to it.
+      changeContent: async (room, uid, p) => {
+        const denied = room.requireHost(uid);
+        if (denied) return denied;
+        const { type, id } = p || {};
+        if (!isContentType(type) || !isContentId(id)) return { error: 'badContent' };
+        const [meta, { results }] = await Promise.all([
+          addons.meta(type, id),
+          addons.streams(config.get().addons, type, id),
+        ]);
+        const streams = normalizeStreams(results);
+        if (!streams.length) return { error: 'noStreams' };
+        const res = room.setContent(uid, { type, contentId: id, meta, streams, hostStreamId: streams[0].streamId });
+        if (!res.error) res.after = () => refreshSubtitles(room);
+        return res;
+      },
     },
   },
 });

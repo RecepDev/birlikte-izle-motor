@@ -387,6 +387,42 @@ export class Room {
     };
   }
 
+  // Host switches the room to a whole different title (found via search).
+  // Resets everything that was tied to the old content: streams, subtitles,
+  // playback position, and each guest's own-stream pick (old streamIds are meaningless now).
+  setContent(userId, { type, contentId, meta, streams, hostStreamId }) {
+    const denied = this.requireHost(userId);
+    if (denied) return denied;
+    this.type = type;
+    this.contentId = contentId;
+    this.meta = meta || {};
+    this.streams = streams;
+    this.hostStreamId = hostStreamId;
+    this.subtitles = [];
+    this.hostSubtitle = null;
+    this.torrentStats = {};
+    this.playback = { paused: true, position: 0, updatedAt: this.now() };
+    this.autoPaused = false;
+    this.waitingUserIds = [];
+    this.skippedUserIds.clear();
+    for (const u of this.users.values()) u.ownStreamId = null;
+    return {
+      msgs: [
+        {
+          to: 'room',
+          event: 'content',
+          data: { type: this.type, contentId: this.contentId, meta: this.meta, hostStreamId: this.hostStreamId, streams: this.guestStreams() },
+          urgent: true,
+        },
+        this.systemChat(`Host film değiştirdi: ${this.meta.name || this.contentId}`),
+        this.playbackMsg(null),
+        { to: 'room', event: 'subtitles', data: { subtitles: [] }, urgent: true },
+        { to: 'room', event: 'hostSubtitle', data: null, urgent: true },
+        this.usersMsg(true),
+      ],
+    };
+  }
+
   // ---- torrent stats -----------------------------------------------------
 
   // Streams whose torrent may be running on the host PC: the host's own and
