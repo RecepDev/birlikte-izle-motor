@@ -58,6 +58,7 @@
             <button id="banner-skip" type="button" hidden>Beklemeden devam et</button>
           </div>
           <button id="compat-btn" type="button" class="compat-btn" hidden></button>
+          <button id="speed-warn" type="button" class="speed-warn" hidden></button>
           <div id="notice" class="notice" hidden>
             <div class="notice-card">
               <p id="notice-text"></p>
@@ -67,7 +68,10 @@
           <div class="controls">
             <button id="btn-play" type="button" class="ctl" aria-label="Oynat">▶</button>
             <span id="time" class="time">0:00 / 0:00</span>
-            <input id="seek" class="seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="Konum">
+            <div class="seek-wrap">
+              <div id="seek-bar" class="seek-bar"></div>
+              <input id="seek" class="seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="Konum">
+            </div>
             <button id="btn-mute" type="button" class="ctl" aria-label="Sessiz">🔊</button>
             <input id="volume" class="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="Ses">
             <button id="btn-fs" type="button" class="ctl" aria-label="Tam ekran">⛶</button>

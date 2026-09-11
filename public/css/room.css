@@ -87,7 +87,26 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .player.idle { cursor: none; }
 .ctl { background: transparent; border: none; font-size: 18px; padding: 6px 8px; min-width: 40px; }
 .time { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
-.seek { flex: 1; min-width: 60px; accent-color: var(--accent); }
+.seek-wrap { position: relative; flex: 1; min-width: 60px; height: 22px; display: flex; align-items: center; }
+.seek-bar {
+  position: absolute; left: 0; right: 0; top: 50%; height: 5px; transform: translateY(-50%);
+  border-radius: 3px; background: rgba(255, 255, 255, .18); pointer-events: none;
+}
+.seek { -webkit-appearance: none; appearance: none; background: transparent; width: 100%; height: 22px; margin: 0; position: relative; cursor: pointer; }
+.seek:disabled { cursor: not-allowed; }
+.seek::-webkit-slider-runnable-track { height: 5px; background: transparent; }
+.seek::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4.5px; border-radius: 50%; background: #fff; }
+.seek::-moz-range-track { height: 5px; background: transparent; }
+.seek::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: #fff; }
+.seek:disabled::-webkit-slider-thumb { background: #999; }
+.seek:disabled::-moz-range-thumb { background: #999; }
+.speed-warn {
+  position: absolute; left: 12px; bottom: 64px; z-index: 3; max-width: calc(62% - 24px);
+  background: rgba(58, 42, 16, .95); border: 1px solid var(--warn); color: var(--warn);
+  border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; text-align: left;
+}
+.quality .need { font-size: 11px; color: var(--muted); }
+.quality .heavy { color: var(--warn); }
 .volume { width: 80px; accent-color: var(--accent); }
 .banner {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
@@ -161,7 +180,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .quality .info { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: pre-line; overflow: hidden; max-height: 3.6em; }
 .quality .btns { display: flex; gap: 6px; }
 .quality button { padding: 4px 8px; font-size: 12px; }
-.warning { margin: 10px; padding: 10px; border-radius: 10px; background: #3a2a10; color: var(--warn); font-size: 13px; }
+.warning { white-space: pre-line; margin: 10px; padding: 10px; border-radius: 10px; background: #3a2a10; color: var(--warn); font-size: 13px; }
 
 .subs { padding: 12px; overflow-y: auto; display: grid; gap: 12px; align-content: start; }
 .subs .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

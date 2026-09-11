@@ -6,7 +6,8 @@ import { createSync } from './sync.js';
 import { createPlayer, isStremioUp } from './player.js';
 import { createChat } from './chat.js';
 import { renderUsers, durationMismatch } from './users.js';
-import { renderQuality, streamLabel } from './quality.js';
+import { renderQuality, streamLabel, formatMbps } from './quality.js';
+import { createBandwidthMeter, requiredMbps } from './bandwidth.js';
 import { createSubs } from './subs.js';
 import { STREMIO_BASE, torrentPath, hlsPath, localTorrentUrl } from './shared/stream-url.js';
 
@@ -292,6 +293,51 @@ function renderUsersTab() {
 }
 
 let mismatchWarned = false;
+// ---- download speed vs. file bitrate ----
+const meter = createBandwidthMeter(video);
+let speed = { slow: false, rate: null, need: null, have: null };
+
+// All streams are the same title, so one duration (ours or the host's) fits all.
+function contentDuration() {
+  const own = player.duration();
+  if (own) return own;
+  const host = state.room?.users.find((u) => u.id === state.room.hostUserId);
+  return Number.isFinite(host?.status?.duration) ? host.status.duration : null;
+}
+
+function speedText() {
+  const numbers = speed.have !== null && speed.need !== null
+    ? ` (~${formatMbps(speed.have)} Mbps geliyor, bu dosya ~${formatMbps(speed.need)} Mbps istiyor)`
+    : '';
+  const why = player.status().source === 'relay' ? " Host'un upload hızı yetmiyor olabilir." : '';
+  return `⚠️ İndirme hızın bu dosyaya yetişmiyor${numbers}, video sık donabilir.${why} Aşağıdan daha küçük bir dosya seçebilirsin.`;
+}
+
+function checkSpeed() {
+  if (!state.room || state.ended) return;
+  const rate = meter.rate();
+  const need = requiredMbps(myStream()?.sizeBytes, player.duration());
+  const ahead = meter.ahead();
+  let slow = speed.slow;
+  if (rate === null) slow = false;
+  else if (rate < 0.95 && ahead < 60) slow = true;
+  else if (rate >= 1.1 || ahead >= 60) slow = false;
+  const have = rate !== null && need !== null ? rate * need : null;
+  const changed = slow !== speed.slow
+    || (have === null) !== (speed.have === null)
+    || (have !== null && Math.abs(have - speed.have) > speed.have * 0.15);
+  if (slow && !speed.slow) toast(speedText(), 8000);
+  speed = { slow, rate, need, have };
+  const btn = $('#speed-warn');
+  btn.hidden = !slow;
+  btn.textContent = have !== null && need !== null
+    ? `⚠️ İndirme yetişmiyor: ${formatMbps(have)} / ${formatMbps(need)} Mbps`
+    : '⚠️ İndirme hızı yetişmiyor';
+  btn.title = speedText();
+  if (changed) renderQualityTab();
+}
+setInterval(checkSpeed, 3000);
+
 function renderQualityTab() {
   renderQuality($('#quality-list'), state.room, {
     myStreamId: myStreamId(),
@@ -306,13 +352,18 @@ function renderQualityTab() {
       const res = await request('setHostStream', { streamId });
       if (res?.error) toast(errorText(res.error));
     },
+    needFor: (s) => requiredMbps(s.sizeBytes, contentDuration()),
+    have: speed.have,
   });
   const host = state.room.users.find((u) => u.id === state.room.hostUserId);
   const mine = me();
   const mismatch = Boolean(mine && host && mine.id !== host.id && durationMismatch(mine, host));
+  const warnings = [];
+  if (mismatch) warnings.push("⚠️ Bu sürümün süresi host'unkinden farklı, senkron kayabilir. Mümkünse host'la aynı stream'i seç.");
+  if (speed.slow) warnings.push(speedText());
   const box = $('#quality-warning');
-  box.hidden = !mismatch;
-  box.textContent = "⚠️ Bu sürümün süresi host'unkinden farklı, senkron kayabilir. Mümkünse host'la aynı stream'i seç.";
+  box.hidden = warnings.length === 0;
+  box.textContent = warnings.join('\n');
   if (mismatch && !mismatchWarned) toast("Senin sürümün host'unkinden farklı, senkron kayabilir.", 5000);
   mismatchWarned = mismatch;
 }
@@ -535,9 +586,38 @@ socket.on('disconnect', (reason) => {
 let seeking = false;
 const seek = $('#seek');
 $('#btn-play').addEventListener('click', () => (canControl() ? sync.toggle() : toast(errorText('locked'))));
+// Seek bar: played part in accent colour, downloaded (buffered) parts lighter.
+function renderSeekBar() {
+  const bar = $('#seek-bar');
+  const d = video.duration;
+  if (!Number.isFinite(d) || d <= 0) {
+    bar.style.background = '';
+    return;
+  }
+  const pct = (t) => Math.min(100, Math.max(0, (t / d) * 100));
+  const played = pct(seeking ? Number(seek.value) : video.currentTime);
+  const EMPTY = 'rgba(255,255,255,.18)';
+  const LOADED = 'rgba(255,255,255,.5)';
+  const stops = [`var(--accent) 0% ${played}%`];
+  let cursor = played;
+  for (let i = 0; i < video.buffered.length; i++) {
+    const end = pct(video.buffered.end(i));
+    if (end <= cursor) continue;
+    const start = Math.max(pct(video.buffered.start(i)), cursor);
+    stops.push(`${EMPTY} ${cursor}% ${start}%`, `${LOADED} ${start}% ${end}%`);
+    cursor = end;
+  }
+  stops.push(`${EMPTY} ${cursor}% 100%`);
+  bar.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+}
+video.addEventListener('progress', renderSeekBar);
+video.addEventListener('emptied', renderSeekBar);
+setInterval(renderSeekBar, 1000);
+
 seek.addEventListener('input', () => {
   seeking = true;
   $('#time').textContent = `${formatTime(Number(seek.value))} / ${formatTime(video.duration)}`;
+  renderSeekBar();
 });
 seek.addEventListener('change', () => {
   seeking = false;
@@ -546,6 +626,7 @@ seek.addEventListener('change', () => {
 video.addEventListener('timeupdate', () => {
   if (!seeking) seek.value = String(video.currentTime);
   $('#time').textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+  renderSeekBar();
 });
 video.addEventListener('durationchange', () => {
   seek.max = String(Number.isFinite(video.duration) ? video.duration : 0);
@@ -578,6 +659,7 @@ function toggleFullscreen() {
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
+$('#speed-warn').addEventListener('click', () => selectTab('quality'));
 $('#banner-skip').addEventListener('click', async () => {
   const res = await request('skipWaiting');
   if (res?.error) toast(errorText(res.error));
