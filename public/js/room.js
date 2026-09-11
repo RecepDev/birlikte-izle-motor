@@ -7,7 +7,7 @@ import { createPlayer, isStremioUp } from './player.js';
 import { createChat } from './chat.js';
 import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
-import { createBandwidthMeter, requiredMbps } from './bandwidth.js';
+import { requiredMbps, runSpeedTest } from './bandwidth.js';
 import { createSubs } from './subs.js';
 import { STREMIO_BASE, torrentPath, hlsPath, localTorrentUrl } from './shared/stream-url.js';
 
@@ -293,9 +293,9 @@ function renderUsersTab() {
 }
 
 let mismatchWarned = false;
-// ---- download speed vs. file bitrate ----
-const meter = createBandwidthMeter(video);
-let speed = { slow: false, rate: null, need: null, have: null };
+// ---- on-demand speed test vs. file bitrate ----
+let measuredMbps = null;
+let speedTesting = false;
 
 // All streams are the same title, so one duration (ours or the host's) fits all.
 function contentDuration() {
@@ -305,38 +305,50 @@ function contentDuration() {
   return Number.isFinite(host?.status?.duration) ? host.status.duration : null;
 }
 
-function speedText() {
-  const numbers = speed.have !== null && speed.need !== null
-    ? ` (~${formatMbps(speed.have)} Mbps geliyor, bu dosya ~${formatMbps(speed.need)} Mbps istiyor)`
-    : '';
-  const why = player.status().source === 'relay' ? " Host'un upload hızı yetmiyor olabilir." : '';
-  return `⚠️ İndirme hızın bu dosyaya yetişmiyor${numbers}, video sık donabilir.${why} Aşağıdan daha küçük bir dosya seçebilirsin.`;
+function renderSpeedResult() {
+  const box = $('#speedtest-result');
+  if (speedTesting || measuredMbps === null) return;
+  const need = requiredMbps(myStream()?.sizeBytes, contentDuration());
+  const lines = [`İnternet hızın: ~${formatMbps(measuredMbps)} Mbps`];
+  let cls = '';
+  if (need === null) {
+    lines.push('İzlediğin dosyanın ihtiyacı henüz hesaplanamadı (boyutu ya da süresi bilinmiyor).');
+  } else if (measuredMbps >= need * 1.3) {
+    lines.push(`✅ Yeterli. Bu dosya ~${formatMbps(need)} Mbps istiyor.`);
+    cls = 'ok';
+  } else {
+    lines.push(`⚠️ Yetmeyebilir. Bu dosya ~${formatMbps(need)} Mbps istiyor, video donabilir. ⚠️ işaretli olmayan daha küçük bir dosya seç.`);
+    cls = 'bad';
+  }
+  if (player.status().source === 'relay') lines.push("Host üzerinden izliyorsun: asıl sınır host'un upload hızı olabilir.");
+  else if (myStream()?.kind === 'torrent') lines.push('Torrent\'te hız kaynak (seed) sayısına da bağlıdır.');
+  box.className = `small ${cls || 'muted'}`;
+  box.textContent = lines.join('\n');
 }
 
-function checkSpeed() {
-  if (!state.room || state.ended) return;
-  const rate = meter.rate();
-  const need = requiredMbps(myStream()?.sizeBytes, player.duration());
-  const ahead = meter.ahead();
-  let slow = speed.slow;
-  if (rate === null) slow = false;
-  else if (rate < 0.95 && ahead < 60) slow = true;
-  else if (rate >= 1.1 || ahead >= 60) slow = false;
-  const have = rate !== null && need !== null ? rate * need : null;
-  const changed = slow !== speed.slow
-    || (have === null) !== (speed.have === null)
-    || (have !== null && Math.abs(have - speed.have) > speed.have * 0.15);
-  if (slow && !speed.slow) toast(speedText(), 8000);
-  speed = { slow, rate, need, have };
-  const btn = $('#speed-warn');
-  btn.hidden = !slow;
-  btn.textContent = have !== null && need !== null
-    ? `⚠️ İndirme yetişmiyor: ${formatMbps(have)} / ${formatMbps(need)} Mbps`
-    : '⚠️ İndirme hızı yetişmiyor';
-  btn.title = speedText();
-  if (changed) renderQualityTab();
+async function startSpeedTest() {
+  const btn = $('#speedtest-btn');
+  const box = $('#speedtest-result');
+  speedTesting = true;
+  btn.disabled = true;
+  box.className = 'muted small';
+  box.textContent = 'Ölçülüyor… (~10 sn)';
+  try {
+    measuredMbps = await runSpeedTest({
+      onProgress: (mbps) => { box.textContent = `Ölçülüyor… ~${formatMbps(mbps)} Mbps`; },
+    });
+    speedTesting = false;
+    renderSpeedResult();
+    renderQualityTab();
+  } catch {
+    speedTesting = false;
+    box.className = 'small bad';
+    box.textContent = 'Hız testi yapılamadı. İnternet bağlantını kontrol edip tekrar dene.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Hız testini tekrarla';
+  }
 }
-setInterval(checkSpeed, 3000);
 
 function renderQualityTab() {
   renderQuality($('#quality-list'), state.room, {
@@ -353,17 +365,15 @@ function renderQualityTab() {
       if (res?.error) toast(errorText(res.error));
     },
     needFor: (s) => requiredMbps(s.sizeBytes, contentDuration()),
-    have: speed.have,
+    have: measuredMbps,
   });
+  renderSpeedResult();
   const host = state.room.users.find((u) => u.id === state.room.hostUserId);
   const mine = me();
   const mismatch = Boolean(mine && host && mine.id !== host.id && durationMismatch(mine, host));
-  const warnings = [];
-  if (mismatch) warnings.push("⚠️ Bu sürümün süresi host'unkinden farklı, senkron kayabilir. Mümkünse host'la aynı stream'i seç.");
-  if (speed.slow) warnings.push(speedText());
   const box = $('#quality-warning');
-  box.hidden = warnings.length === 0;
-  box.textContent = warnings.join('\n');
+  box.hidden = !mismatch;
+  box.textContent = "⚠️ Bu sürümün süresi host'unkinden farklı, senkron kayabilir. Mümkünse host'la aynı stream'i seç.";
   if (mismatch && !mismatchWarned) toast("Senin sürümün host'unkinden farklı, senkron kayabilir.", 5000);
   mismatchWarned = mismatch;
 }
@@ -659,7 +669,7 @@ function toggleFullscreen() {
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
 $('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
-$('#speed-warn').addEventListener('click', () => selectTab('quality'));
+$('#speedtest-btn').addEventListener('click', startSpeedTest);
 $('#banner-skip').addEventListener('click', async () => {
   const res = await request('skipWaiting');
   if (res?.error) toast(errorText(res.error));

@@ -59,7 +59,7 @@ const ROOM_CSP = [
   "style-src 'self' 'unsafe-inline'",
   'img-src * data: blob:',
   'media-src * blob:',
-  "connect-src 'self' ws: wss: http://127.0.0.1:11470",
+  "connect-src 'self' ws: wss: http://127.0.0.1:11470 https://speed.cloudflare.com",
   "worker-src 'self' blob:",
   "frame-ancestors 'none'",
 ].join('; ');

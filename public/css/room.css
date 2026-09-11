@@ -100,11 +100,10 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .seek::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: #fff; }
 .seek:disabled::-webkit-slider-thumb { background: #999; }
 .seek:disabled::-moz-range-thumb { background: #999; }
-.speed-warn {
-  position: absolute; left: 12px; bottom: 64px; z-index: 3; max-width: calc(62% - 24px);
-  background: rgba(58, 42, 16, .95); border: 1px solid var(--warn); color: var(--warn);
-  border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600; text-align: left;
-}
+.speedtest { display: grid; gap: 6px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.speedtest p { margin: 0; line-height: 1.45; white-space: pre-line; }
+.speedtest .ok { color: var(--ok); }
+.speedtest .bad { color: var(--warn); }
 .quality .need { font-size: 11px; color: var(--muted); }
 .quality .heavy { color: var(--warn); }
 .volume { width: 80px; accent-color: var(--accent); }
