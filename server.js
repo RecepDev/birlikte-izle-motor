@@ -99,6 +99,12 @@ socketCtl = attachSocket(io, {
     roomEvents: {
       setHostSubtitle: (room, uid, p) =>
         room.setHostSubtitle(uid, { subId: p.subId ?? null, offset: Number(p.offset ?? 0) }),
+      refreshSubtitles: (room) => {
+        if (Date.now() - (room.subsRefreshedAt || 0) < 10_000) return { error: 'rate' };
+        room.subsRefreshedAt = Date.now();
+        refreshSubtitles(room);
+        return { msgs: [] };
+      },
       requestRelay: (room, uid) => room.requestRelay(uid),
       releaseRelay: (room, uid) => room.releaseRelay(uid),
     },

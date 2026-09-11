@@ -13,6 +13,8 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
   const localFiles = []; // guest-only uploads: { subId, label, url }
   let trackEl = null;
   let appliedId = null;
+  let trackFailed = false;
+  let reloadCount = 0;
   const originals = new WeakMap();
   let size = Number(storage.get('cueSize')) || 1;
   let bg = storage.get('cueBg') ?? '0.6';
@@ -32,7 +34,9 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
 
   const effective = () => personal || hostSel || { subId: null, offset: 0 };
   const findSub = (id) => localFiles.find((f) => f.subId === id) || list.find((s) => s.subId === id);
-  const srcFor = (id) => localFiles.find((f) => f.subId === id)?.url || `/sub/${roomId}/${encodeURIComponent(id)}.vtt`;
+  const srcFor = (id) =>
+    localFiles.find((f) => f.subId === id)?.url
+    || `/sub/${roomId}/${encodeURIComponent(id)}.vtt${reloadCount ? `?r=${reloadCount}` : ''}`;
 
   function showOnly() {
     for (const t of video.textTracks) t.mode = trackEl && t === trackEl.track ? 'showing' : 'disabled';
@@ -87,13 +91,18 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
       trackEl?.remove();
       trackEl = null;
       appliedId = eff.subId;
+      trackFailed = false;
       if (eff.subId && findSub(eff.subId)) {
         trackEl = el('track', { kind: 'subtitles', src: srcFor(eff.subId), srclang: 'tr', label: 'Altyazı' });
         trackEl.addEventListener('load', () => {
           shift(effective().offset);
           applyLine();
         });
-        trackEl.addEventListener('error', () => toast('Altyazı yüklenemedi.'));
+        trackEl.addEventListener('error', () => {
+          trackFailed = true;
+          toast('Altyazı yüklenemedi. Altyazı sekmesinden tekrar deneyebilirsin.');
+          render();
+        });
         video.append(trackEl);
       }
       showOnly();
@@ -113,6 +122,19 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
     }
     personal = { subId, offset: 0 };
     apply();
+  }
+
+  function reloadTrack() {
+    reloadCount++;
+    appliedId = null; // forces a fresh <track>
+    apply();
+  }
+
+  async function refreshList() {
+    const res = await request('refreshSubtitles');
+    if (res?.error === 'rate') toast('Liste az önce yenilendi, birkaç saniye bekle.');
+    else if (res?.error) toast(errorText(res.error));
+    else toast('Altyazı listesi yenileniyor…');
   }
 
   async function nudge(delta) {
@@ -181,6 +203,11 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
     const fileInput = el('input', { type: 'file', accept: '.srt,.vtt,text/vtt', hidden: true, onchange: (e) => upload(e.target.files[0]) });
     panel.replaceChildren(
       mode,
+      trackFailed
+        ? el('div', { class: 'row warning-row' },
+          el('span', { text: '⚠️ Altyazı yüklenemedi.' }),
+          el('button', { type: 'button', text: '↻ Tekrar yükle', onclick: reloadTrack }))
+        : null,
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: 'Gecikme' }),
         el('button', { type: 'button', text: `−${STEP}`, disabled: !eff.subId, onclick: () => nudge(-STEP) }),
@@ -203,7 +230,9 @@ export function createSubs({ panel, video, playerEl, roomId, request, isHost, us
         el('button', { type: 'button', text: '📄 .srt / .vtt yükle', onclick: () => fileInput.click() }),
         el('span', { class: 'muted small', text: isHost() ? 'herkese eklenir' : 'sadece sende görünür' })),
       el('ul', {}, el('li', {}, el('button', { type: 'button', class: eff.subId ? '' : 'current', onclick: () => choose(null), text: 'Kapalı' }))),
-      ...(list.length || localFiles.length ? [] : [el('p', { class: 'muted small', text: 'Altyazılar yükleniyor… Panelde altyazı eklentisi (OpenSubtitles) açık olmalı.' })]),
+      el('div', { class: 'row' },
+        el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),
+        el('button', { type: 'button', text: '↻ Listeyi yenile', title: "Altyazıları addon'lardan yeniden çek", onclick: refreshList })),
       ...[...groups].flatMap(([name, subs]) => [el('h3', { text: name }), el('ul', {}, ...subs.map((s) => subButton(s, eff.subId)))]),
     );
   }

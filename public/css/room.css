@@ -66,8 +66,11 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .top-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 .layout {
-  flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr var(--side-w);
+  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--side-w);
 }
+/* Long unbreakable file names must never widen the layout. */
+.side, .tab-body { min-width: 0; }
+.quality .info, .users .meta, .users .name, .subs li button span { overflow-wrap: anywhere; min-width: 0; }
 .player-col { min-width: 0; display: flex; flex-direction: column; padding: 12px; gap: 8px; }
 .lock-hint { padding: 0 4px; }
 
@@ -195,7 +198,7 @@ body.resizing video { pointer-events: none; }
 .quality li { flex-wrap: wrap; border: 1px solid transparent; }
 .quality li.current { border-color: var(--accent); }
 .quality .q { font-weight: 700; min-width: 56px; }
-.quality .info { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: pre-line; overflow: hidden; max-height: 3.6em; }
+.quality .info { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: pre-line; overflow: hidden; line-height: 1.35; max-height: calc(1.35em * 3); }
 .quality .btns { display: flex; gap: 6px; }
 .quality button { padding: 4px 8px; font-size: 12px; }
 .warning { white-space: pre-line; margin: 10px; padding: 10px; border-radius: 10px; background: #3a2a10; color: var(--warn); font-size: 13px; }
@@ -205,6 +208,7 @@ body.resizing video { pointer-events: none; }
 .subs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .subs li button { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 8px; }
 .subs li button.current { border-color: var(--accent); background: #251f45; }
+.subs .warning-row { color: var(--warn); }
 .subs h3 { margin: 6px 0 2px; font-size: 13px; color: var(--muted); font-weight: 600; }
 
 /* ---- dialog / toast ---- */
@@ -227,7 +231,10 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 
 /* ---- responsive ---- */
 @media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .quality li { gap: 6px 10px; }
+  .quality .info { flex: 1 1 calc(100% - 80px); }
+  .quality .btns { margin-left: auto; }
   .player-col { padding: 0; }
   .player { border-radius: 0; flex: none; aspect-ratio: 16 / 9; max-height: 60vh; }
   .side { border-left: none; border-top: 1px solid var(--line); }
