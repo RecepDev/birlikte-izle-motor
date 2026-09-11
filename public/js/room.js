@@ -271,7 +271,6 @@ function startCompat({ allowReencode = false } = {}) {
   loaded.compat = true;
   mediaProblem = null;
   qualityBlocked = false;
-  toast('Uyumlu moda geçiliyor…');
   player.load(s, { forceFallback: true, compat: true });
   renderCompatButton();
   renderCompatTier();
@@ -336,8 +335,6 @@ video.addEventListener('loadedmetadata', () => setTimeout(detectMediaProblem, 50
 
 // In compat mode Stremio re-encodes the picture only when its codec is not in
 // the list we sent; that (and 4K -> 1080p downscaling) costs quality.
-let qualityInfoShownFor = null;
-
 function compatQuality() {
   const s = myStream();
   if (!loaded.compat || !s) return null;
@@ -355,39 +352,17 @@ function compatQuality() {
   };
 }
 
-function renderQualityInfo() {
-  const box = $('#quality-info');
-  const info = compatQuality();
-  box.hidden = !info?.text;
-  if (!info?.text) return;
-  box.textContent = info.text;
-  box.title = 'Kalite sekmesini aç';
-  const key = `${loaded.streamId}|${info.text}`;
-  if (qualityInfoShownFor !== key) {
-    qualityInfoShownFor = key;
-    toast(info.text, 7000);
-  }
-}
-video.addEventListener('resize', renderQualityInfo);
-video.addEventListener('loadedmetadata', renderQualityInfo);
-
+// No floating pill and no auto-toast for this any more (only the control-bar
+// button reflects state) — kept quiet on purpose, see compatQuality() callers.
 function renderCompatButton() {
-  renderQualityInfo();
-  const btn = $('#compat-btn');
-  const show = Boolean(player.stream()) && (loaded.compat || mediaProblem);
-  btn.hidden = !show;
-  btn.classList.toggle('active', loaded.compat);
-  btn.textContent = loaded.compat ? 'Normal moda dön' : 'Ses/görüntü sorunu mu?';
-  btn.title = loaded.compat
-    ? (compatQuality()?.reencoded
-      ? 'Görüntü dönüştürülüyor (kalite biraz düşük). Dönüştürmeyi kapatıp videoyu doğrudan oynat.'
-      : 'Görüntü kalitesi aynı; gerekirse sadece ses dönüştürülüyor. Dönüştürmeyi kapatıp videoyu doğrudan oynat.')
-    : 'Uyumlu moda geç: Stremio videoyu tarayıcının açabileceği biçime dönüştürür';
-
-  // Same toggle, always visible in the control bar (the pill above only shows once compat is on or something's wrong).
   const inline = $('#btn-compat');
   inline.classList.toggle('active', loaded.compat);
-  inline.title = loaded.compat ? 'Uyumlu mod açık · normale dönmek için tıkla' : 'Uyumlu moda geç (ses dili, düşük çözünürlük...)';
+  inline.classList.toggle('warn', !loaded.compat && Boolean(mediaProblem));
+  inline.title = loaded.compat
+    ? 'Uyumlu mod açık · normale dönmek için tıkla'
+    : mediaProblem
+      ? 'Ses ya da görüntüde sorun olabilir — uyumlu modu dene'
+      : 'Uyumlu moda geç (ses dili, düşük çözünürlük...)';
 }
 
 // ---- live download + viewers overlay on the player ----
@@ -690,15 +665,19 @@ function renderNotice() {
     text = `Tarayıcın bu videonun görüntü biçimini${s?.videoRisk ? ` (${s.videoRisk})` : ''} açamıyor.\n`
       + (noGpu ? 'Tarayıcında donanım hızlandırma kapalı görünüyor; açınca bu dosya da açılabilir.\n' : '')
       + 'Kalite düşmesin diye görüntü dönüştürülmedi.\n'
-      + 'Kalite sekmesinde ✅ işaretli bir dosyaya geçebilir ya da yine de dönüştürebilirsin.';
+      + 'Kalite sekmesinde ✅ işaretli bir dosyaya geçebilir ya da bir çözünürlükle yine de dönüştürebilirsin.';
     actions.push(button('✅ Dosya seç', () => selectTab('quality'), true));
     if (noGpu) actions.push(button('Donanım hızlandırma nasıl açılır?', () => alert(HW_HELP)));
     else actions.push(button('HEVC nasıl açılır?', () => alert(HEVC_HELP)));
-    actions.push(button('Yine de dönüştür (kalite düşer)', () => {
-      qualityBlocked = false;
-      loaded.compat = false;
-      startCompat({ allowReencode: true });
-    }));
+    // Pick the resolution right here instead of a single "convert anyway" that
+    // silently lands on whatever tier was last used — that's the point of asking.
+    for (const [q, label] of [['2160p', '2K'], ['1080p', '1080p'], ['720p', '720p'], ['480p', '480p']]) {
+      actions.push(button(`${label} ile dönüştür`, () => {
+        qualityBlocked = false;
+        loaded.compat = false;
+        selectCompatTier(q);
+      }));
+    }
   } else if (st.state === 'noStremio') {
     text = isTouch
       ? 'Bu cihazda Stremio bulunamadı.\nTelefonda videoyu host üzerinden izleyebilirsin.'
@@ -986,9 +965,6 @@ function toggleFullscreen() {
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 video.addEventListener('dblclick', toggleFullscreen);
-$('#compat-btn').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
-$('#btn-compat').addEventListener('click', () => (loaded.compat ? stopCompat() : startCompat()));
-$('#quality-info').addEventListener('click', () => selectTab('quality'));
 
 // ---- content search (host only): switch the room to a different title ----
 let searchSeq = 0;
@@ -1087,7 +1063,7 @@ $('#search-input').addEventListener('input', () => {
 });
 renderSearchResults([]);
 
-// ---- compat-mode resolution picker (also switches to/from Uyumlu mod) ----
+// ---- compat-mode resolution picker: a popover opened from the player's 🛠 button ----
 function reloadCompatTier() {
   if (!loaded.compat) return;
   const s = myStream();
@@ -1096,18 +1072,11 @@ function reloadCompatTier() {
 }
 
 function renderCompatTier() {
-  const box = $('#compat-quality');
+  const box = $('#compat-popover');
   for (const b of box.children) b.classList.toggle('active', b.dataset.q === (loaded.compat ? compatTier : 'normal'));
-  const viaRelay = player.status().source === 'relay';
-  $('#compat-quality-note').title = loaded.compat
-    ? compatTier === '2160p'
-      ? (viaRelay && !state.room?.settings.relay4k
-        ? "Relay'den izliyorsun: 2K/4K dönüştürme host'un bilgisayarında yapılır, host izin vermeli. Şimdilik ~1080p."
-        : '2K/4K korunur. Dönüştürme ekran kartını çok yorar; video takılırsa düşür.')
-      : `Görüntü ${compatTier}'e dönüştürülüyor. Daha düşük seçmek internet/veri kullanımını azaltır.`
-    : 'Normal oynatmadan Uyumlu moda (Stremio dönüştürücüsü) geçer; ses dilini değiştirmek ya da 2K/4K yerine düşük çözünürlük istemek için kullan.';
 }
 function selectCompatTier(q) {
+  $('#compat-popover').hidden = true;
   if (q === 'normal') {
     if (loaded.compat) stopCompat();
     renderCompatTier();
@@ -1115,13 +1084,19 @@ function selectCompatTier(q) {
   }
   compatTier = q;
   storage.set('compatTier', q);
+  // Picking a resolution is itself consent to convert the picture if needed
+  // (that's what "kaliteyi düşür" means); asking again would just be in the way.
   if (loaded.compat) reloadCompatTier();
-  else startCompat();
+  else startCompat({ allowReencode: true });
   renderCompatTier();
 }
-for (const b of document.querySelectorAll('#compat-quality button')) {
+for (const b of document.querySelectorAll('#compat-popover button')) {
   b.addEventListener('click', () => selectCompatTier(b.dataset.q));
 }
+$('#btn-compat').addEventListener('click', () => {
+  const box = $('#compat-popover');
+  box.hidden = !box.hidden;
+});
 renderCompatTier();
 
 // ---- hardware acceleration check ----

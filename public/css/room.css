@@ -92,13 +92,15 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
   background: linear-gradient(transparent, rgba(0, 0, 0, .85)); position: absolute; left: 0; right: 0; bottom: 0;
   transition: opacity .2s;
 }
-.player.idle .controls, .player.idle .viewers-ov, .player.idle .compat-btn, .player.idle .quality-info { opacity: 0; pointer-events: none; }
-.quality-info {
-  position: absolute; left: 12px; bottom: 64px; z-index: 3; transition: opacity .2s;
-  max-width: calc(58% - 24px); text-align: left; line-height: 1.35;
-  background: rgba(20, 20, 28, .92); border: 1px solid var(--line); color: var(--text);
-  border-radius: 12px; padding: 7px 12px; font-size: 13px;
+.player.idle .controls, .player.idle .viewers-ov, .player.idle .compat-popover { opacity: 0; pointer-events: none; }
+.compat-popover {
+  position: absolute; left: 12px; right: 12px; bottom: 64px; z-index: 3;
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; transition: opacity .2s;
+  background: rgba(20, 20, 28, .92); border: 1px solid var(--line);
+  border-radius: 12px; padding: 8px;
 }
+.compat-popover button { padding: 6px 12px; font-size: 13px; border-radius: 999px; }
+.compat-popover button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .viewers-ov {
   position: absolute; top: 12px; left: 12px; z-index: 3; transition: opacity .2s;
   background: rgba(14, 15, 19, .78); border: 1px solid var(--line); border-radius: 12px;
@@ -115,6 +117,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .player.idle { cursor: none; }
 .ctl { background: transparent; border: none; font-size: 18px; padding: 6px 8px; min-width: 40px; }
 .ctl.active { color: var(--accent-2); }
+.ctl.warn { color: var(--warn); }
 .time { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
 .aspect-btn { font-size: 12px; min-width: 52px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 6px; padding: 3px 6px; }
 .seek-wrap { position: relative; flex: 1; min-width: 60px; height: 22px; display: flex; align-items: center; }
@@ -172,12 +175,6 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
   background: var(--sub-bg, rgba(0, 0, 0, .6)); color: #fff; padding: .04em .35em; border-radius: .15em;
   white-space: pre-line; text-shadow: var(--sub-shadow, none);
 }
-.compat-btn {
-  position: absolute; right: 12px; bottom: 64px; z-index: 3; transition: opacity .2s;
-  background: rgba(20, 20, 28, .92); border: 1px solid var(--warn); color: var(--warn);
-  border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600;
-}
-.compat-btn.active { border-color: var(--line); color: var(--text); font-weight: 500; }
 .notice {
   position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
   background: rgba(0, 0, 0, .7); z-index: 2;
