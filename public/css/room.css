@@ -124,7 +124,16 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .chat li .from { font-weight: 600; margin-right: 6px; color: var(--accent-2); }
 .chat li.mine .from { color: var(--ok); }
 .chat li .ts { color: var(--muted); font-size: 11px; margin-left: 6px; }
-.chat-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
+.chat-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); position: relative; }
+.emoji-btn { padding: 6px 9px; font-size: 18px; line-height: 1; }
+.emoji-panel {
+  position: absolute; left: 10px; right: 10px; bottom: calc(100% + 6px); z-index: 5;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 2px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+  max-height: 220px; overflow-y: auto; box-shadow: 0 8px 30px rgba(0, 0, 0, .4);
+}
+.emoji-panel button { border: none; background: transparent; font-size: 22px; padding: 4px; border-radius: 8px; }
+.emoji-panel button:hover { background: var(--panel); }
 
 .users, .quality { list-style: none; margin: 0; padding: 8px; overflow-y: auto; }
 .users li, .quality li {
