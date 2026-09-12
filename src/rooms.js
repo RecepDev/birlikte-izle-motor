@@ -423,6 +423,28 @@ export class Room {
     };
   }
 
+  // Host re-asked the configured addons for streams (some may have timed out
+  // or not been added yet when the room was first opened) and wants to merge
+  // in anything new, without touching what's already playing.
+  addStreams(userId, newStreams) {
+    const denied = this.requireHost(userId);
+    if (denied) return denied;
+    const key = (s) => (s.kind === 'torrent' ? `t:${s.infoHash}:${s.fileIdx}` : `h:${s.url}`);
+    const known = new Set(this.streams.map(key));
+    const added = [];
+    for (const s of newStreams) {
+      if (known.has(key(s))) continue;
+      known.add(key(s));
+      added.push({ ...s, streamId: `s${this.streams.length + added.length + 1}` });
+    }
+    if (!added.length) return { msgs: [], added: 0 };
+    this.streams = [...this.streams, ...added];
+    return {
+      msgs: [{ to: 'room', event: 'hostStream', data: { hostStreamId: this.hostStreamId, streams: this.guestStreams() }, urgent: true }],
+      added: added.length,
+    };
+  }
+
   // ---- torrent stats -----------------------------------------------------
 
   // Streams whose torrent may be running on the host PC: the host's own and

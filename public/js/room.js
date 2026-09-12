@@ -628,15 +628,38 @@ function checkStream(streamId) {
   });
 }
 
-// Tests every torrent in the currently-open addon tab, a couple at a time so
-// it doesn't ask the host's Stremio to open a dozen torrents in one go.
+// Host-only: re-asks the configured addons for streams (one may have timed
+// out, or been added to the panel after the room opened) and merges in
+// anything new — doesn't touch what's currently playing.
+let refreshingAddons = false;
+async function refreshAddonStreams() {
+  if (refreshingAddons) return;
+  refreshingAddons = true;
+  const btn = $('#quality-refresh-addons');
+  btn.disabled = true;
+  btn.textContent = '🔄 Aranıyor…';
+  const res = await request('refreshStreams');
+  refreshingAddons = false;
+  btn.disabled = false;
+  btn.textContent = "🔄 Addon'ları tekrar ara";
+  if (res?.error) return toast(errorText(res.error));
+  toast(
+    res.added
+      ? `${res.added} yeni stream bulundu.`
+      : 'Yeni stream bulunamadı.',
+  );
+  if (res.errors?.length) toast(`Cevap vermeyen addon'lar: ${res.errors.join(', ')}`, 6000);
+}
+$('#quality-refresh-addons').addEventListener('click', refreshAddonStreams);
+
+// Tests every torrent in the currently-open addon tab, 10 at a time.
 let checkingAll = false;
 async function checkAllInTab(streams) {
   if (checkingAll) return;
   checkingAll = true;
   renderQualityTab();
   const queue = streams.filter((s) => s.kind === 'torrent' && !streamChecks.get(s.streamId)?.checking);
-  const CONCURRENCY = 2;
+  const CONCURRENCY = 10;
   let next = 0;
   async function worker() {
     while (next < queue.length) {
@@ -673,6 +696,7 @@ function renderQualityAddonTabs() {
 
 function renderQualityTab() {
   renderQualityAddonTabs();
+  $('#quality-refresh-addons').hidden = !isHost();
   const streams = qualityAddonFilter === 'all'
     ? state.room.streams
     : state.room.streams.filter((s) => s.addonName === qualityAddonFilter);

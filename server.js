@@ -113,6 +113,18 @@ socketCtl = attachSocket(io, {
       },
       requestRelay: (room, uid) => room.requestRelay(uid),
       releaseRelay: (room, uid) => room.releaseRelay(uid),
+      // Host re-asks the configured addons for streams (one may have timed out
+      // or been added after the room opened) and merges in anything new.
+      refreshStreams: async (room, uid) => {
+        const denied = room.requireHost(uid);
+        if (denied) return denied;
+        if (Date.now() - (room.streamsRefreshedAt || 0) < 10_000) return { error: 'rate' };
+        room.streamsRefreshedAt = Date.now();
+        const { results, errors } = await addons.streams(config.get().addons, room.type, room.contentId);
+        const res = room.addStreams(uid, normalizeStreams(results));
+        if (res.error) return res;
+        return { reply: { ok: true, added: res.added, errors: errors.map((e) => e.addonName) }, msgs: res.msgs };
+      },
       // Host tests a torrent (peers/real download speed) before picking it for the
       // room — some show peers in the addon listing but never actually feed data.
       checkStream: async (room, uid, p) => {

@@ -68,7 +68,7 @@ export function renderQuality(listEl, room, {
             class: `need ${check.result.alive ? 'okline' : 'heavy'}`,
             text: check.result.alive ? `✅ ${formatMbps(check.result.downMbps)} Mbps · ${check.result.peers} peer` : '⚠️ veri gelmiyor',
             title: check.result.alive
-              ? 'Test sırasında gerçekten veri indi.'
+              ? 'Test sırasında gerçekten veri indi (ya da dosya zaten bilgisayarında hazır).'
               : "Peer'lar bağlansa da birkaç saniye içinde hiç veri gelmedi — muhtemelen ölü kaynak.",
           })
           : null),

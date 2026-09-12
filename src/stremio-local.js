@@ -48,20 +48,25 @@ export function createStremioLocal({ base = STREMIO_BASE, fetchImpl = fetch, tim
         signal: AbortSignal.timeout(checkMs + 2000),
       }).catch(() => {});
       const deadline = Date.now() + checkMs;
-      const best = { peers: 0, downMbps: 0 };
+      const best = { peers: 0, downMbps: 0, progress: 0 };
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, pollMs));
         const s = await fetchStats(stream);
         if (s) {
           best.peers = Math.max(best.peers, s.peers);
           best.downMbps = Math.max(best.downMbps, s.downMbps);
-          if (best.downMbps > 0.1) break; // clearly alive, no need to wait out the full window
+          if (s.progress !== null) best.progress = Math.max(best.progress, s.progress);
+          // Clearly alive: either it's actively downloading, or it's already
+          // sitting on disk from a previous run (nothing left to download, so
+          // downloadSpeed can legitimately stay 0 forever).
+          if (best.downMbps > 0.1 || best.progress >= 0.99) break;
         }
       }
       await warm;
       // Peers alone prove nothing (that's the whole complaint: some torrents show
-      // peers but never actually feed data) — only real download speed counts.
-      return { ...best, alive: best.downMbps > 0.1 };
+      // peers but never actually feed data) — only real download speed or an
+      // already-cached file counts.
+      return { peers: best.peers, downMbps: best.downMbps, alive: best.downMbps > 0.1 || best.progress >= 0.99 };
     },
 
     // OpenSubtitles hash of a video the host's Stremio can reach.

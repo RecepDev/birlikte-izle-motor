@@ -75,3 +75,19 @@ test('checkTorrent reports not alive when the torrent never actually downloads',
   assert.equal(result.peers, 5);
   s.close();
 });
+
+test('checkTorrent reports alive for a file already fully cached on disk (nothing left to download)', async () => {
+  const s = await fakeStremio((req, res) => {
+    if (req.url.endsWith('/stats.json')) {
+      // Already on disk from a previous run: no download speed needed, streamProgress is maxed out.
+      res.end(JSON.stringify({ peers: 0, downloadSpeed: 0, streamProgress: 1 }));
+      return;
+    }
+    res.end('ok');
+  });
+  const local = createStremioLocal({ base: s.base, timeoutMs: 1000 });
+  const result = await local.checkTorrent(STREAM, { checkMs: 5000, pollMs: 10 });
+  assert.equal(result.alive, true);
+  assert.equal(result.downMbps, 0);
+  s.close();
+});

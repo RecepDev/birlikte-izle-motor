@@ -360,6 +360,33 @@ test('setContent switches the room to a new title, resets playback/subs/own-stre
   assert.equal(room.hostSubtitle, null);
 });
 
+test('addStreams merges only genuinely new streams, host only', () => {
+  const { room, host, join } = setup();
+  const ali = join('ali');
+  assert.deepEqual(room.addStreams(ali.id, []), { error: 'notHost' });
+
+  // s1/s2 are torrent dupes of existing streams (same infoHash+fileIdx); s3 is
+  // an http dupe by url; only the two genuinely new ones should be added.
+  const res = room.addStreams(host.id, [
+    { kind: 'torrent', infoHash: IH, fileIdx: 0, quality: '1080p', addonName: 'T' }, // dup of STREAMS[0]
+    { kind: 'http', url: 'https://rd/secret', quality: '2160p', addonName: 'RD' }, // dup of STREAMS[2]
+    { kind: 'torrent', infoHash: 'd'.repeat(40), fileIdx: 0, quality: '4k', addonName: 'Torrentio' },
+    { kind: 'http', url: 'https://new/link', quality: '1080p', addonName: 'RD2' },
+  ]);
+  assert.equal(res.added, 2);
+  assert.equal(room.streams.length, 5);
+  const added = room.streams.slice(3);
+  assert.deepEqual(added.map((s) => s.addonName), ['Torrentio', 'RD2']);
+  assert.deepEqual(new Set(added.map((s) => s.streamId)).size, 2, 'new streamIds are unique');
+  // guestStreams() only ever shows torrents plus the host's own http pick —
+  // s3 (http, not the host pick) was already hidden, and the new RD2 http
+  // stream is hidden the same way, so only the 3 torrents show up here.
+  const ev = events(res.msgs, 'hostStream')[0].data;
+  assert.equal(ev.streams.length, 3);
+
+  assert.deepEqual(room.addStreams(host.id, []).msgs, [], 'nothing new -> no broadcast');
+});
+
 test('snapshot hides other http streams and user tokens', () => {
   const { room, host } = setup();
   const snap = room.snapshot(host.id);
