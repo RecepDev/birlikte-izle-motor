@@ -38,7 +38,11 @@ export function createStremioLocal({ base = STREMIO_BASE, fetchImpl = fetch, tim
     // and polls its stats for a few seconds: a torrent that shows peers but never
     // actually downloads anything looks the same as a healthy one until you try it,
     // this lets the host check before picking it for the room.
-    async checkTorrent(stream, { checkMs = 7000, pollMs = 1000 } = {}) {
+    // Cold torrents (no cached metadata/peers yet) can take a while to ramp up —
+    // real playback gives one up to 60s (see player.js's LOAD_TIMEOUT_MS) before
+    // calling it dead, so a much shorter window here was reporting healthy
+    // torrents as "no data" just because they hadn't warmed up yet.
+    async checkTorrent(stream, { checkMs = 20_000, pollMs = 1000 } = {}) {
       const warm = fetchImpl(localTorrentUrl(stream, base), {
         headers: { range: 'bytes=0-1' },
         signal: AbortSignal.timeout(checkMs + 2000),

@@ -617,12 +617,36 @@ const streamChecks = new Map(); // streamId -> { checking, result }
 function checkStream(streamId) {
   streamChecks.set(streamId, { checking: true, result: null });
   renderQualityTab();
-  socket.timeout(12_000).emit('checkStream', { streamId }, (err, res) => {
-    if (err) res = { error: 'timeout' };
-    streamChecks.set(streamId, { checking: false, result: res?.error ? null : res });
-    if (res?.error) toast(errorText(res.error));
-    renderQualityTab();
+  return new Promise((resolve) => {
+    socket.timeout(26_000).emit('checkStream', { streamId }, (err, res) => {
+      if (err) res = { error: 'timeout' };
+      streamChecks.set(streamId, { checking: false, result: res?.error ? null : res });
+      if (res?.error) toast(errorText(res.error));
+      renderQualityTab();
+      resolve();
+    });
   });
+}
+
+// Tests every torrent in the currently-open addon tab, a couple at a time so
+// it doesn't ask the host's Stremio to open a dozen torrents in one go.
+let checkingAll = false;
+async function checkAllInTab(streams) {
+  if (checkingAll) return;
+  checkingAll = true;
+  renderQualityTab();
+  const queue = streams.filter((s) => s.kind === 'torrent' && !streamChecks.get(s.streamId)?.checking);
+  const CONCURRENCY = 2;
+  let next = 0;
+  async function worker() {
+    while (next < queue.length) {
+      const s = queue[next++];
+      await checkStream(s.streamId);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+  checkingAll = false;
+  renderQualityTab();
 }
 
 let qualityAddonFilter = 'all';
@@ -652,6 +676,20 @@ function renderQualityTab() {
   const streams = qualityAddonFilter === 'all'
     ? state.room.streams
     : state.room.streams.filter((s) => s.addonName === qualityAddonFilter);
+  const torrents = streams.filter((s) => s.kind === 'torrent');
+  const checkAllBtn = $('#quality-check-all');
+  checkAllBtn.hidden = !isHost() || !torrents.length;
+  checkAllBtn.disabled = checkingAll;
+  if (checkingAll) {
+    const done = torrents.filter((s) => {
+      const c = streamChecks.get(s.streamId);
+      return c && !c.checking;
+    }).length;
+    checkAllBtn.textContent = `⏳ Test ediliyor… (${done}/${torrents.length})`;
+  } else {
+    checkAllBtn.textContent = `🔍 ${qualityAddonFilter === 'all' ? 'Tümünü' : `${qualityAddonFilter} sekmesini`} test et (${torrents.length})`;
+  }
+  checkAllBtn.onclick = () => checkAllInTab(torrents);
   renderQuality($('#quality-list'), { ...state.room, streams }, {
     myStreamId: myStreamId(),
     isHost: isHost(),

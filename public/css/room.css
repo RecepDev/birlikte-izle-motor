@@ -264,6 +264,8 @@ body.resizing video { pointer-events: none; }
 .search-results .year { color: var(--muted); font-size: 12px; }
 .search-back { margin: 8px; align-self: flex-start; padding: 4px 10px; font-size: 13px; }
 .season-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 8px 8px; }
+.quality-check-row { padding: 0 8px 8px; }
+.quality-check-row button { padding: 4px 10px; font-size: 13px; }
 .season-tabs button { padding: 4px 10px; font-size: 12px; border-radius: 999px; }
 .season-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .hdr-profiles { display: flex; gap: 6px; }
