@@ -149,6 +149,25 @@
           </div>
           <div id="quality-warning" class="warning" hidden></div>
           <div id="quality-addon-tabs" class="season-tabs" hidden></div>
+          <div id="quality-res-filter" class="season-tabs" hidden></div>
+          <div class="row-line quality-filter-row" hidden id="quality-filter-row">
+            <label class="check small"><input type="checkbox" id="filter-hdr"> <span>Sadece HDR/Dolby</span></label>
+            <select id="filter-size">
+              <option value="">Boyut: tümü</option>
+              <option value="2">&lt; 2 GB</option>
+              <option value="5">&lt; 5 GB</option>
+              <option value="10">&lt; 10 GB</option>
+              <option value="20">&lt; 20 GB</option>
+            </select>
+            <select id="filter-speed">
+              <option value="">Gereken hız: tümü</option>
+              <option value="5">&lt; 5 Mbps</option>
+              <option value="10">&lt; 10 Mbps</option>
+              <option value="20">&lt; 20 Mbps</option>
+              <option value="40">&lt; 40 Mbps</option>
+            </select>
+            <button id="filter-clear" type="button" hidden>Filtreleri temizle</button>
+          </div>
           <div class="row-line quality-check-row">
             <button id="quality-refresh-addons" type="button" hidden>🔄 Addon'ları tekrar ara</button>
             <button id="quality-check-all" type="button" hidden></button>

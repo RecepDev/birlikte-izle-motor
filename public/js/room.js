@@ -652,6 +652,29 @@ async function refreshAddonStreams() {
 }
 $('#quality-refresh-addons').addEventListener('click', refreshAddonStreams);
 
+$('#filter-hdr').addEventListener('change', (e) => {
+  qualityFilters.hdr = e.target.checked;
+  renderQualityTab();
+});
+$('#filter-size').addEventListener('change', (e) => {
+  qualityFilters.maxGb = e.target.value ? Number(e.target.value) : null;
+  renderQualityTab();
+});
+$('#filter-speed').addEventListener('change', (e) => {
+  qualityFilters.maxMbps = e.target.value ? Number(e.target.value) : null;
+  renderQualityTab();
+});
+$('#filter-clear').addEventListener('click', () => {
+  qualityFilters.res.clear();
+  qualityFilters.hdr = false;
+  qualityFilters.maxGb = null;
+  qualityFilters.maxMbps = null;
+  $('#filter-hdr').checked = false;
+  $('#filter-size').value = '';
+  $('#filter-speed').value = '';
+  renderQualityTab();
+});
+
 // Tests every torrent in the currently-open addon tab, 10 at a time. Clicking
 // the same button again while it runs stops it from starting any more (checks
 // already in flight still finish on their own — there's no way to abort those).
@@ -704,12 +727,54 @@ function renderQualityAddonTabs() {
   );
 }
 
+// Resolution / HDR / size / needed-speed filters, layered on top of the addon tab.
+const qualityFilters = { res: new Set(), hdr: false, maxGb: null, maxMbps: null };
+function filtersActive() {
+  return Boolean(qualityFilters.res.size || qualityFilters.hdr || qualityFilters.maxGb !== null || qualityFilters.maxMbps !== null);
+}
+function matchesQualityFilters(s) {
+  if (qualityFilters.res.size && !qualityFilters.res.has(s.quality || '?')) return false;
+  if (qualityFilters.hdr && !s.hdr) return false;
+  if (qualityFilters.maxGb !== null) {
+    const gb = s.sizeBytes ? s.sizeBytes / 1024 ** 3 : null;
+    if (gb === null || gb >= qualityFilters.maxGb) return false;
+  }
+  if (qualityFilters.maxMbps !== null) {
+    const need = requiredMbps(s.sizeBytes, contentDuration());
+    if (need === null || need >= qualityFilters.maxMbps) return false;
+  }
+  return true;
+}
+function renderQualityResFilter(streams) {
+  const box = $('#quality-res-filter');
+  const qualities = [...new Set(streams.map((s) => s.quality).filter(Boolean))];
+  for (const q of [...qualityFilters.res]) if (!qualities.includes(q)) qualityFilters.res.delete(q);
+  if (!qualities.length) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  box.replaceChildren(...qualities.map((q) => {
+    const b = el('button', { type: 'button', class: qualityFilters.res.has(q) ? 'active' : '', text: q });
+    b.addEventListener('click', () => {
+      if (qualityFilters.res.has(q)) qualityFilters.res.delete(q);
+      else qualityFilters.res.add(q);
+      renderQualityTab();
+    });
+    return b;
+  }));
+}
+
 function renderQualityTab() {
   renderQualityAddonTabs();
   $('#quality-refresh-addons').hidden = !isHost();
-  const streams = qualityAddonFilter === 'all'
+  const addonStreams = qualityAddonFilter === 'all'
     ? state.room.streams
     : state.room.streams.filter((s) => s.addonName === qualityAddonFilter);
+  renderQualityResFilter(addonStreams);
+  $('#quality-filter-row').hidden = !addonStreams.length;
+  $('#filter-clear').hidden = !filtersActive();
+  const streams = addonStreams.filter(matchesQualityFilters);
   const torrents = streams.filter((s) => s.kind === 'torrent');
   const checkAllBtn = $('#quality-check-all');
   checkAllBtn.hidden = !isHost() || !torrents.length;
@@ -745,6 +810,9 @@ function renderQualityTab() {
     checkStatusFor: (s) => streamChecks.get(s.streamId) || null,
     onCheckStream: checkStream,
   });
+  if (!streams.length && addonStreams.length) {
+    $('#quality-list').replaceChildren(el('li', { class: 'muted', text: 'Bu filtrelere uyan stream yok.' }));
+  }
   const host = state.room.users.find((u) => u.id === state.room.hostUserId);
   const mine = me();
   const mismatch = Boolean(mine && host && mine.id !== host.id && durationMismatch(mine, host));

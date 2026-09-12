@@ -266,6 +266,11 @@ body.resizing video { pointer-events: none; }
 .season-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 8px 8px; }
 .quality-check-row { padding: 0 8px 8px; }
 .quality-check-row button { padding: 4px 10px; font-size: 13px; }
+.quality-filter-row { padding: 0 8px 8px; font-size: 13px; }
+.quality-filter-row select { padding: 4px 6px; font-size: 12.5px; }
+.quality-filter-row .check { gap: 6px; }
+.quality-filter-row .check.small { font-size: 12.5px; }
+.quality-filter-row #filter-clear { padding: 4px 10px; font-size: 12.5px; }
 .season-tabs button { padding: 4px 10px; font-size: 12px; border-radius: 999px; }
 .season-tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 .hdr-profiles { display: flex; gap: 6px; }
