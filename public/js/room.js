@@ -655,7 +655,7 @@ $('#quality-refresh-addons').addEventListener('click', refreshAddonStreams);
 $('#quality-filter-btn').addEventListener('click', () => {
   $('#quality-filter-panel').hidden = !$('#quality-filter-panel').hidden;
 });
-const HDR_CYCLE = { all: ['hdr', 'Tümü'], hdr: ['sdr', 'HDR'], sdr: ['all', 'SDR'] };
+const HDR_CYCLE = { all: ['hdr', 'Görüntü: Tümü'], hdr: ['sdr', 'Görüntü: HDR'], sdr: ['all', 'Görüntü: SDR'] };
 $('#filter-hdr-cycle').addEventListener('click', () => {
   qualityFilters.hdrMode = HDR_CYCLE[qualityFilters.hdrMode][0];
   renderQualityTab();
