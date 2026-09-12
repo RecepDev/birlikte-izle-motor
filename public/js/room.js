@@ -652,8 +652,12 @@ async function refreshAddonStreams() {
 }
 $('#quality-refresh-addons').addEventListener('click', refreshAddonStreams);
 
-$('#filter-hdr').addEventListener('change', (e) => {
-  qualityFilters.hdr = e.target.checked;
+$('#quality-filter-btn').addEventListener('click', () => {
+  $('#quality-filter-panel').hidden = !$('#quality-filter-panel').hidden;
+});
+const HDR_CYCLE = { all: ['hdr', 'Tümü'], hdr: ['sdr', 'HDR'], sdr: ['all', 'SDR'] };
+$('#filter-hdr-cycle').addEventListener('click', () => {
+  qualityFilters.hdrMode = HDR_CYCLE[qualityFilters.hdrMode][0];
   renderQualityTab();
 });
 $('#filter-size').addEventListener('change', (e) => {
@@ -666,10 +670,9 @@ $('#filter-speed').addEventListener('change', (e) => {
 });
 $('#filter-clear').addEventListener('click', () => {
   qualityFilters.res.clear();
-  qualityFilters.hdr = false;
+  qualityFilters.hdrMode = 'all';
   qualityFilters.maxGb = null;
   qualityFilters.maxMbps = null;
-  $('#filter-hdr').checked = false;
   $('#filter-size').value = '';
   $('#filter-speed').value = '';
   renderQualityTab();
@@ -727,14 +730,15 @@ function renderQualityAddonTabs() {
   );
 }
 
-// Resolution / HDR / size / needed-speed filters, layered on top of the addon tab.
-const qualityFilters = { res: new Set(), hdr: false, maxGb: null, maxMbps: null };
+// Resolution / HDR-SDR / size / needed-speed filters, layered on top of the addon tab.
+const qualityFilters = { res: new Set(), hdrMode: 'all', maxGb: null, maxMbps: null };
 function filtersActive() {
-  return Boolean(qualityFilters.res.size || qualityFilters.hdr || qualityFilters.maxGb !== null || qualityFilters.maxMbps !== null);
+  return Boolean(qualityFilters.res.size || qualityFilters.hdrMode !== 'all' || qualityFilters.maxGb !== null || qualityFilters.maxMbps !== null);
 }
 function matchesQualityFilters(s) {
   if (qualityFilters.res.size && !qualityFilters.res.has(s.quality || '?')) return false;
-  if (qualityFilters.hdr && !s.hdr) return false;
+  if (qualityFilters.hdrMode === 'hdr' && !s.hdr) return false;
+  if (qualityFilters.hdrMode === 'sdr' && s.hdr) return false;
   if (qualityFilters.maxGb !== null) {
     const gb = s.sizeBytes ? s.sizeBytes / 1024 ** 3 : null;
     if (gb === null || gb >= qualityFilters.maxGb) return false;
@@ -772,8 +776,15 @@ function renderQualityTab() {
     ? state.room.streams
     : state.room.streams.filter((s) => s.addonName === qualityAddonFilter);
   renderQualityResFilter(addonStreams);
-  $('#quality-filter-row').hidden = !addonStreams.length;
+  const filterBtn = $('#quality-filter-btn');
+  filterBtn.hidden = !addonStreams.length;
+  if (!addonStreams.length) $('#quality-filter-panel').hidden = true;
+  $('#filter-hdr-cycle').textContent = HDR_CYCLE[qualityFilters.hdrMode][1];
   $('#filter-clear').hidden = !filtersActive();
+  const activeCount = (qualityFilters.res.size ? 1 : 0) + (qualityFilters.hdrMode !== 'all' ? 1 : 0)
+    + (qualityFilters.maxGb !== null ? 1 : 0) + (qualityFilters.maxMbps !== null ? 1 : 0);
+  $('#quality-filter-count').hidden = !activeCount;
+  $('#quality-filter-count').textContent = String(activeCount);
   const streams = addonStreams.filter(matchesQualityFilters);
   const torrents = streams.filter((s) => s.kind === 'torrent');
   const checkAllBtn = $('#quality-check-all');
