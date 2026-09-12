@@ -123,18 +123,26 @@ export function createPanelApp({
   // NDJSON (one JSON object per line) instead of one big response: the host
   // sees each addon's streams the moment that addon replies, rather than
   // staring at "alınıyor…" until the slowest of them times out (up to ~20s).
+  //
+  // ?retry=Name1,Name2 re-asks only those addons (the ones that failed) and
+  // keeps whatever already succeeded, instead of throwing away every addon's
+  // results just because one of them didn't answer.
   app.get('/api/streams', wrap(async (req, res) => {
-    const { type, id } = req.query;
+    const { type, id, retry } = req.query;
     if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
     const key = `${type}|${id}`;
-    streamCache.delete(key); // opening the page always refreshes
+    const retryNames = typeof retry === 'string' && retry ? retry.split(',').filter(Boolean) : null;
+    const prior = retryNames ? streamCache.get(key) : null;
+    if (!retryNames) streamCache.delete(key); // opening the page fresh always refreshes everything
+
     res.set('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.set('Cache-Control', 'no-store');
     const write = (obj) => res.write(`${JSON.stringify(obj)}\n`);
 
-    const enabled = config.get().addons;
-    const allStreams = [];
-    const metaPromise = addons.meta(type, id).then((meta) => {
+    const allAddons = config.get().addons;
+    const enabled = retryNames ? allAddons.filter((a) => retryNames.includes(a.name)) : allAddons;
+    const allStreams = prior ? [...prior.streams] : [];
+    const metaPromise = prior ? Promise.resolve(prior.meta) : addons.meta(type, id).then((meta) => {
       write({ type: 'meta', meta });
       return meta;
     });
@@ -146,10 +154,13 @@ export function createPanelApp({
     });
     const [meta, { errors }] = await Promise.all([metaPromise, streamsPromise]);
     for (const e of errors) log.warn('Addon cevap vermedi', { addon: e.addonName, content: id, error: e.message });
+    // Errors from addons not part of this request (untouched on a retry) carry over unchanged.
+    const priorErrors = retryNames ? (prior?.errors || []).filter((e) => !retryNames.includes(e.addonName)) : [];
+    const allErrors = [...priorErrors, ...errors];
     // Cached even with errors: room creation must use the exact list the host saw
-    // (stream ids are positions). Reloading /new always refetches.
-    streamCache.set(key, { at: Date.now(), meta, streams: allStreams, errors });
-    write({ type: 'done', errors: errors.map((e) => ({ addonName: e.addonName, message: e.message })) });
+    // (stream ids are positions). Reloading /new (without ?retry) always refetches.
+    streamCache.set(key, { at: Date.now(), meta, streams: allStreams, errors: allErrors });
+    write({ type: 'done', errors: allErrors.map((e) => ({ addonName: e.addonName, message: e.message })) });
     res.end();
   }));
 

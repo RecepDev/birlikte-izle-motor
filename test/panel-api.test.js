@@ -14,6 +14,7 @@ const silentLog = { info() {}, warn() {}, error() {}, recent: () => [{ msg: 'x' 
 let server;
 let base;
 let rooms;
+let config;
 const socketCalls = [];
 
 before(async () => {
@@ -21,24 +22,38 @@ before(async () => {
   fs.writeFileSync(path.join(dir, 'index.html'), '<meta name="panel-key" content="%%PANEL_KEY%%">panel');
   fs.writeFileSync(path.join(dir, 'new.html'), '<meta name="panel-key" content="%%PANEL_KEY%%">new');
   rooms = createRoomManager();
+  config = createConfigStore(path.join(dir, 'config.json'));
+  // Named to match the fake addons.streams() below, so the retry tests can
+  // filter `enabled` by name the same way the real client/panel-api do.
+  config.save({
+    nickname: 'Host',
+    addons: [
+      { url: 'https://t.example/manifest.json', name: 'T', enabled: true, resources: ['stream'] },
+      { url: 'https://slow.example/manifest.json', name: 'Slow', enabled: true, resources: ['stream'] },
+    ],
+    defaults: { locked: true, waitMode: 'wait', relayEnabled: true, relayLimit: 2, relay4k: false },
+  });
   const app = createPanelApp({
     panelKey: KEY,
     panelDir: dir,
     publicBase: 'http://127.0.0.1:7000',
-    config: createConfigStore(path.join(dir, 'config.json')),
+    config,
     addons: {
       manifest: async (url) => {
         if (url.includes('bad')) throw new Error('HTTP 404');
         return { name: 'Torrentio', resources: ['stream'] };
       },
       meta: async () => ({ name: 'Dune', poster: null }),
+      // Mirrors the real addons-client: only calls back for addons actually
+      // present in `enabled`, so ?retry=Name filtering is meaningfully testable.
       streams: async (enabled, type, id, onAddon) => {
+        const names = new Set(enabled.map((a) => a.name));
         const items = [{ infoHash: 'a'.repeat(40), name: '1080p' }, { url: 'https://rd/x' }];
-        onAddon?.('T', items, null);
-        onAddon?.('Slow', null, 'zaman aşımı');
+        if (names.has('T')) onAddon?.('T', items, null);
+        if (names.has('Slow')) onAddon?.('Slow', null, 'zaman aşımı');
         return {
-          results: [{ addonName: 'T', streams: items }],
-          errors: [{ addonName: 'Slow', message: 'zaman aşımı' }],
+          results: names.has('T') ? [{ addonName: 'T', streams: items }] : [],
+          errors: names.has('Slow') ? [{ addonName: 'Slow', message: 'zaman aşımı' }] : [],
         };
       },
     },
@@ -144,6 +159,29 @@ test('streams validates ids and returns normalized list', async () => {
   assert.equal(body.meta.name, 'Dune');
   assert.deepEqual(body.streams.map((s) => s.kind), ['torrent', 'http']);
   assert.equal(body.errors[0].addonName, 'Slow');
+});
+
+test('?retry re-asks only the named addons and keeps the rest of the cached list', async () => {
+  const first = await readStreams(await api('/api/streams?type=movie&id=tt2'));
+  assert.deepEqual(first.streams.map((s) => s.name), ['1080p', '']); // T's torrent + http stream
+  assert.equal(first.errors[0].addonName, 'Slow');
+
+  // Retry only "Slow" — T must not be re-queried or duplicated in the merged list.
+  const res = await api(`/api/streams?type=movie&id=tt2&retry=Slow`);
+  const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual(lines.filter((l) => l.type === 'meta'), [], 'no re-fetch of meta on a retry');
+  const addonLines = lines.filter((l) => l.type === 'addon');
+  assert.deepEqual(addonLines.map((l) => l.addonName), ['Slow'], "only the retried addon's line is sent");
+  const done = lines.find((l) => l.type === 'done');
+  assert.equal(done.errors[0].addonName, 'Slow'); // still fails the same way in this fake, but not duplicated
+
+  // /api/rooms reuses the cache as-is (doesn't invalidate it the way a fresh
+  // GET /api/streams does) — the best way to inspect what the retry left behind.
+  const roomStreamId = first.streams.find((s) => s.name === '1080p').streamId;
+  const created = await (await api('/api/rooms', { method: 'POST', body: { type: 'movie', id: 'tt2', streamId: roomStreamId } })).json();
+  const room = rooms.get(created.roomId);
+  assert.equal(room.streams.filter((s) => s.name === '1080p').length, 1, "T's stream wasn't duplicated by the retry");
+  rooms.close(created.roomId); // just probing the cache via a room — don't leak it into later list()/order assertions
 });
 
 test('room create, list, kick, close', async () => {

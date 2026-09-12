@@ -22,6 +22,40 @@ const id = params.get('id');
 let streams = [];
 let loadDone = false;
 let addonsReplied = 0;
+let retrying = false;
+
+function renderErrors(errors) {
+  const box = $('#errors');
+  if (!errors.length) {
+    box.hidden = true;
+    return;
+  }
+  box.replaceChildren(
+    `Cevap vermeyen addon'lar: ${errors.map((e) => `${e.addonName} (${e.message})`).join(', ')} `,
+    el('button', { type: 'button', text: retrying ? 'Tekrar deneniyor…' : '↻ Tekrar dene', disabled: retrying, onclick: () => retryFailed(errors) }),
+  );
+  box.hidden = false;
+}
+
+// Re-asks only the addons that failed, keeping whatever already succeeded —
+// a full reload used to throw away a working addon's results too just
+// because a different one didn't answer.
+async function retryFailed(errors) {
+  if (retrying) return;
+  retrying = true;
+  renderErrors(errors);
+  const names = errors.map((e) => e.addonName);
+  await apiStream(`/api/streams?${new URLSearchParams({ type, id, retry: names.join(',') })}`, (line) => {
+    if (line.type === 'addon') {
+      addonsReplied += 1;
+      if (!line.error) streams.push(...line.streams);
+      render();
+    } else if (line.type === 'done') {
+      retrying = false;
+      renderErrors(line.errors);
+    }
+  });
+}
 
 async function createRoom(stream, button) {
   if (stream.kind === 'http' && !confirm(DEBRID_WARNING)) return;
@@ -101,13 +135,7 @@ try {
       render();
     } else if (line.type === 'done') {
       loadDone = true;
-      if (line.errors.length) {
-        $('#errors').replaceChildren(
-          `Cevap vermeyen addon'lar: ${line.errors.map((e) => `${e.addonName} (${e.message})`).join(', ')} `,
-          el('button', { type: 'button', text: '↻ Tekrar dene', onclick: () => location.reload() }),
-        );
-        $('#errors').hidden = false;
-      }
+      renderErrors(line.errors);
       render();
     }
   });
