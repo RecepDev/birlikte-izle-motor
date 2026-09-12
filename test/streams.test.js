@@ -9,6 +9,7 @@ import {
   parseEmbeddedSubs,
   parseMultiAudio,
   normalizeStreams,
+  normalizeAddonStreams,
   guestStreamList,
 } from '../src/streams.js';
 
@@ -119,6 +120,21 @@ test('parseMultiAudio spots dual-audio / dublaj release names', () => {
 test('normalizeStreams reads Torrentio seeder count', () => {
   const [s] = normalizeStreams([{ addonName: 'T', streams: [{ infoHash: IH, title: 'Movie.1080p\n👤 186 💾 7.4 GB ⚙️ yts' }] }]);
   assert.equal(s.seeders, 186);
+});
+
+test('normalizeAddonStreams continues streamIds from startIndex, matching normalizeStreams called all at once', () => {
+  const addonResults = [
+    { addonName: 'A', streams: [{ infoHash: IH, title: 'a' }, { infoHash: 'b'.repeat(40), title: 'b' }] },
+    { addonName: 'B', streams: [{ infoHash: 'c'.repeat(40), title: 'c' }] },
+  ];
+  const allAtOnce = normalizeStreams(addonResults);
+
+  // Same normalization, but as each addon "arrives" separately (progressive fetch).
+  const first = normalizeAddonStreams('A', addonResults[0].streams, 0);
+  const second = normalizeAddonStreams('B', addonResults[1].streams, first.length);
+  assert.deepEqual([...first, ...second], allAtOnce);
+  assert.deepEqual(first.map((s) => s.streamId), ['s1', 's2']);
+  assert.deepEqual(second.map((s) => s.streamId), ['s3']);
 });
 
 test('normalizeStreams rejects malformed infoHash and keeps stream subtitles', () => {

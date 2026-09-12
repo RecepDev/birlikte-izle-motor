@@ -145,13 +145,22 @@ function normalizeOne(raw, addonName) {
 }
 
 // addonResults: [{ addonName, streams: [raw] }]
+// One addon's raw streams -> normalized ones, streamIds continuing from
+// startIndex (so a caller can normalize addons one at a time as they arrive
+// and still end up with the same globally-unique ids as normalizeStreams).
+export function normalizeAddonStreams(addonName, rawStreams, startIndex = 0) {
+  const out = [];
+  for (const raw of rawStreams || []) {
+    const s = normalizeOne(raw, addonName);
+    if (s) out.push({ streamId: `s${startIndex + out.length + 1}`, ...s });
+  }
+  return out;
+}
+
 export function normalizeStreams(addonResults) {
   const out = [];
   for (const { addonName, streams } of addonResults) {
-    for (const raw of streams || []) {
-      const s = normalizeOne(raw, addonName);
-      if (s) out.push({ streamId: `s${out.length + 1}`, ...s });
-    }
+    out.push(...normalizeAddonStreams(addonName, streams, out.length));
   }
   return out;
 }

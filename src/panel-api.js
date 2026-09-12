@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import { isContentId, isContentType } from './addon.js';
-import { normalizeStreams } from './streams.js';
+import { normalizeStreams, normalizeAddonStreams } from './streams.js';
 
 const STREAM_CACHE_MS = 10 * 60 * 1000;
 
@@ -120,12 +120,37 @@ export function createPanelApp({
 
   const validContent = (type, id) => isContentType(type) && typeof id === 'string' && isContentId(id);
 
+  // NDJSON (one JSON object per line) instead of one big response: the host
+  // sees each addon's streams the moment that addon replies, rather than
+  // staring at "alınıyor…" until the slowest of them times out (up to ~20s).
   app.get('/api/streams', wrap(async (req, res) => {
     const { type, id } = req.query;
     if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
-    streamCache.delete(`${type}|${id}`); // opening the page always refreshes
-    const { meta, streams, errors } = await loadStreams(type, id);
-    res.json({ meta, streams, errors });
+    const key = `${type}|${id}`;
+    streamCache.delete(key); // opening the page always refreshes
+    res.set('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.set('Cache-Control', 'no-store');
+    const write = (obj) => res.write(`${JSON.stringify(obj)}\n`);
+
+    const enabled = config.get().addons;
+    const allStreams = [];
+    const metaPromise = addons.meta(type, id).then((meta) => {
+      write({ type: 'meta', meta });
+      return meta;
+    });
+    const streamsPromise = addons.streams(enabled, type, id, (addonName, items, error) => {
+      if (error) return write({ type: 'addon', addonName, streams: [], error });
+      const normalized = normalizeAddonStreams(addonName, items, allStreams.length);
+      allStreams.push(...normalized);
+      write({ type: 'addon', addonName, streams: normalized, error: null });
+    });
+    const [meta, { errors }] = await Promise.all([metaPromise, streamsPromise]);
+    for (const e of errors) log.warn('Addon cevap vermedi', { addon: e.addonName, content: id, error: e.message });
+    // Cached even with errors: room creation must use the exact list the host saw
+    // (stream ids are positions). Reloading /new always refetches.
+    streamCache.set(key, { at: Date.now(), meta, streams: allStreams, errors });
+    write({ type: 'done', errors: errors.map((e) => ({ addonName: e.addonName, message: e.message })) });
+    res.end();
   }));
 
   app.post('/api/rooms', wrap(async (req, res) => {

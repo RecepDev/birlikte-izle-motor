@@ -32,10 +32,15 @@ before(async () => {
         return { name: 'Torrentio', resources: ['stream'] };
       },
       meta: async () => ({ name: 'Dune', poster: null }),
-      streams: async () => ({
-        results: [{ addonName: 'T', streams: [{ infoHash: 'a'.repeat(40), name: '1080p' }, { url: 'https://rd/x' }] }],
-        errors: [{ addonName: 'Slow', message: 'zaman aşımı' }],
-      }),
+      streams: async (enabled, type, id, onAddon) => {
+        const items = [{ infoHash: 'a'.repeat(40), name: '1080p' }, { url: 'https://rd/x' }];
+        onAddon?.('T', items, null);
+        onAddon?.('Slow', null, 'zaman aşımı');
+        return {
+          results: [{ addonName: 'T', streams: items }],
+          errors: [{ addonName: 'Slow', message: 'zaman aşımı' }],
+        };
+      },
     },
     rooms,
     socketCtl: {
@@ -65,6 +70,17 @@ const api = (p, { method = 'GET', body, key = KEY, origin = base } = {}) =>
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+
+// /api/streams answers with one JSON object per line (NDJSON) so the panel
+// can render addons as they reply; tests just want the merged final shape.
+async function readStreams(res) {
+  const text = await res.text();
+  const lines = text.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const meta = lines.find((l) => l.type === 'meta')?.meta;
+  const streams = lines.filter((l) => l.type === 'addon').flatMap((l) => l.streams);
+  const errors = lines.find((l) => l.type === 'done')?.errors || [];
+  return { meta, streams, errors };
+}
 
 function rawGet(p, host) {
   return new Promise((resolve, reject) => {
@@ -124,7 +140,7 @@ test('status reports tunnel and stremio', async () => {
 
 test('streams validates ids and returns normalized list', async () => {
   assert.equal((await api('/api/streams?type=movie&id=../x')).status, 400);
-  const body = await (await api('/api/streams?type=movie&id=tt1')).json();
+  const body = await readStreams(await api('/api/streams?type=movie&id=tt1'));
   assert.equal(body.meta.name, 'Dune');
   assert.deepEqual(body.streams.map((s) => s.kind), ['torrent', 'http']);
   assert.equal(body.errors[0].addonName, 'Slow');

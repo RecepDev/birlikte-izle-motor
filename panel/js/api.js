@@ -13,6 +13,31 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 
+// Like api(), but for an NDJSON (one JSON object per line) response: calls
+// onLine for each object as it arrives instead of waiting for the whole body.
+export async function apiStream(path, onLine) {
+  const res = await fetch(path, { headers: { 'x-panel-key': KEY } });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      if (line) onLine(JSON.parse(line));
+    }
+  }
+  if (buf.trim()) onLine(JSON.parse(buf));
+}
+
 export function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {

@@ -1,4 +1,4 @@
-import { api, el, $, formatSize } from './api.js';
+import { api, apiStream, el, $, formatSize } from './api.js';
 import { browserCodecs } from './codecs.js';
 
 // Can this browser show the picture without re-encoding (original quality)?
@@ -20,6 +20,8 @@ const params = new URLSearchParams(location.search);
 const type = params.get('type');
 const id = params.get('id');
 let streams = [];
+let loadDone = false;
+let addonsReplied = 0;
 
 async function createRoom(stream, button) {
   if (stream.kind === 'http' && !confirm(DEBRID_WARNING)) return;
@@ -40,7 +42,12 @@ function render() {
   const visible = streams.filter((s) => !q || `${s.name} ${s.title} ${s.quality}`.toLowerCase().includes(q));
   const box = $('#streams');
   if (!streams.length) {
-    box.replaceChildren(el('p', { class: 'muted', text: "Hiç stream bulunamadı. Panelde Torrentio gibi bir stream addon'u ekli ve açık mı?" }));
+    box.replaceChildren(el('p', {
+      class: 'muted',
+      text: loadDone
+        ? "Hiç stream bulunamadı. Panelde Torrentio gibi bir stream addon'u ekli ve açık mı?"
+        : `Addon'lardan stream'ler alınıyor… (${addonsReplied} addon cevap verdi)`,
+    }));
     return;
   }
   const groups = new Map();
@@ -48,7 +55,8 @@ function render() {
     if (!groups.has(s.addonName)) groups.set(s.addonName, []);
     groups.get(s.addonName).push(s);
   }
-  box.replaceChildren(el('ul', { class: 'streams' }, ...[...groups].flatMap(([addon, list]) => [
+  const searching = loadDone ? null : el('p', { class: 'muted small', text: `Diğer addon'lar aranıyor… (${addonsReplied} cevap verdi)` });
+  const ul = el('ul', { class: 'streams' }, ...[...groups].flatMap(([addon, list]) => [
     el('h3', { text: `${addon} (${list.length})` }),
     ...list.map((s) => {
       const button = el('button', { type: 'button', class: 'primary', text: 'Bununla oda aç' });
@@ -70,29 +78,39 @@ function render() {
         button,
       );
     }),
-  ])));
+  ]));
+  box.replaceChildren(...[searching, ul].filter(Boolean));
 }
 
 $('#filter').addEventListener('input', render);
 
 try {
   if (!type || !id) throw new Error('İçerik bilgisi yok. Bu sayfayı Stremio\'dan aç.');
-  const data = await api(`/api/streams?${new URLSearchParams({ type, id })}`);
-  document.title = `${data.meta.name} · Oda aç`;
-  $('#title').textContent = data.meta.name;
-  if (data.meta.poster) {
-    $('#poster').src = data.meta.poster;
-    $('#poster').hidden = false;
-  }
-  if (data.errors.length) {
-    $('#errors').replaceChildren(
-      `Cevap vermeyen addon'lar: ${data.errors.map((e) => `${e.addonName} (${e.message})`).join(', ')} `,
-      el('button', { type: 'button', text: '↻ Tekrar dene', onclick: () => location.reload() }),
-    );
-    $('#errors').hidden = false;
-  }
-  streams = data.streams;
   render();
+  await apiStream(`/api/streams?${new URLSearchParams({ type, id })}`, (line) => {
+    if (line.type === 'meta') {
+      document.title = `${line.meta.name} · Oda aç`;
+      $('#title').textContent = line.meta.name;
+      if (line.meta.poster) {
+        $('#poster').src = line.meta.poster;
+        $('#poster').hidden = false;
+      }
+    } else if (line.type === 'addon') {
+      addonsReplied += 1;
+      if (!line.error) streams.push(...line.streams);
+      render();
+    } else if (line.type === 'done') {
+      loadDone = true;
+      if (line.errors.length) {
+        $('#errors').replaceChildren(
+          `Cevap vermeyen addon'lar: ${line.errors.map((e) => `${e.addonName} (${e.message})`).join(', ')} `,
+          el('button', { type: 'button', text: '↻ Tekrar dene', onclick: () => location.reload() }),
+        );
+        $('#errors').hidden = false;
+      }
+      render();
+    }
+  });
 } catch (err) {
   $('#title').textContent = 'Hata';
   $('#streams').replaceChildren(el('p', { class: 'error', text: err.message }));

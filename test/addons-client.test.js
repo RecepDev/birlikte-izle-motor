@@ -56,6 +56,24 @@ test('streams calls enabled stream addons only and reports errors per addon', as
   assert.equal(fetchImpl.calls.some((u) => u.includes('subs.example') || u.includes('off.example')), false);
 });
 
+test('streams calls onAddon per result while keeping the final result/error order stable', async () => {
+  const broken = { ...TORRENTIO, url: 'https://broken.example/manifest.json', name: 'Broken' };
+  const fetchImpl = fakeFetch({
+    'https://torrentio.example/opts/stream/series/tt1:1:2.json': { streams: [{ infoHash: 'a'.repeat(40) }] },
+  });
+  const client = createAddonsClient({ fetchImpl });
+  const seen = [];
+  const res = await client.streams([TORRENTIO, broken], 'series', 'tt1:1:2', (addonName, items, error) => {
+    seen.push({ addonName, items, error });
+  });
+  assert.deepEqual(new Set(seen.map((s) => s.addonName)), new Set(['Torrentio', 'Broken']), 'onAddon fired for both');
+  assert.deepEqual(seen.find((s) => s.addonName === 'Torrentio'), { addonName: 'Torrentio', items: [{ infoHash: 'a'.repeat(40) }], error: null });
+  assert.deepEqual(seen.find((s) => s.addonName === 'Broken'), { addonName: 'Broken', items: null, error: 'HTTP 404' });
+  // Final shape is unaffected by onAddon and stays in addon-list order.
+  assert.deepEqual(res.results, [{ addonName: 'Torrentio', streams: [{ infoHash: 'a'.repeat(40) }] }]);
+  assert.deepEqual(res.errors, [{ addonName: 'Broken', message: 'HTTP 404' }]);
+});
+
 test('addons without known resources are tried for both', async () => {
   const unknown = { url: 'https://u.example/manifest.json', name: 'U', enabled: true, resources: [] };
   const fetchImpl = fakeFetch({ 'https://u.example/stream/movie/tt9.json': { streams: [] } });

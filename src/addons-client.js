@@ -36,10 +36,22 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
     }
   }
 
-  // Calls `path` on every addon that supports `resource`, in parallel.
-  async function fanOut(addons, resource, path, pick) {
+  // Calls `path` on every addon that supports `resource`, in parallel. When given,
+  // onAddon fires as each individual addon settles (arrival order, for a
+  // progressive UI) while the returned { results, errors } stays in addon-list
+  // order regardless, same as before onAddon existed.
+  async function fanOut(addons, resource, path, pick, onAddon) {
     const targets = addons.filter((a) => supports(a, resource));
-    const settled = await Promise.allSettled(targets.map((a) => getJsonRetry(`${addonBase(a.url)}${path}`)));
+    const promises = targets.map((a) => getJsonRetry(`${addonBase(a.url)}${path}`));
+    if (onAddon) {
+      promises.forEach((p, i) => {
+        p.then(
+          (body) => onAddon({ addonName: targets[i].name, items: pick(body), error: null }),
+          (err) => onAddon({ addonName: targets[i].name, items: null, error: errorMessage(err) }),
+        );
+      });
+    }
+    const settled = await Promise.allSettled(promises);
     const results = [];
     const errors = [];
     settled.forEach((r, i) => {
@@ -57,10 +69,12 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
       return { name: String(m.name || url), resources: KNOWN_RESOURCES.filter((r) => names.includes(r)) };
     },
 
-    async streams(addons, type, id) {
+    // onAddon(name, streams|null, error|null) fires as each addon replies, for a
+    // progressive UI; the returned promise still resolves once every addon has.
+    async streams(addons, type, id, onAddon) {
+      const wrapped = onAddon && ((r) => onAddon(r.addonName, r.items, r.error));
       const { results, errors } = await fanOut(addons, 'stream', `/stream/${type}/${id}.json`, (b) =>
-        Array.isArray(b?.streams) ? b.streams : [],
-      );
+        Array.isArray(b?.streams) ? b.streams : [], wrapped);
       return { results: results.map((r) => ({ addonName: r.addonName, streams: r.items })), errors };
     },
 
