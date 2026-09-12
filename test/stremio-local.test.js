@@ -39,3 +39,39 @@ test('opensubHash returns null on error', async () => {
   assert.equal(await createStremioLocal({ base: s.base }).opensubHash('x'), null);
   s.close();
 });
+
+const STREAM = { kind: 'torrent', infoHash: 'a'.repeat(40), fileIdx: 0, sources: [] };
+
+test('checkTorrent reports alive once real download speed shows up', async () => {
+  let statsHits = 0;
+  const s = await fakeStremio((req, res) => {
+    if (req.url.endsWith('/stats.json')) {
+      statsHits += 1;
+      res.end(JSON.stringify({ peers: 3, downloadSpeed: statsHits < 2 ? 0 : 500_000, streamProgress: 0.1 }));
+      return;
+    }
+    res.end('ok'); // the warm-up range request against the media path
+  });
+  const local = createStremioLocal({ base: s.base, timeoutMs: 1000 });
+  const result = await local.checkTorrent(STREAM, { checkMs: 5000, pollMs: 10 });
+  assert.equal(result.alive, true);
+  assert.ok(result.downMbps > 0);
+  assert.equal(result.peers, 3);
+  s.close();
+});
+
+test('checkTorrent reports not alive when the torrent never actually downloads', async () => {
+  const s = await fakeStremio((req, res) => {
+    if (req.url.endsWith('/stats.json')) {
+      res.end(JSON.stringify({ peers: 5, downloadSpeed: 0, streamProgress: 0 }));
+      return;
+    }
+    res.end('ok');
+  });
+  const local = createStremioLocal({ base: s.base, timeoutMs: 1000 });
+  const result = await local.checkTorrent(STREAM, { checkMs: 60, pollMs: 10 });
+  assert.equal(result.alive, false);
+  assert.equal(result.downMbps, 0);
+  assert.equal(result.peers, 5);
+  s.close();
+});

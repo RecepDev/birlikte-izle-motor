@@ -8,7 +8,11 @@ export function streamLabel(s) {
 export const formatMbps = (v) => (v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).toString();
 
 // needFor(stream) -> Mbps the file needs (or null).
-export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onPickHost, needFor = () => null, pictureFor = () => null }) {
+// checkStatusFor(stream) -> { checking, result: { peers, downMbps, alive } | null } | null
+export function renderQuality(listEl, room, {
+  myStreamId, isHost, onPickOwn, onPickHost, needFor = () => null, pictureFor = () => null,
+  checkStatusFor = () => null, onCheckStream = () => {},
+}) {
   const items = room.streams.map((s) => {
     const isHostStream = s.streamId === room.hostStreamId;
     const isMine = s.streamId === myStreamId;
@@ -16,7 +20,19 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
     const title = String(s.title || s.name).split('\n')[0];
     const info = [s.addonName, title].filter(Boolean).join(' · ');
     const need = needFor(s);
+    const check = s.kind === 'torrent' ? checkStatusFor(s) : null;
     const buttons = [];
+    if (isHost && s.kind === 'torrent') {
+      buttons.push(el('button', {
+        type: 'button',
+        class: 'icon-btn',
+        text: check?.checking ? '⏳' : '🔍',
+        title: check?.checking ? 'Kontrol ediliyor…' : 'Bu torrenti test et (gerçekten veri geliyor mu)',
+        'aria-label': 'Torrenti test et',
+        disabled: check?.checking ? true : null,
+        onclick: () => onCheckStream(s.streamId),
+      }));
+    }
     if (!isMine) {
       const label = isHostStream ? "Host'unkine dön" : 'Ben bunu izleyeyim';
       buttons.push(
@@ -46,7 +62,16 @@ export function renderQuality(listEl, room, { myStreamId, isHost, onPickOwn, onP
       el('span', { class: 'q' }, s.quality || '?',
         need !== null ? el('div', { class: 'need', text: `~${formatMbps(need)} Mbps`, title: 'Akıcı izlemek için gereken indirme hızı' }) : null,
         Number.isFinite(s.seeders) ? el('div', { class: 'need', text: `👤 ${s.seeders}`, title: 'Torrent kaynak (seed) sayısı' }) : null,
-        s.sizeBytes ? el('div', { class: 'need', text: `💾 ${formatSize(s.sizeBytes)}`, title: 'Dosya boyutu' }) : null),
+        s.sizeBytes ? el('div', { class: 'need', text: `💾 ${formatSize(s.sizeBytes)}`, title: 'Dosya boyutu' }) : null,
+        check?.result
+          ? el('div', {
+            class: `need ${check.result.alive ? 'okline' : 'heavy'}`,
+            text: check.result.alive ? `✅ ${formatMbps(check.result.downMbps)} Mbps · ${check.result.peers} peer` : '⚠️ veri gelmiyor',
+            title: check.result.alive
+              ? 'Test sırasında gerçekten veri indi.'
+              : "Peer'lar bağlansa da birkaç saniye içinde hiç veri gelmedi — muhtemelen ölü kaynak.",
+          })
+          : null),
       el('div', { class: 'info' },
         (() => {
           const items = pictureFor(s) || [];

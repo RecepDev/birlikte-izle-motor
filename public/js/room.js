@@ -610,6 +610,21 @@ function pictureVerdictBase(s) {
     : { ok: false, text: `⚠️ ${s.videoRisk}: tarayıcın açamıyor${keepQuality ? '' : ' (dönüştürülür, kalite düşer)'}` };
 }
 
+// Host-only: test a torrent's real peers/download speed before picking it,
+// without switching the room to it. A longer socket timeout than the usual
+// 8s request() default since the server side actively waits on Stremio.
+const streamChecks = new Map(); // streamId -> { checking, result }
+function checkStream(streamId) {
+  streamChecks.set(streamId, { checking: true, result: null });
+  renderQualityTab();
+  socket.timeout(12_000).emit('checkStream', { streamId }, (err, res) => {
+    if (err) res = { error: 'timeout' };
+    streamChecks.set(streamId, { checking: false, result: res?.error ? null : res });
+    if (res?.error) toast(errorText(res.error));
+    renderQualityTab();
+  });
+}
+
 let qualityAddonFilter = 'all';
 function renderQualityAddonTabs() {
   const box = $('#quality-addon-tabs');
@@ -652,6 +667,8 @@ function renderQualityTab() {
     },
     needFor: (s) => requiredMbps(s.sizeBytes, contentDuration()),
     pictureFor: (s) => pictureVerdict(s),
+    checkStatusFor: (s) => streamChecks.get(s.streamId) || null,
+    onCheckStream: checkStream,
   });
   const host = state.room.users.find((u) => u.id === state.room.hostUserId);
   const mine = me();

@@ -113,6 +113,16 @@ socketCtl = attachSocket(io, {
       },
       requestRelay: (room, uid) => room.requestRelay(uid),
       releaseRelay: (room, uid) => room.releaseRelay(uid),
+      // Host tests a torrent (peers/real download speed) before picking it for the
+      // room — some show peers in the addon listing but never actually feed data.
+      checkStream: async (room, uid, p) => {
+        const denied = room.requireHost(uid);
+        if (denied) return denied;
+        const stream = room.streams.find((s) => s.streamId === p?.streamId && s.kind === 'torrent');
+        if (!stream) return { error: 'badStream' };
+        const result = await stremioLocal.checkTorrent(stream);
+        return { reply: { ok: true, ...result }, msgs: [] };
+      },
       // Host searches Cinemeta's catalog for a different title to switch the room to.
       searchContent: async (room, uid, p) => {
         const denied = room.requireHost(uid);

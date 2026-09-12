@@ -159,6 +159,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .quality .pics span.ic { font-size: 14px; }
 .quality .need { font-size: 11px; color: var(--muted); }
 .quality .okline { color: var(--ok); }
+.quality .heavy { color: var(--warn); }
 .volume { width: 80px; accent-color: var(--accent); }
 .banner {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
