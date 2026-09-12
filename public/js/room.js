@@ -652,23 +652,33 @@ async function refreshAddonStreams() {
 }
 $('#quality-refresh-addons').addEventListener('click', refreshAddonStreams);
 
-// Tests every torrent in the currently-open addon tab, 10 at a time.
+// Tests every torrent in the currently-open addon tab, 10 at a time. Clicking
+// the same button again while it runs stops it from starting any more (checks
+// already in flight still finish on their own — there's no way to abort those).
 let checkingAll = false;
+let cancelAllRequested = false;
+function stopCheckAll() {
+  if (!checkingAll) return;
+  cancelAllRequested = true;
+  renderQualityTab();
+}
 async function checkAllInTab(streams) {
   if (checkingAll) return;
   checkingAll = true;
+  cancelAllRequested = false;
   renderQualityTab();
   const queue = streams.filter((s) => s.kind === 'torrent' && !streamChecks.get(s.streamId)?.checking);
   const CONCURRENCY = 10;
   let next = 0;
   async function worker() {
-    while (next < queue.length) {
+    while (next < queue.length && !cancelAllRequested) {
       const s = queue[next++];
       await checkStream(s.streamId);
     }
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
   checkingAll = false;
+  cancelAllRequested = false;
   renderQualityTab();
 }
 
@@ -703,17 +713,20 @@ function renderQualityTab() {
   const torrents = streams.filter((s) => s.kind === 'torrent');
   const checkAllBtn = $('#quality-check-all');
   checkAllBtn.hidden = !isHost() || !torrents.length;
-  checkAllBtn.disabled = checkingAll;
+  checkAllBtn.disabled = false;
   if (checkingAll) {
     const done = torrents.filter((s) => {
       const c = streamChecks.get(s.streamId);
       return c && !c.checking;
     }).length;
-    checkAllBtn.textContent = `⏳ Test ediliyor… (${done}/${torrents.length})`;
+    checkAllBtn.textContent = cancelAllRequested
+      ? `⏳ Durduruluyor… (${done}/${torrents.length})`
+      : `⏹ Durdur (${done}/${torrents.length})`;
+    checkAllBtn.onclick = stopCheckAll;
   } else {
     checkAllBtn.textContent = `🔍 ${qualityAddonFilter === 'all' ? 'Tümünü' : `${qualityAddonFilter} sekmesini`} test et (${torrents.length})`;
+    checkAllBtn.onclick = () => checkAllInTab(torrents);
   }
-  checkAllBtn.onclick = () => checkAllInTab(torrents);
   renderQuality($('#quality-list'), { ...state.room, streams }, {
     myStreamId: myStreamId(),
     isHost: isHost(),
