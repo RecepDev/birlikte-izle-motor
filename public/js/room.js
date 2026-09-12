@@ -238,12 +238,21 @@ function videoNeedsReencode(s) {
   return Boolean(codec) && !browserCodecs(video).videoCodecs.includes(codec);
 }
 
+// Detecting a silently-missing audio track live only works on Safari/Firefox
+// (Chrome has no equivalent API), so known-risky audio codecs are checked
+// up front from the release name instead and routed straight into compat mode.
+const AUDIO_RISK_CODEC = { AC3: 'ac3', 'E-AC3': 'eac3', DTS: 'dts', 'DTS-HD': 'dts', TrueHD: 'truehd' };
+function audioNeedsReencode(s) {
+  const codec = AUDIO_RISK_CODEC[s?.audioRisk];
+  return Boolean(codec) && !browserCodecs(video).audioCodecs.includes(codec);
+}
+
 let loaded = { streamId: undefined, compat: false };
 function loadMyStream(force = false) {
   const s = myStream();
   const id = s?.streamId ?? null;
   if (!force && id === loaded.streamId) return;
-  const compat = Boolean(s?.notWebReady) && !(keepQuality && videoNeedsReencode(s));
+  const compat = (Boolean(s?.notWebReady) || audioNeedsReencode(s)) && !(keepQuality && videoNeedsReencode(s));
   loaded = { streamId: id, compat };
   mediaProblem = null;
   reencodeAllowed = false;
@@ -580,6 +589,11 @@ function pictureVerdict(s) {
   const items = [{ icon: v.ok ? '✅' : '⚠️', text: v.text.replace(/^(✅|⚠️)\s*/, '') }];
   if (s.hdr) items.push({ icon: '🌗', text: `${s.hdr}: HDR olmayan ekranda karanlık ya da soluk görünebilir (parlaklık ayarı yukarıda).` });
   if (s.embeddedSubs) items.push({ icon: '💬', text: embeddedSubsText(s) });
+  if (s.audioRisk) {
+    items.push(audioNeedsReencode(s)
+      ? { icon: '🔇', text: `${s.audioRisk}: tarayıcın bu sesi açamıyor, otomatik Uyumlu moda geçilir (sadece ses dönüştürülür).` }
+      : { icon: '🔊', text: `${s.audioRisk}: tarayıcın açabiliyor, orijinal kalite` });
+  }
   return items;
 }
 

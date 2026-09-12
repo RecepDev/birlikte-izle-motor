@@ -4,6 +4,7 @@ import {
   parseQuality,
   parseSizeBytes,
   parseVideoRisk,
+  parseAudioRisk,
   parseHdr,
   parseEmbeddedSubs,
   parseMultiAudio,
@@ -29,6 +30,16 @@ test('parseVideoRisk flags formats browsers often cannot decode', () => {
   assert.equal(parseVideoRisk('Movie 1080p AV1'), 'AV1');
   assert.equal(parseVideoRisk('Movie.1080p.x264'), null);
   assert.equal(parseVideoRisk('Divx release'), null);
+});
+
+test('parseAudioRisk flags audio codecs browsers commonly cannot decode', () => {
+  assert.equal(parseAudioRisk('Movie.1080p.TrueHD.7.1.Atmos'), 'TrueHD');
+  assert.equal(parseAudioRisk('Movie 1080p DTS-HD MA 5.1'), 'DTS-HD');
+  assert.equal(parseAudioRisk('Movie.1080p.DTS.5.1'), 'DTS');
+  assert.equal(parseAudioRisk('Movie 1080p DDP5.1'), 'E-AC3');
+  assert.equal(parseAudioRisk('Movie.1080p.EAC3.5.1'), 'E-AC3');
+  assert.equal(parseAudioRisk('Movie 1080p AC3 5.1'), 'AC3');
+  assert.equal(parseAudioRisk('Movie.1080p.AAC.x264'), null);
 });
 
 test('parseHdr flags HDR formats', () => {
@@ -68,6 +79,7 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
     title: 'Movie.1080p\n💾 2 GB',
     quality: '1080p',
     videoRisk: null,
+    audioRisk: null,
     hdr: null,
     seeders: null,
     embeddedSubs: null,

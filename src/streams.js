@@ -21,6 +21,20 @@ export function parseVideoRisk(text) {
   return null;
 }
 
+// Audio formats browsers commonly cannot decode at all (picture plays, no sound).
+// Detecting this live in the browser is unreliable on Chrome/Edge (no
+// webkitAudioDecodedByteCount there), so it's flagged from the release name
+// up front instead, the same way parseVideoRisk covers the picture side.
+export function parseAudioRisk(text) {
+  const t = String(text || '');
+  if (/\btrue.?hd\b/i.test(t)) return 'TrueHD';
+  if (/\bdts.?(hd|x|ma)\b/i.test(t)) return 'DTS-HD';
+  if (/\bdts\b/i.test(t)) return 'DTS';
+  if (/\be-?ac-?3\b|\bddp\d*\b|\bdd\+/i.test(t)) return 'E-AC3';
+  if (/\bac-?3\b|dolby.?digital/i.test(t)) return 'AC3';
+  return null;
+}
+
 // HDR content often looks dark or washed out on SDR screens.
 export function parseHdr(text) {
   const t = String(text || '');
@@ -87,6 +101,7 @@ function normalizeOne(raw, addonName) {
   };
   base.quality = parseQuality(`${base.name} ${base.title}`);
   base.videoRisk = parseVideoRisk(`${base.name} ${base.title}`);
+  base.audioRisk = parseAudioRisk(`${base.name} ${base.title}`);
   base.hdr = parseHdr(`${base.name} ${base.title}`);
   // Torrentio puts the seeder count in the title as "👤 123".
   const seeders = `${base.title} ${base.name}`.match(/👤\s*(\d+)/);
