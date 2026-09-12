@@ -610,8 +610,34 @@ function pictureVerdictBase(s) {
     : { ok: false, text: `⚠️ ${s.videoRisk}: tarayıcın açamıyor${keepQuality ? '' : ' (dönüştürülür, kalite düşer)'}` };
 }
 
+let qualityAddonFilter = 'all';
+function renderQualityAddonTabs() {
+  const box = $('#quality-addon-tabs');
+  const names = [...new Set(state.room.streams.map((s) => s.addonName).filter(Boolean))];
+  if (names.length <= 1) {
+    box.hidden = true;
+    qualityAddonFilter = 'all';
+    return;
+  }
+  if (qualityAddonFilter !== 'all' && !names.includes(qualityAddonFilter)) qualityAddonFilter = 'all';
+  box.hidden = false;
+  const tab = (key, label, count) => {
+    const b = el('button', { type: 'button', class: qualityAddonFilter === key ? 'active' : '', text: `${label} (${count})` });
+    b.addEventListener('click', () => { qualityAddonFilter = key; renderQualityTab(); });
+    return b;
+  };
+  box.replaceChildren(
+    tab('all', 'Tümü', state.room.streams.length),
+    ...names.map((name) => tab(name, name, state.room.streams.filter((s) => s.addonName === name).length)),
+  );
+}
+
 function renderQualityTab() {
-  renderQuality($('#quality-list'), state.room, {
+  renderQualityAddonTabs();
+  const streams = qualityAddonFilter === 'all'
+    ? state.room.streams
+    : state.room.streams.filter((s) => s.addonName === qualityAddonFilter);
+  renderQuality($('#quality-list'), { ...state.room, streams }, {
     myStreamId: myStreamId(),
     isHost: isHost(),
     onPickOwn: async (streamId) => {
