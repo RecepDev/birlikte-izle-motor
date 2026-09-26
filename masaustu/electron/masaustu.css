@@ -50,7 +50,21 @@
 
 /* Videonun üstüne binen ve masaüstünde işe yaramayan katmanlar.
    Uyumlu mod gerekmiyor: mpv her biçimi kendi çözüyor. */
-.viewers-ov, .compat-popover, #viewers-ov, #picture-info { display: none !important; }
+.compat-popover { display: none !important; }
+/* İzleyici katmanı videonun üstüne çizilemiyor: yalnızca kaynak bilgisini,
+   videonun sol üstünde kendi satırında tutuyoruz. */
+.viewers-ov {
+  position: static !important;
+  order: -1;
+  align-self: flex-start !important;
+  background: none !important;
+  padding: 0 !important;
+  display: block !important;
+}
+#viewers-toggle, #viewers-list { display: none !important; }
+#picture-info { position: static !important; }
+/* Altyazıyı mpv çiziyor; sayfanın katmanı boş bir kutu olarak görünüyordu. */
+.sub-overlay { display: none !important; }
 #btn-compat, #btn-aspect { display: none !important; }
 /* Zaten masaüstündeyiz; uyumluluk ekranı da gereksiz (mpv her biçimi açıyor). */
 #open-desktop, #open-compat { display: none !important; }

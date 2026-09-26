@@ -265,12 +265,15 @@ function loadMyStream(force = false) {
   const s = myStream();
   const id = s?.streamId ?? null;
   if (!force && id === loaded.streamId) return;
-  const compat = (Boolean(s?.notWebReady) || audioNeedsReencode(s)) && !(keepQuality && videoNeedsReencode(s));
+  // Masaüstü kabuğunda dönüştürmeye hiç gerek yok: HEVC, Dolby Vision, AC3 - hepsini
+  // mpv doğrudan açıyor. Uyumlu mod açılırsa HDR dosyalar boşuna bozuluyor ya da hiç açılmıyor.
+  const masaustu = Boolean(window.masaustuSes);
+  const compat = !masaustu && (Boolean(s?.notWebReady) || audioNeedsReencode(s)) && !(keepQuality && videoNeedsReencode(s));
   loaded = { streamId: id, compat };
   mediaProblem = null;
   reencodeAllowed = false;
   // Known undecodable picture in quality mode: ask before downloading anything.
-  qualityBlocked = Boolean(s) && keepQuality && videoNeedsReencode(s);
+  qualityBlocked = !masaustu && Boolean(s) && keepQuality && videoNeedsReencode(s);
   player.load(qualityBlocked ? null : s, compat ? { forceFallback: true, compat: true } : {});
   renderCompatButton();
   renderCompatTier();
