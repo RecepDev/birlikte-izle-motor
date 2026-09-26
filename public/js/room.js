@@ -13,6 +13,8 @@ import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS, C
 import { langLabel } from './shared/subtitle-text.js';
 import { browserCodecs, isRealSafari } from './codecs.js';
 import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
+import { probeDevice, evaluate as evaluateCompat, autoScanTargets } from './compat.js';
+import { createCompatScreen } from './compat-view.js';
 
 // ---- identity --------------------------------------------------------------
 
@@ -855,6 +857,18 @@ const HEVC_HELP = 'HEVC (x265) videoyu tarayıcıda açmak için:\n\n'
   + '• Ekran kartı sürücüsünün güncel olması gerekir.\n\n'
   + 'Sonra sayfayı yenile.';
 
+// Stremio Desktop kurulurken "stremio://" protokolunu kaydeder; link tiklamasi uygulamayi
+// acar (tarayici "Stremio'yu ac?" diye sorabilir). Acildiktan sonra player zaten 3 saniyede
+// bir yeniden dener (bkz. player.js PROBE_RETRY_MS), ayrica baglanma islemine gerek yok.
+function launchStremio() {
+  const link = document.createElement('a');
+  link.href = 'stremio://';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  toast("Stremio başlatılıyor… Açılınca otomatik bağlanacak. Tarayıcı izin sorarsa 'Aç'a bas.", 6000);
+}
+
 function renderNotice() {
   const box = $('#notice');
   const actions = [];
@@ -893,6 +907,7 @@ function renderNotice() {
       ? 'Bu cihazda Stremio bulunamadı.\nTelefonda videoyu host üzerinden izleyebilirsin.'
       : 'Stremio açık değil.\nBilgisayarında Stremio uygulamasını aç, sayfa kendiliğinden bağlanır.\nTarayıcı "yerel ağdaki cihazlara erişim" izni sorarsa İzin ver\'e bas.';
     if (state.relayError && !isHost()) text += `\n\nHost üzerinden izleme: ${errorText(state.relayError)}`;
+    if (!isTouch) actions.push(button("🔌 Stremio'ya bağlan", launchStremio, true));
     if (state.room?.settings.relayEnabled && !isHost()) {
       actions.push(button('📶 Host üzerinden izle', () => {
         state.relayError = null;
@@ -948,6 +963,7 @@ function renderAll() {
 
 function applySnapshot(snap, publicUrl) {
   const hadRelay = player.status().source === 'relay';
+  const firstJoin = !state.joinedOnce; // reconnect'lerde applySnapshot tekrar cagrilir - otomatik tarama yalnizca ilk girişte calismali
   state.room = snap;
   state.me = snap.you;
   state.publicUrl = publicUrl;
@@ -962,6 +978,10 @@ function applySnapshot(snap, publicUrl) {
   sync.calibrate().then(() => sync.setPlayback(state.room.playback, state.room.autoPaused));
   loadMyStream(hadRelay);
   state.joinedOnce = true;
+  if (firstJoin) {
+    maybeAutoCheckQuality();
+    refreshCompat({ auto: true });
+  }
 }
 
 const JOIN_ERRORS = {
@@ -1028,6 +1048,7 @@ socket.on('hostStream', ({ hostStreamId, streams }) => {
   renderQualityTab();
   renderUsersTab();
   loadMyStream();
+  refreshCompat();
 });
 
 socket.on('content', (d) => {
@@ -1042,6 +1063,7 @@ socket.on('content', (d) => {
   renderUsersTab();
   loadMyStream(true);
   selectTab('quality');
+  refreshCompat();
 });
 
 socket.on('torrentStats', (stats) => {
@@ -1257,9 +1279,34 @@ function renderSearchResults(results) {
     return item;
   }));
 }
+// A pasted magnet link (or bare infoHash) is not a catalog search: offer to play it directly.
+const MAGNET_INPUT = /^(magnet:\?|[0-9a-f]{40}$)/i;
+function renderMagnetRow(text) {
+  const name = new URLSearchParams(text.slice(text.indexOf('?') + 1)).get('dn');
+  const item = el(
+    'li',
+    {},
+    el('div', { class: 'ph' }, '🧲'),
+    el('div', { class: 'info' },
+      el('div', { class: 'name', text: name || 'Magnet linki' }),
+      el('div', { class: 'year', text: 'Odaya kaynak olarak ekle ve herkes için seç' })),
+  );
+  item.addEventListener('click', async () => {
+    item.classList.add('busy');
+    const res = await request('addMagnet', { magnet: text });
+    item.classList.remove('busy');
+    if (res?.error) return toast(errorText(res.error));
+    $('#search-input').value = '';
+    renderSearchResults([]);
+    toast('Magnet eklendi ve herkes için seçildi.');
+  });
+  $('#search-results').replaceChildren(item);
+}
+
 async function runSearch() {
   const q = $('#search-input').value.trim();
   const seq = ++searchSeq;
+  if (MAGNET_INPUT.test(q)) return renderMagnetRow(q);
   if (q.length < 2) return renderSearchResults([]);
   $('#search-results').replaceChildren(el('li', { class: 'muted', text: 'Aranıyor…' }));
   const res = await request('searchContent', { query: q });
@@ -1329,12 +1376,57 @@ function renderHw() {
     );
   }
 }
-checkHardware().then((result) => {
+const hardwareCheck = checkHardware();
+hardwareCheck.then((result) => {
   hw = result;
   renderHw();
   if (!hw.gpu) toast('Tarayıcında donanım hızlandırma kapalı görünüyor. Ayrıntı: Kalite sekmesi.', 7000);
   renderNotice();
 });
+
+// ---- device compatibility screen ----
+// Checks whether this device can open the room's videos (HEVC, HDR, audio codecs, Stremio…).
+// It opens by itself only when something is wrong; the header button opens it any time.
+const compatScreen = createCompatScreen({
+  onPick: async (streamId) => {
+    const res = await request('setOwnStream', { streamId: streamId === state.room.hostStreamId ? null : streamId });
+    toast(res?.error ? errorText(res.error) : 'Önerilen kaynağa geçildi.');
+  },
+  onOpenQuality: () => selectTab('quality'),
+});
+let compatDevice = null;
+
+async function refreshCompat({ auto = false, show = false } = {}) {
+  if (!state.room) return;
+  compatDevice ||= await probeDevice({
+    codecs: browserCodecs(video),
+    hw: await hardwareCheck,
+    stremioUp: null,
+    touch: isTouch,
+  });
+  compatDevice = { ...compatDevice, stremio: isTouch ? null : await isStremioUp() };
+  if (!state.room) return;
+  // Guests only ever see torrents plus the host's own stream, so judge exactly those.
+  const streams = state.room.streams.filter((s) => s.kind === 'torrent' || s.streamId === state.room.hostStreamId);
+  const result = evaluateCompat({
+    device: compatDevice,
+    streams,
+    current: myStream(),
+    isHost: isHost(),
+    relayEnabled: state.room.settings.relayEnabled,
+  });
+  const data = { result, device: compatDevice, currentStreamId: myStreamId() };
+  const issues = result.problems.filter((p) => p.level !== 'info').length;
+  $('#compat-badge').hidden = !issues;
+  $('#compat-badge').textContent = String(issues);
+  compatScreen.update(data);
+  if (show) return compatScreen.show(data);
+  if (auto && result.needsAttention) {
+    const muted = new Set((storage.get('compatSeen') || '').split(',').filter(Boolean));
+    if (result.problems.some((p) => p.level !== 'info' && !muted.has(p.id))) compatScreen.show(data);
+  }
+}
+$('#open-compat').addEventListener('click', () => refreshCompat({ show: true }));
 
 // ---- picture adjustment (brightness / contrast / colour), per viewer ----
 // SDR gets one set. HDR gets 3 switchable profiles: HDR brightness needs vary a
@@ -1564,6 +1656,17 @@ if ('mediaSession' in navigator) {
 
 // ---- tabs, header actions, settings ------------------------------------------------------
 
+// Odaya girince (sadece BIR kez, kalite sekmesine her girişte degil) tum eklentileri
+// otomatik test etmek gercek torrent verisi cektigi icin internet tuketir (bkz.
+// checkAllInTab) - mobilde veri kullanimi/pil daha kritik oldugundan bu otomasyon
+// SADECE masaustunde (dokunmatik olmayan) calisir; mobilde kullanici elle "Test et"
+// butonuna basmali. Cagrildigi yer: applySnapshot (ilk baglantida, reconnect'te degil).
+function maybeAutoCheckQuality() {
+  if (isTouch || !isHost() || checkingAll) return;
+  const targets = autoScanTargets(state.room?.streams || []);
+  if (targets.length) checkAllInTab(targets);
+}
+
 function selectTab(name) {
   for (const b of document.querySelectorAll('.tabs button')) b.classList.toggle('active', b.dataset.tab === name);
   for (const body of document.querySelectorAll('.tab-body')) body.hidden = body.dataset.tab !== name;
@@ -1585,6 +1688,7 @@ $('#open-settings').addEventListener('click', () => {
   $('#set-relay').checked = s.relayEnabled;
   $('#set-relay-limit').value = String(s.relayLimit);
   $('#set-relay4k').checked = Boolean(s.relay4k);
+  $('#set-stop-others').checked = s.stopOtherDownloads !== false;
   dialog.showModal();
 });
 dialog.addEventListener('change', async () => {
@@ -1594,6 +1698,7 @@ dialog.addEventListener('change', async () => {
     relayEnabled: $('#set-relay').checked,
     relayLimit: Math.max(0, Math.min(10, Number($('#set-relay-limit').value) || 0)),
     relay4k: $('#set-relay4k').checked,
+    stopOtherDownloads: $('#set-stop-others').checked,
   });
   if (res?.error) toast(errorText(res.error));
 });

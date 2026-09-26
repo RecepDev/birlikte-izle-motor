@@ -38,7 +38,11 @@ export function decodeSubtitle(bytes, lang) {
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(body);
   } catch {
-    return new TextDecoder(CODE_PAGE[normalizeLang(lang)] || 'windows-1252').decode(body);
+    // Dil bilinmiyorsa (orn. dosya adindan tahmin edilemeyen elle yuklenen altyazi)
+    // varsayilan olarak Turkce kod sayfasi kullanilir - bu uygulamanin kullanici
+    // kitlesi Turkce oldugu icin "bilinmeyen" neredeyse hep Turkce cikiyor; aksi
+    // varsayim (windows-1252) s/i/g gibi harfleri sessizce bozuyordu.
+    return new TextDecoder(CODE_PAGE[normalizeLang(lang)] || 'windows-1254').decode(body);
   }
 }
 

@@ -34,6 +34,28 @@ export function createStremioLocal({ base = STREMIO_BASE, fetchImpl = fetch, tim
 
     torrentStats: fetchStats,
 
+    // infoHashes of every torrent currently open in the host's Stremio.
+    async openTorrents() {
+      try {
+        const res = await fetchImpl(`${base}/stats.json`, { signal: AbortSignal.timeout(timeoutMs) });
+        if (!res.ok) return [];
+        return Object.keys((await res.json()) || {});
+      } catch {
+        return [];
+      }
+    },
+
+    // Closes the torrent in the host's Stremio. Stremio never closes one on its own, so
+    // every torrent a check opens would otherwise keep downloading in the background.
+    async removeTorrent(stream) {
+      try {
+        const res = await fetchImpl(`${base}/${stream.infoHash}/remove`, { signal: AbortSignal.timeout(timeoutMs) });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    },
+
     // Starts the torrent (same trick the relay uses to warm one before converting)
     // and polls its stats for a few seconds: a torrent that shows peers but never
     // actually downloads anything looks the same as a healthy one until you try it,

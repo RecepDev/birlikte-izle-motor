@@ -14,7 +14,8 @@ import { createLogger } from './src/log.js';
 import { createConfigStore } from './src/config.js';
 import { createAddonsClient } from './src/addons-client.js';
 import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
-import { normalizeStreams } from './src/streams.js';
+import { normalizeStreams, normalizeAddonStreams } from './src/streams.js';
+import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
@@ -38,6 +39,9 @@ const log = createLogger({ file: path.join(DATA, 'logs', 'server.log') });
 const config = createConfigStore(path.join(DATA, 'config.json'), log);
 const addons = createAddonsClient();
 const stremioLocal = createStremioLocal();
+// infoHash -> tests running right now. Several files of one torrent share a Stremio torrent,
+// so it may only be closed once the last of them has finished.
+const activeChecks = new Map();
 const rooms = createRoomManager();
 const subtitles = createSubtitleService({
   addons,
@@ -132,8 +136,43 @@ socketCtl = attachSocket(io, {
         if (denied) return denied;
         const stream = room.streams.find((s) => s.streamId === p?.streamId && s.kind === 'torrent');
         if (!stream) return { error: 'badStream' };
-        const result = await stremioLocal.checkTorrent(stream);
+        activeChecks.set(stream.infoHash, (activeChecks.get(stream.infoHash) || 0) + 1);
+        let result;
+        try {
+          result = await stremioLocal.checkTorrent(stream);
+        } finally {
+          const left = (activeChecks.get(stream.infoHash) || 1) - 1;
+          if (left > 0) activeChecks.set(stream.infoHash, left);
+          else activeChecks.delete(stream.infoHash);
+          // The test opened this torrent in Stremio, which keeps downloading it forever.
+          // Close it again unless someone in the room is actually watching it.
+          const inUse = room.statsStreamIds().some(
+            (id) => room.streams.find((s) => s.streamId === id)?.infoHash === stream.infoHash,
+          );
+          if (left === 0 && !inUse) await stremioLocal.removeTorrent(stream);
+        }
         return { reply: { ok: true, ...result }, msgs: [] };
+      },
+      // Host pastes a magnet link: it becomes a stream of the current room and is picked for everyone.
+      addMagnet: async (room, uid, p) => {
+        const denied = room.requireHost(uid);
+        if (denied) return denied;
+        const raw = parseMagnet(p?.magnet);
+        if (!raw) return { error: 'badMagnet' };
+        const [stream] = normalizeAddonStreams('Magnet', [raw]);
+        if (!stream) return { error: 'badMagnet' };
+        const added = room.addStreams(uid, [stream]);
+        if (added.error) return added;
+        const saved = room.streams.find(
+          (s) => s.kind === 'torrent' && s.infoHash === stream.infoHash && s.fileIdx === stream.fileIdx,
+        );
+        const picked = room.setHostStream(uid, saved.streamId);
+        if (picked.error) return picked;
+        return {
+          reply: { ok: true, streamId: saved.streamId },
+          msgs: [...added.msgs, ...picked.msgs],
+          after: () => refreshSubtitles(room),
+        };
       },
       // Host searches Cinemeta's catalog for a different title to switch the room to.
       searchContent: async (room, uid, p) => {
@@ -202,6 +241,31 @@ const statsTimer = setInterval(async () => {
   }
 }, 3000);
 statsTimer.unref();
+
+// "Stop other downloads" room setting: while such a room has people in it, only the torrents
+// being watched (in any room) or tested right now may stay open in the host's Stremio.
+let cleanupBusy = false;
+const cleanupTimer = setInterval(async () => {
+  if (cleanupBusy) return;
+  const all = rooms.list();
+  if (!all.some((r) => r.settings.stopOtherDownloads && r.connectedUsers().length)) return;
+  cleanupBusy = true;
+  try {
+    const keep = new Set(activeChecks.keys());
+    for (const room of all) {
+      for (const id of room.statsStreamIds()) {
+        const hash = room.streams.find((s) => s.streamId === id)?.infoHash;
+        if (hash) keep.add(hash);
+      }
+    }
+    for (const infoHash of await stremioLocal.openTorrents()) {
+      if (!keep.has(infoHash)) await stremioLocal.removeTorrent({ infoHash });
+    }
+  } finally {
+    cleanupBusy = false;
+  }
+}, 5000);
+cleanupTimer.unref();
 
 // ---- panel server (:7001) -------------------------------------------------
 

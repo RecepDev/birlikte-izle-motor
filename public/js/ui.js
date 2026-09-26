@@ -75,6 +75,7 @@ export const ERROR_TEXT = {
   tooLong: 'Mesaj çok uzun.',
   timeout: 'Sunucu cevap vermedi.',
   badStream: 'Bu stream seçilemiyor.',
+  badMagnet: 'Geçerli bir magnet linki değil.',
   relayFull: 'Relay dolu, host kişi sınırını artırmalı.',
   relayOff: 'Host relay\'i kapatmış.',
   hostStremioDown: 'Host\'un Stremio\'su şu an kapalı.',

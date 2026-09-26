@@ -15,7 +15,7 @@ export const DEFAULT_CONFIG = {
       resources: ['subtitles'],
     },
   ],
-  defaults: { locked: true, waitMode: 'wait', relayEnabled: true, relayLimit: 2, relay4k: false },
+  defaults: { locked: true, waitMode: 'wait', relayEnabled: true, relayLimit: 2, relay4k: false, stopOtherDownloads: true },
 };
 
 export class ConfigError extends Error {}
@@ -29,6 +29,8 @@ export function validateSettings(input, errors = [], prefix = 'defaults') {
     relayLimit: s.relayLimit,
     // Optional (added later): older config files simply get false.
     relay4k: s.relay4k === true,
+    // Optional (added later): older config files simply get true.
+    stopOtherDownloads: s.stopOtherDownloads !== false,
   };
   if (typeof out.locked !== 'boolean') errors.push(`${prefix}.locked true/false olmalı`);
   if (!WAIT_MODES.includes(out.waitMode)) errors.push(`${prefix}.waitMode "wait" veya "continue" olmalı`);
