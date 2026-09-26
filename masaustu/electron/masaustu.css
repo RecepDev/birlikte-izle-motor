@@ -35,13 +35,16 @@
   align-self: center !important;
   margin: 6px auto !important;
 }
-.notice {
+/* :not([hidden]) şart: düz "display: flex !important" gizli bildirimi de görünür
+   kılıyor ve videonun altında boş bir kutu bırakıyordu. */
+.notice:not([hidden]) {
   position: static !important;
   background: transparent !important;
   display: flex !important;
   justify-content: center !important;
   padding: 8px 0 !important;
 }
+.notice[hidden] { display: none !important; }
 .notice-card { max-width: none; }
 
 /* mpv yerel pencerede çiziyor: bir diyalog açıkken pencereyi gizliyoruz, yoksa
@@ -59,8 +62,8 @@
   align-self: flex-start !important;
   background: none !important;
   padding: 0 !important;
-  display: block !important;
 }
+.viewers-ov[hidden] { display: none !important; }
 #viewers-toggle, #viewers-list { display: none !important; }
 #picture-info { position: static !important; }
 /* Altyazıyı mpv çiziyor; sayfanın katmanı boş bir kutu olarak görünüyordu. */
