@@ -170,7 +170,15 @@ async function mpvBaslat() {
   mpv = createMpv({
     binary: MPV,
     pipeName: `birlikte-izle-kabuk-${process.pid}`,
-    args: [`--wid=${hwndOf(videoPenceresi)}`, '--no-config', '--keep-open=yes', '--idle=yes', '--osc=no'],
+    args: [
+      `--wid=${hwndOf(videoPenceresi)}`, '--no-config', '--keep-open=yes', '--idle=yes', '--osc=no',
+      // --no-config donanım çözmeyi de kapatıyor: 4K HEVC/HDR işlemciyle çözülüp takılıyordu.
+      '--hwdec=auto-safe',
+      // Windows HDR açıksa HDR görüntüyü ekrana olduğu gibi ver (kapalıysa etkisi yok).
+      '--target-colorspace-hint=yes',
+      // Torrent akışı dalgalı: önden daha çok tamponla, kısa kesintiler görünmesin.
+      '--cache=yes', '--demuxer-max-bytes=512MiB', '--demuxer-readahead-secs=120',
+    ],
   });
   try {
     await mpv.start();
