@@ -179,6 +179,10 @@ async function mpvBaslat() {
 const SEMA = 'birlikteizle';
 
 function semadanUrl(arglar) {
+  // Sunucu uygulamayı doğrudan http adresiyle de başlatabiliyor (Stremio özel
+  // şemaları kabul etmiyor), o yüzden ikisini de alıyoruz.
+  const duz = (arglar || []).find((a) => typeof a === 'string' && /^https?:\/\//.test(a));
+  if (duz) return duz;
   const bag = (arglar || []).find((a) => typeof a === 'string' && a.startsWith(`${SEMA}://`));
   if (!bag) return '';
   const kalan = bag.slice(`${SEMA}://`.length).replace(/\/$/, '');

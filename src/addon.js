@@ -38,9 +38,9 @@ export function createAddonRouter({ panelBase }) {
         {
           name: '👥 Birlikte İzle',
           title: 'Masaüstü uygulamasında aç · gerçek HDR, tüm ses dilleri',
-          // Şemayı masaüstü uygulaması kendine kaydediyor; kurulu değilse Windows
-          // bir şey yapmaz, o yüzden altta tarayıcı seçeneği de duruyor.
-          externalUrl: `birlikteizle://${encodeURIComponent(`${panelBase}/new?${query}`)}`,
+          // Sıradan http adresi olmak zorunda: Stremio özel şemaları https:// diye
+          // yeniden yazıyor. Uygulamayı /ac isteğini alan sunucu başlatıyor.
+          externalUrl: `${panelBase}/ac?${query}`,
         },
         {
           name: '👥 Birlikte İzle',

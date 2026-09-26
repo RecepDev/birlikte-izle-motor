@@ -5,6 +5,7 @@ import path from 'node:path';
 import express from 'express';
 import { isContentId, isContentType } from './addon.js';
 import { normalizeStreams, normalizeAddonStreams } from './streams.js';
+import { masaustuAc } from './masaustu-baslat.js';
 
 const STREAM_CACHE_MS = 10 * 60 * 1000;
 
@@ -52,6 +53,25 @@ export function createPanelApp({
   };
   app.get('/', page('index.html'));
   app.get('/new', page('new.html'));
+
+  // Stremio'dan gelen "masaüstünde aç" bağlantısı: uygulamayı burada başlatıyoruz,
+  // tarayıcı sekmesi yalnızca sonucu gösteriyor.
+  app.get('/ac', (req, res) => {
+    const { type, id } = req.query;
+    if (!isContentType(type) || !isContentId(String(id || ''))) return res.status(400).send('Geçersiz içerik');
+    const hedef = `http://${req.headers.host}/new?${new URLSearchParams({ type, id })}`;
+    const sonuc = masaustuAc(hedef);
+    res.set('Cache-Control', 'no-store');
+    res.type('html').send(sonuc.error
+      ? `<!doctype html><meta charset="utf-8"><body style="background:#0e0f13;color:#e8e9ee;font:16px system-ui;padding:40px">
+         <h2>Masaüstü uygulaması bulunamadı</h2>
+         <p>Uygulamayı bir kez çalıştırman yeterli; sonra bu bağlantı doğrudan açar.</p>
+         <p><a style="color:#9c86ff" href="${hedef}">Tarayıcıda devam et</a></p></body>`
+      : `<!doctype html><meta charset="utf-8"><body style="background:#0e0f13;color:#e8e9ee;font:16px system-ui;padding:40px">
+         <h2>Masaüstü uygulamasında açıldı</h2>
+         <p>Bu sekmeyi kapatabilirsin.</p>
+         <p><a style="color:#9c86ff" href="${hedef}">Yine de tarayıcıda aç</a></p></body>`);
+  });
   // Shared with the room page: which codecs this browser decodes.
   app.get('/js/codecs.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'codecs.js')));
   app.use(express.static(panelDir, { index: false }));
