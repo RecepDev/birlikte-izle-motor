@@ -1,0 +1,17 @@
+{
+  "name": "birlikte-izle-masaustu",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Birlikte İzle masaüstü istemcisi: Electron kabuğu + gömülü mpv",
+  "main": "electron/ana.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Gömme kanıtı</title>
+<style>
+  :root { --panel:#171920; --line:#2a2e39; --text:#e8e9ee; --accent:#7b5cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; height:100vh; display:grid; grid-template-columns:1fr 300px;
+         background:#0e0f13; color:var(--text); font-family:system-ui,sans-serif; }
+  .sol { display:flex; flex-direction:column; }
+  #video-alani { flex:1; background:#000; border:2px dashed var(--accent); }
+  .kontrol { padding:10px; background:var(--panel); border-top:1px solid var(--line);
+             display:flex; gap:8px; align-items:center; }
+  .yan { background:var(--panel); border-left:1px solid var(--line); padding:12px; }
+  h2 { margin:0 0 8px; font-size:15px; }
+  p { color:#9096a6; font-size:13px; }
+</style>
+</head>
+<body>
+  <div class="sol">
+    <div id="video-alani"></div>
+    <div class="kontrol">
+      <button>▶</button><span>0:00 / 0:00</span><span style="flex:1"></span><span>Kontroller burada</span>
+    </div>
+  </div>
+  <aside class="yan">
+    <h2>Sohbet / Kalite</h2>
+    <p>Bu sütun mevcut web arayüzünün yerini temsil ediyor.</p>
+    <p>Soldaki kesikli çerçeve, mpv'nin gömüleceği alan. mpv oraya oturuyorsa gömme çalışıyor demektir.</p>
+  </aside>
+<script>
+  const alan = document.getElementById('video-alani');
+  const bildir = () => {
+    const r = alan.getBoundingClientRect();
+    window.kabuk.videoAlani({ x: r.x, y: r.y, width: r.width, height: r.height });
+  };
+  new ResizeObserver(bildir).observe(alan);
+  window.kabuk.olcumIstendi(bildir);
+  window.addEventListener('load', bildir);
+</script>
+</body>
+</html>

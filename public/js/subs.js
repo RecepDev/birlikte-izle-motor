@@ -58,6 +58,7 @@ export function createSubs({
     overlay.style.setProperty('--sub-bg', `rgba(0, 0, 0, ${bg})`);
     overlay.style.setProperty('--sub-shadow', OUTLINES[outline][1]);
     overlay.style.bottom = `${100 - (line ?? DEFAULT_LINE)}%`;
+    window.masaustuAltyazi?.stil({ size, bg: Number(bg), outline, line: line ?? DEFAULT_LINE });
   }
   new ResizeObserver(applyStyle).observe(playerEl);
 
@@ -149,6 +150,9 @@ export function createSubs({
     shift(eff.offset);
     renderCues();
     render();
+    // Masaüstü kabuğunda altyazıyı mpv çiziyor: mpv yerel (native) bir pencerede
+    // çizdiği için ne <track> ipuçları ne de bu HTML katmanı videonun üstüne gelebiliyor.
+    window.masaustuAltyazi?.uygula(eff.subId && findSub(eff.subId) ? srcFor(eff.subId) : null, eff.offset);
   }
 
   async function choose(subId) {

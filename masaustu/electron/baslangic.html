@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Birlikte İzle</title>
+<style>
+  body { margin:0; height:100vh; display:grid; place-items:center; background:#0e0f13;
+         color:#e8e9ee; font-family:system-ui,sans-serif; }
+  .kart { width:min(460px,90vw); background:#171920; border:1px solid #2a2e39;
+          border-radius:16px; padding:24px; display:grid; gap:14px; }
+  h1 { margin:0; font-size:22px; }
+  p { margin:0; color:#9096a6; font-size:14px; }
+  input { background:#0e0f13; border:1px solid #2a2e39; border-radius:8px;
+          padding:10px 12px; color:inherit; font:inherit; width:100%; }
+  button { background:#7b5cff; border:none; border-radius:8px; padding:12px;
+           color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button:hover { background:#9c86ff; }
+</style>
+</head>
+<body>
+  <form class="kart" id="form">
+    <h1>Birlikte İzle</h1>
+    <p>Oda linkini yapıştır. Video, tarayıcı yerine mpv ile oynatılır: gerçek HDR, tüm ses dilleri, donanım çözme.</p>
+    <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
+    <button type="submit">Odaya gir</button>
+  </form>
+<script>
+  document.getElementById('form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = document.getElementById('link').value.trim();
+    if (v) window.kabuk.odayaGit(v);
+  });
+</script>
+</body>
+</html>

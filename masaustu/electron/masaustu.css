@@ -1,0 +1,31 @@
+/* Masaüstü kabuğuna özel düzen.
+   mpv doğal (native) bir pencerede çiziyor; üstüne HTML katmanı konulamaz. Tarayıcıda
+   videonun üzerinde duran kontroller ve bildirimler bu yüzden videonun dışına alınır. */
+
+/* Video alanı: kalan boşluğu doldurur, kontroller altında kendi şeridinde durur.
+   fitVideo() satır içi ölçü yazdığı için !important gerekiyor; en-boy oranını artık
+   mpv'nin kendisi ayarlıyor. */
+.player { justify-content: flex-start !important; }
+.player video {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+}
+
+.controls {
+  position: static !important;
+  background: #14161d !important;
+  border-top: 1px solid #2a2e39;
+}
+
+/* Bildirim ve bekleme şeridi: videonun üstünde değil, üst tarafında görünür. */
+.banner { position: static !important; }
+.notice { position: static !important; background: transparent !important; }
+.notice-card { max-width: none; }
+
+/* Videonun üstüne binen ve masaüstünde işe yaramayan katmanlar.
+   Uyumlu mod gerekmiyor: mpv her biçimi kendi çözüyor. */
+.viewers-ov, .compat-popover { display: none !important; }
+#btn-compat, #btn-aspect { display: none !important; }
