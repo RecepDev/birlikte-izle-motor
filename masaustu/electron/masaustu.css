@@ -16,16 +16,31 @@
 
 .controls {
   position: static !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
   background: #14161d !important;
   border-top: 1px solid #2a2e39;
 }
 
-/* Bildirim ve bekleme şeridi: videonun üstünde değil, üst tarafında görünür. */
+/* Bildirim ve bekleme şeridi: videonun üstünde değil, üst tarafında ortada. */
 .banner { position: static !important; }
-.notice { position: static !important; background: transparent !important; }
+.notice {
+  position: static !important;
+  background: transparent !important;
+  display: flex !important;
+  justify-content: center !important;
+  padding: 8px 0 !important;
+}
 .notice-card { max-width: none; }
+
+/* mpv yerel pencerede çiziyor: bir diyalog açıkken pencereyi gizliyoruz, yoksa
+   diyaloğun üstünü örtüyor (bkz. onyukleme-kabuk.cjs). */
+.player.mpv-gizli video { background: #000 !important; }
 
 /* Videonun üstüne binen ve masaüstünde işe yaramayan katmanlar.
    Uyumlu mod gerekmiyor: mpv her biçimi kendi çözüyor. */
 .viewers-ov, .compat-popover { display: none !important; }
 #btn-compat, #btn-aspect { display: none !important; }
+/* Zaten masaüstündeyiz; uyumluluk ekranı da gereksiz (mpv her biçimi açıyor). */
+#open-desktop, #open-compat { display: none !important; }

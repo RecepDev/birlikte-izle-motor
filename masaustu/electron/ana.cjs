@@ -241,6 +241,12 @@ app.whenReady().then(() => {
     if (!videoPenceresi.isVisible()) videoPenceresi.show();
     if (!mpv) await mpvBaslat();
   });
+  // Diyalog açıkken mpv penceresi gizlenir; yoksa diyaloğun üstünü örter.
+  ipcMain.on('kabuk:ortu', (_e, ortulu) => {
+    if (!videoPenceresi || videoPenceresi.isDestroyed()) return;
+    if (ortulu) videoPenceresi.hide();
+    else if (mpv) videoPenceresi.show();
+  });
   ipcMain.on('mpv:yukle', (_e, url) => {
     if (!mpv) bekleyenYukleme = url;
     else mpv.load(url).catch(() => {});

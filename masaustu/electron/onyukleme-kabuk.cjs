@@ -32,10 +32,22 @@ function olcumKur() {
   return true;
 }
 
+// mpv yerel pencerede çizdiği için HTML katmanı onun üstüne gelemiyor: bir diyalog
+// ya da tam ekran kaplayan bir katman açıkken mpv penceresini gizliyoruz.
+const ORTU = 'dialog[open], .overlay:not([hidden]), .compat-screen:not([hidden])';
+function ortuKur() {
+  const bak = () => ipcRenderer.send('kabuk:ortu', Boolean(document.querySelector(ORTU)));
+  new MutationObserver(bak).observe(document.body, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ['open', 'hidden', 'class', 'style'],
+  });
+  bak();
+}
+
 function kur() {
   if (!document.getElementById('video')) return;
   stilEkle();
   olcumKur();
+  ortuKur();
   try {
     require('./video-koprusu.cjs');
   } catch (err) {

@@ -162,7 +162,8 @@ export function createPanelApp({
     const allAddons = config.get().addons;
     const enabled = retryNames ? allAddons.filter((a) => retryNames.includes(a.name)) : allAddons;
     const allStreams = prior ? [...prior.streams] : [];
-    const metaPromise = prior ? Promise.resolve(prior.meta) : addons.meta(type, id).then((meta) => {
+    // Önbellekten gelse bile meta satırı yazılmalı: yoksa sayfa başlığı ham id olarak kalıyor.
+    const metaPromise = (prior ? Promise.resolve(prior.meta) : addons.meta(type, id)).then((meta) => {
       write({ type: 'meta', meta });
       return meta;
     });

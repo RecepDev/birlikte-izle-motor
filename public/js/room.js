@@ -1432,7 +1432,8 @@ async function refreshCompat({ auto = false, show = false } = {}) {
   $('#compat-badge').textContent = String(issues);
   compatScreen.update(data);
   if (show) return compatScreen.show(data);
-  if (auto && result.needsAttention) {
+  // Masaüstü kabuğunda uyumluluk uyarıları anlamsız: görüntüyü mpv çiziyor, her biçimi açıyor.
+  if (auto && result.needsAttention && !window.masaustuSes) {
     const muted = new Set((storage.get('compatSeen') || '').split(',').filter(Boolean));
     if (result.problems.some((p) => p.level !== 'info' && !muted.has(p.id))) compatScreen.show(data);
   }

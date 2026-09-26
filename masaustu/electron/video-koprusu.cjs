@@ -148,7 +148,12 @@ ipcRenderer.on('mpv:durum', (_e, next) => {
   const oncekiSure = durum.duration;
   Object.assign(durum, next);
   if (!el) return;
-  if (oncekiSure === null && durum.duration !== null) yolla('loadedmetadata');
+  if (oncekiSure !== durum.duration) {
+    // Süre değişince ikisi de gerekiyor: sayfa süreyi 'durationchange' ile okuyor,
+    // hazır olmayı 'loadedmetadata' ile.
+    yolla('durationchange');
+    if (oncekiSure === null && durum.duration !== null) yolla('loadedmetadata');
+  }
   if (oncekiHazir < 3 && readyState() >= 3) yolla('canplay');
   if (oncekiDuraklat !== durum.paused) yolla(durum.paused ? 'pause' : 'play');
   if (durum.cacheStalled) yolla('waiting');
