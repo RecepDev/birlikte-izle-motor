@@ -7,7 +7,7 @@
   "main": "electron/ana.cjs",
   "scripts": {
     "start": "electron .",
-    "paketle": "electron-builder --win"
+    "paketle": "electron-packager . \"Birlikte Izle\" --platform=win32 --arch=x64 --out=dagitim --overwrite --ignore=\"(^/node_modules$|^/dagitim|^/electron/gomme-kaniti|^/electron/kanit\\.html|^/electron/onyukleme\\.cjs$)\""
   },
   "build": {
     "appId": "xyz.birlikteizle.masaustu",
