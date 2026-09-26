@@ -1229,12 +1229,36 @@ async function pickContent(type, id, item) {
   }
 }
 
-async function openEpisodePicker(series) {
+// Boş aramada odanın dizisini göster. Hata olursa tekrar denemiyoruz (sonsuz döngü olmasın).
+let seriesShownFor = null;
+function showCurrentSeries() {
+  const series = currentSeries();
+  if (!series) return false;
+  if (seriesShownFor === state.room.contentId && $('#search-results').querySelector('.season-tabs')) return true;
+  seriesShownFor = state.room.contentId;
+  openEpisodePicker(series, { current: series });
+  return true;
+}
+
+// Oda bir dizideyse: "tt123:3:1" -> { id: 'tt123', season: 3, episode: 1 }.
+function currentSeries() {
+  if (state.room?.type !== 'series') return null;
+  const [id, season, episode] = String(state.room.contentId || '').split(':');
+  if (!id) return null;
+  // Başlık "Silo S03E01 · Who Are You?" gibi geliyor; bölüm kısmını atıyoruz.
+  const name = (state.room.meta?.name || id).replace(/\s+S\d+E\d+.*$/, '');
+  return { id, name, season: Number(season) || null, episode: Number(episode) || null };
+}
+
+async function openEpisodePicker(series, { current = null } = {}) {
   const box = $('#search-results');
   box.replaceChildren(el('li', { class: 'muted', text: 'Bölümler yükleniyor…' }));
   const res = await request('seriesEpisodes', { id: series.id });
   if (res?.error) {
     toast(errorText(res.error));
+    // Odanın dizisi yüklenemediyse boş aramaya dön; renderSearchResults'a dönmek
+    // aynı diziyi tekrar açmayı deneyip döngüye girerdi.
+    if (current) return box.replaceChildren(el('li', { class: 'muted', text: 'Aramak için yaz.' }));
     return renderSearchResults(lastSearchResults);
   }
   const bySeason = new Map();
@@ -1243,22 +1267,28 @@ async function openEpisodePicker(series) {
     bySeason.get(ep.season).push(ep);
   }
   const seasons = [...bySeason.keys()].sort((a, b) => (a === 0 ? 1 : b === 0 ? -1 : a - b));
-  let currentSeason = seasons.find((s) => s !== 0) ?? seasons[0];
+  let currentSeason = current?.season && bySeason.has(current.season)
+    ? current.season
+    : seasons.find((s) => s !== 0) ?? seasons[0];
 
-  const back = el('button', { type: 'button', class: 'search-back', text: `◀ ${series.name}` });
-  back.addEventListener('click', () => renderSearchResults(lastSearchResults));
+  // Odanın kendi dizisi açıkken "geri" diye bir yer yok: başlık yalnızca bilgi.
+  const back = current
+    ? el('div', { class: 'search-back', text: `📺 ${series.name} · şu an izlenen dizi` })
+    : el('button', { type: 'button', class: 'search-back', text: `◀ ${series.name}` });
+  if (!current) back.addEventListener('click', () => renderSearchResults(lastSearchResults));
   const seasonTabs = el('div', { class: 'season-tabs' });
   const list = el('ul', { class: 'search-results' });
 
   function renderEpisodes() {
     for (const b of seasonTabs.children) b.classList.toggle('active', Number(b.dataset.season) === currentSeason);
     list.replaceChildren(...bySeason.get(currentSeason).map((ep) => {
+      const playing = current && ep.season === current.season && ep.episode === current.episode;
       const item = el(
         'li',
-        {},
+        { class: playing ? 'current' : '' },
         el('div', { class: 'info' },
           el('div', { class: 'name', text: `${ep.episode}. ${ep.name}` }),
-          el('div', { class: 'year', text: currentSeason === 0 ? 'Özel' : `Sezon ${currentSeason}` })),
+          el('div', { class: 'year', text: [currentSeason === 0 ? 'Özel' : `Sezon ${currentSeason}`, playing ? '▶ şu an' : ''].filter(Boolean).join(' · ') })),
       );
       item.addEventListener('click', () => pickContent('series', `${series.id}:${ep.season}:${ep.episode}`, item));
       return item;
@@ -1277,7 +1307,9 @@ function renderSearchResults(results) {
   lastSearchResults = results;
   const box = $('#search-results');
   if (!results.length) {
-    box.replaceChildren(el('li', { class: 'muted', text: $('#search-input').value.trim() ? 'Sonuç yok.' : 'Aramak için yaz.' }));
+    const empty = !$('#search-input').value.trim();
+    if (empty && showCurrentSeries()) return;
+    box.replaceChildren(el('li', { class: 'muted', text: empty ? 'Aramak için yaz.' : 'Sonuç yok.' }));
     return;
   }
   box.replaceChildren(...results.map((r) => {
@@ -1514,6 +1546,9 @@ function fitVideo() {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   $('#btn-aspect').textContent = ASPECTS.find(([m]) => m === aspectMode)[1];
+  // Masaüstü kabuğunda görüntüyü mpv çiziyor: oranı ona söylüyoruz (aynı değeri
+  // tekrar yollamayı köprü eliyor).
+  window.masaustuOran?.(aspectMode);
   if (!vw || !vh || !W || !H || aspectMode === 'stretch') {
     video.style.objectFit = 'fill';
     video.style.width = `${W || 0}px`;
@@ -1685,6 +1720,8 @@ function maybeAutoCheckQuality() {
 function selectTab(name) {
   for (const b of document.querySelectorAll('.tabs button')) b.classList.toggle('active', b.dataset.tab === name);
   for (const body of document.querySelectorAll('.tab-body')) body.hidden = body.dataset.tab !== name;
+  // Arama boşken ve oda bir dizideyse: o dizinin bölümleri hazır gelsin.
+  if (name === 'search' && !$('#search-input').value.trim()) showCurrentSeries();
 }
 for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => selectTab(b.dataset.tab));
 

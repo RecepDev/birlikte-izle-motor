@@ -69,6 +69,17 @@ function eskiAltyazilariSil() {
 // Sayfa stili mpv açılmadan önce yolluyor; son değeri saklayıp mpv hazır olunca uyguluyoruz.
 let sonStil = null;
 
+// Sayfanın görüntü oranı modları -> mpv. "Doldur" kırparak ekranı kaplar (panscan),
+// "Uzat" oranı bozar (keepaspect kapalı), sabit oranlar görüntüyü o şekle zorlar.
+let sonOran = 'fit';
+function oranUygula() {
+  if (!mpv) return;
+  const sabit = { '16:9': '16:9', '4:3': '4:3', '21:9': '21:9' }[sonOran];
+  mpv.set('keepaspect', sonOran !== 'stretch').catch(() => {});
+  mpv.set('panscan', sonOran === 'fill' ? 1 : 0).catch(() => {});
+  mpv.set('video-aspect-override', sabit || '-1').catch(() => {});
+}
+
 async function sesleriYolla() {
   if (!mpv || !ana) return;
   const liste = await mpv.get('track-list').catch(() => null);
@@ -204,6 +215,7 @@ async function mpvBaslat() {
   mpv.on('file-loaded', () => { sesleriYolla(); setTimeout(sesleriYolla, 1500); });
   mpv.on('track-switched', sesleriYolla);
   altyaziStilUygula();
+  oranUygula();
   durumZamanlayici = setInterval(durumDongusu, DURUM_MS);
   if (bekleyenYukleme) {
     await mpv.load(bekleyenYukleme).catch(() => {});
@@ -325,6 +337,10 @@ app.whenReady().then(() => {
     altyaziDosyasi = null;
     mpv?.set('sub-visibility', false).catch(() => {});
   });
+  ipcMain.on('mpv:oran', (_e, mod) => {
+    sonOran = mod;
+    oranUygula();
+  });
   ipcMain.on('mpv:ses-sec', async (_e, id) => {
     await mpv?.set('aid', id).catch(() => {});
     sesleriYolla();
@@ -335,18 +351,20 @@ app.whenReady().then(() => {
     altyaziStilUygula();
   });
 
-  // Sayfa tam ekrana geçtiğinde pencereyi de tam ekran yapıyoruz; yoksa görev çubuğu
-  // videonun üstünde kalıyor.
-  // Görev çubuğu, mpv penceresi üste alınmazsa videonun üstünde kalıyor.
+  // Sayfa tam ekrana geçince pencere kiosk moduna giriyor. Düz setFullScreen'de mpv'nin
+  // ayrı penceresi yüzünden Windows pencereyi "tam ekran" saymıyor, görev çubuğu
+  // videonun üstünde kalıyordu; kiosk ekranın tamamını alıyor.
   ana.webContents.on('enter-html-full-screen', () => {
-    ana.setFullScreen(true);
+    ana.setKiosk(true);
     ana.setAlwaysOnTop(true, 'screen-saver');
     videoPenceresi?.setAlwaysOnTop(true, 'screen-saver');
+    setTimeout(() => ana?.webContents.send('kabuk:olcum-iste'), 200);
   });
   ana.webContents.on('leave-html-full-screen', () => {
-    ana.setFullScreen(false);
+    ana.setKiosk(false);
     ana.setAlwaysOnTop(false);
     videoPenceresi?.setAlwaysOnTop(false);
+    setTimeout(() => ana?.webContents.send('kabuk:olcum-iste'), 200);
   });
 
   for (const olay of ['resize', 'move', 'enter-full-screen', 'leave-full-screen', 'maximize', 'unmaximize', 'restore']) {

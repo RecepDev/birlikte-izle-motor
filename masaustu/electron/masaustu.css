@@ -79,7 +79,7 @@ html, body { overflow: hidden !important; }
 .viewers-ov.collapsed .pic-info::after { content: ' ▸'; opacity: .6; }
 /* Altyazıyı mpv çiziyor; sayfanın katmanı boş bir kutu olarak görünüyordu. */
 .sub-overlay { display: none !important; }
-#btn-compat, #btn-aspect { display: none !important; }
+#btn-compat { display: none !important; }
 /* Zaten masaüstündeyiz; uyumluluk ekranı da gereksiz (mpv her biçimi açıyor). */
 #open-desktop, #open-compat { display: none !important; }
 

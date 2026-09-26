@@ -163,6 +163,14 @@ ipcRenderer.on('mpv:sesler', (_e, liste) => {
   // sayfanın kurduğu bir geri çağırmaya güvenilemez.
   window.dispatchEvent(new Event('masaustu-sesler'));
 });
+// Görüntü oranı düğmesi: sayfanın modlarını mpv özelliklerine çeviriyoruz.
+let sonOran = null;
+window.masaustuOran = (mod) => {
+  if (mod === sonOran) return;
+  sonOran = mod;
+  ipcRenderer.send('mpv:oran', mod);
+};
+
 window.masaustuSes = {
   liste: () => sesler,
   sec: (id) => ipcRenderer.send('mpv:ses-sec', Number(id)),

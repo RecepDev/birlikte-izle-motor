@@ -258,6 +258,7 @@ body.resizing video { pointer-events: none; }
 .search-results { list-style: none; margin: 0; padding: 8px; overflow-y: auto; display: grid; gap: 6px; flex: 1; min-height: 0; }
 .search-results li { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; cursor: pointer; }
 .search-results li:hover { background: var(--panel-2); }
+.search-results li.current { background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
 .search-results img, .search-results .ph { width: 36px; height: 52px; object-fit: cover; border-radius: 4px; background: var(--panel-2); flex: none; }
 .search-results .info { flex: 1; min-width: 0; font-size: 13px; }
 .search-results .name { font-weight: 600; }
