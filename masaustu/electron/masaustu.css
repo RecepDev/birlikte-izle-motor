@@ -5,7 +5,11 @@
 /* Video alanı: kalan boşluğu doldurur, kontroller altında kendi şeridinde durur.
    fitVideo() satır içi ölçü yazdığı için !important gerekiyor; en-boy oranını artık
    mpv'nin kendisi ayarlıyor. */
-.player { justify-content: flex-start !important; }
+.player {
+  justify-content: flex-start !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
 .player video {
   flex: 1 1 auto !important;
   width: 100% !important;
@@ -23,8 +27,14 @@
   border-top: 1px solid #2a2e39;
 }
 
-/* Bildirim ve bekleme şeridi: videonun üstünde değil, üst tarafında ortada. */
-.banner { position: static !important; }
+/* Bekleme şeridi videonun üstünde duramıyor (mpv yerel pencere), bu yüzden
+   videonun hemen üstünde, ortada kendi satırında duruyor. */
+.banner {
+  position: static !important;
+  order: -1;
+  align-self: center !important;
+  margin: 6px auto !important;
+}
 .notice {
   position: static !important;
   background: transparent !important;
@@ -40,7 +50,7 @@
 
 /* Videonun üstüne binen ve masaüstünde işe yaramayan katmanlar.
    Uyumlu mod gerekmiyor: mpv her biçimi kendi çözüyor. */
-.viewers-ov, .compat-popover { display: none !important; }
+.viewers-ov, .compat-popover, #viewers-ov, #picture-info { display: none !important; }
 #btn-compat, #btn-aspect { display: none !important; }
 /* Zaten masaüstündeyiz; uyumluluk ekranı da gereksiz (mpv her biçimi açıyor). */
 #open-desktop, #open-compat { display: none !important; }
