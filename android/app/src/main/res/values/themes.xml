@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Tema" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/zemin</item>
+        <item name="android:statusBarColor">@color/zemin</item>
+        <item name="android:navigationBarColor">@color/zemin</item>
+        <item name="colorPrimary">@color/vurgu</item>
+        <item name="colorAccent">@color/vurgu</item>
+    </style>
+    <color name="zemin">#FF0E0F13</color>
+    <color name="kart">#FF171920</color>
+    <color name="vurgu">#FF7B5CFF</color>
+    <color name="yazi">#FFE8E9EE</color>
+    <color name="soluk">#FF9096A6</color>
+</resources>
