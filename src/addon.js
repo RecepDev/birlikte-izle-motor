@@ -37,7 +37,14 @@ export function createAddonRouter({ panelBase }) {
       streams: [
         {
           name: '👥 Birlikte İzle',
-          title: 'Oda aç, arkadaşlarınla senkron izle',
+          title: 'Masaüstü uygulamasında aç · gerçek HDR, tüm ses dilleri',
+          // Şemayı masaüstü uygulaması kendine kaydediyor; kurulu değilse Windows
+          // bir şey yapmaz, o yüzden altta tarayıcı seçeneği de duruyor.
+          externalUrl: `birlikteizle://${encodeURIComponent(`${panelBase}/new?${query}`)}`,
+        },
+        {
+          name: '👥 Birlikte İzle',
+          title: 'Tarayıcıda aç',
           externalUrl: `${panelBase}/new?${query}`,
         },
       ],

@@ -31,12 +31,14 @@ test('manifest is served with CORS', async () => {
   });
 });
 
-test('stream handler returns one external room link', async () => {
+test('stream handler returns a desktop link and a browser link', async () => {
   await withServer(async (base) => {
     const res = await fetch(`${base}/stream/series/tt0898266:1:12.json`);
     const body = await res.json();
-    assert.equal(body.streams.length, 1);
-    assert.equal(body.streams[0].externalUrl, 'http://127.0.0.1:7001/new?type=series&id=tt0898266%3A1%3A12');
+    assert.equal(body.streams.length, 2);
+    const panel = 'http://127.0.0.1:7001/new?type=series&id=tt0898266%3A1%3A12';
+    assert.equal(body.streams[0].externalUrl, `birlikteizle://${encodeURIComponent(panel)}`);
+    assert.equal(body.streams[1].externalUrl, panel);
   });
 });
 

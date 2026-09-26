@@ -128,7 +128,10 @@ function render() {
 $('#filter').addEventListener('input', render);
 
 const masaustuKutu = $('#masaustu');
-masaustuKutu.checked = localStorage.getItem('masaustuAc') === '1';
+// Zaten masaüstü kabuğundaysak seçenek anlamsız: oda aynı pencerede açılıyor.
+const kabuktayiz = /Electron/.test(navigator.userAgent);
+if (kabuktayiz) masaustuKutu.closest('.row').hidden = true;
+masaustuKutu.checked = !kabuktayiz && localStorage.getItem('masaustuAc') === '1';
 masaustuKutu.addEventListener('change', () => localStorage.setItem('masaustuAc', masaustuKutu.checked ? '1' : '0'));
 
 try {
