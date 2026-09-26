@@ -196,12 +196,20 @@ Sayfa tarafındaki ekleme iki satır: `apply()` ve `applyStyle()` içinde `windo
 Doğrulandı: seçim, kapatma, tekrar seçme, gecikme düğmeleri, yazı boyutu, arka plan; parça
 birikmiyor, kapanışta geçici dosya kalmıyor.
 
-**Kalan işler (Faz 1'i bitirmek için):**
-- **Ses parçası seçimi**: mpv'nin parça listesi sayfaya bağlanmalı (tarayıcıda hiç mümkün değildi,
-  burada bedava geliyor).
-- Tam ekran davranışı, görüntü oranı düğmeleri (şimdilik gizli; mpv kendi sığdırmasını yapıyor),
-  izleyici katmanı (mpv doğal pencere olduğu için üstüne çizilemiyor).
-- Oda linkini uygulama içinde girme akışı (`baslangic.html` var ama denenmedi).
+**Ses parçası seçimi bağlandı (2026-09-26).** mpv'nin `track-list`'indeki ses parçaları sayfaya
+`masaustu-sesler` olayıyla bildiriliyor; seçim `aid`'i değiştiriyor. Etiketi sayfa üretiyor.
+Önyükleme betiği sayfa betiklerinden sonra çalıştığı için haber verme olayla yapılıyor - sayfanın
+kurduğu geri çağırmaya güvenilemiyor. İki ses parçalı dosyayla doğrulandı (Türkçe/İngilizce).
+
+**Tam ekran**: sayfa tam ekrana geçince pencere de tam ekran oluyor ve hizalama düzeliyor.
+Bilinen sorun: Windows görev çubuğu videonun alt şeridinin üstünde kalıyor (mpv doğal pencere).
+
+**Oda linkiyle giriş** (`baslangic.html`) denendi, çalışıyor.
+
+**Kalan işler:**
+- Görüntü oranı düğmeleri (şimdilik gizli; mpv kendi sığdırmasını yapıyor), izleyici katmanı
+  (mpv doğal pencere olduğu için üstüne çizilemiyor).
+- Tam ekranda görev çubuğu sorunu.
 
 ## B) Android uygulaması
 

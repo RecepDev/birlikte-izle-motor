@@ -128,6 +128,20 @@ window.masaustuAltyazi = {
   },
 };
 
+// Ses parçaları: tarayıcı MKV'nin alternatif ses parçalarını hiç göremiyordu,
+// mpv hepsini listeliyor. Etiketi sayfa üretiyor (dil adları orada).
+let sesler = [];
+ipcRenderer.on('mpv:sesler', (_e, liste) => {
+  sesler = liste || [];
+  // Olayla haber veriyoruz: bu betik sayfa betiklerinden sonra çalışıyor, o yüzden
+  // sayfanın kurduğu bir geri çağırmaya güvenilemez.
+  window.dispatchEvent(new Event('masaustu-sesler'));
+});
+window.masaustuSes = {
+  liste: () => sesler,
+  sec: (id) => ipcRenderer.send('mpv:ses-sec', Number(id)),
+};
+
 ipcRenderer.on('mpv:durum', (_e, next) => {
   const oncekiDuraklat = durum.paused;
   const oncekiHazir = readyState();

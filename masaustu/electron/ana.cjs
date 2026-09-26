@@ -35,6 +35,15 @@ function eskiAltyazilariSil() {
 // Sayfa stili mpv açılmadan önce yolluyor; son değeri saklayıp mpv hazır olunca uyguluyoruz.
 let sonStil = null;
 
+async function sesleriYolla() {
+  if (!mpv || !ana) return;
+  const liste = await mpv.get('track-list').catch(() => null);
+  const sesler = (liste || [])
+    .filter((t) => t.type === 'audio')
+    .map((t) => ({ id: String(t.id), title: t.title || '', lang: t.lang || '', active: Boolean(t.selected) }));
+  ana.webContents.send('mpv:sesler', sesler);
+}
+
 function altyaziStilUygula() {
   if (!mpv || !sonStil) return;
   const s = sonStil;
@@ -121,6 +130,9 @@ async function mpvBaslat() {
   await mpv.start();
   mpv.on('exit', () => { mpv = null; });
   mpv.on('file-loaded', altyaziEkle);
+  // Sayfa bu sırada hâlâ kurulmuyor olabilir (katılma ekranı), o yüzden bir de gecikmeli yolluyoruz.
+  mpv.on('file-loaded', () => { sesleriYolla(); setTimeout(sesleriYolla, 1500); });
+  mpv.on('track-switched', sesleriYolla);
   altyaziStilUygula();
   durumZamanlayici = setInterval(durumDongusu, DURUM_MS);
   if (bekleyenYukleme) {
@@ -191,13 +203,36 @@ app.whenReady().then(() => {
     altyaziDosyasi = null;
     mpv?.set('sub-visibility', false).catch(() => {});
   });
+  ipcMain.on('mpv:ses-sec', async (_e, id) => {
+    await mpv?.set('aid', id).catch(() => {});
+    sesleriYolla();
+  });
   ipcMain.on('mpv:altyazi-gecikme', (_e, saniye) => mpv?.set('sub-delay', Number(saniye) || 0).catch(() => {}));
   ipcMain.on('mpv:altyazi-stil', (_e, s) => {
     sonStil = s;
     altyaziStilUygula();
   });
 
-  for (const olay of ['resize', 'move']) ana.on(olay, () => ana.webContents.send('kabuk:olcum-iste'));
+  // Sayfa tam ekrana geçtiğinde pencereyi de tam ekran yapıyoruz; yoksa görev çubuğu
+  // videonun üstünde kalıyor.
+  // Görev çubuğu, mpv penceresi üste alınmazsa videonun üstünde kalıyor.
+  ana.webContents.on('enter-html-full-screen', () => {
+    ana.setFullScreen(true);
+    ana.setAlwaysOnTop(true, 'screen-saver');
+    videoPenceresi?.setAlwaysOnTop(true, 'screen-saver');
+  });
+  ana.webContents.on('leave-html-full-screen', () => {
+    ana.setFullScreen(false);
+    ana.setAlwaysOnTop(false);
+    videoPenceresi?.setAlwaysOnTop(false);
+  });
+
+  for (const olay of ['resize', 'move', 'enter-full-screen', 'leave-full-screen', 'maximize', 'unmaximize', 'restore']) {
+    ana.on(olay, () => {
+      ana.webContents.send('kabuk:olcum-iste');
+      setTimeout(() => ana?.webContents.send('kabuk:olcum-iste'), 150);
+    });
+  }
   ana.on('closed', () => {
     clearInterval(durumZamanlayici);
     for (const dosya of altyaziDosyalari.splice(0)) fs.rmSync(dosya, { force: true });

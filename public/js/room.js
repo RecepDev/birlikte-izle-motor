@@ -97,6 +97,8 @@ function attachSource(url, opts = {}) {
 // Multi-audio files: hls.js exposes alternate audio renditions (compat mode);
 // native playback exposes them via the browser's own AudioTrackList when the
 // container/browser support it (Safari's native HLS, some local mp4/webm).
+// Masaüstü kabuğu ses parçalarını mpv'den bildirir.
+window.addEventListener('masaustu-sesler', () => subs?.rerender());
 if ('audioTracks' in video) {
   const onAudioChange = () => subs?.rerender();
   video.audioTracks.addEventListener('addtrack', onAudioChange);
@@ -105,6 +107,14 @@ if ('audioTracks' in video) {
 }
 
 function audioTracksList() {
+  const masaustu = window.masaustuSes?.liste();
+  if (masaustu?.length > 1) {
+    return masaustu.map((t, i) => ({
+      id: t.id,
+      label: t.title || (t.lang ? langLabel(t.lang) : `Ses ${i + 1}`),
+      active: t.active,
+    }));
+  }
   if (hls?.audioTracks?.length > 1) {
     return hls.audioTracks.map((t, i) => ({
       id: String(i),
@@ -123,6 +133,7 @@ function audioTracksList() {
 }
 
 function selectAudioTrack(id) {
+  if (window.masaustuSes) return window.masaustuSes.sec(id);
   if (hls?.audioTracks?.length > 1) {
     hls.audioTrack = Number(id);
     return;
