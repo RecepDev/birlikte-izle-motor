@@ -63,6 +63,15 @@ async function createRoom(stream, button) {
   button.textContent = 'Oda açılıyor…';
   try {
     const res = await api('/api/rooms', { method: 'POST', body: { type, id, streamId: stream.streamId } });
+    if ($('#masaustu').checked) {
+      // Şemayı masaüstü uygulaması kendine kaydediyor. Kurulu değilse tarayıcı bir şey
+      // yapmaz, o yüzden oda linkini de gösteriyoruz.
+      location.href = `birlikteizle://${encodeURIComponent(res.roomUrl)}`;
+      button.textContent = 'Uygulamada açılıyor…';
+      $('#streams').replaceChildren(el('p', {}, 'Oda masaüstü uygulamasında açılıyor. Açılmadıysa: ',
+        el('a', { href: res.roomUrl }, 'tarayıcıda aç')));
+      return;
+    }
     location.href = res.roomUrl;
   } catch (err) {
     alert(`Oda açılamadı: ${err.message}`);
@@ -117,6 +126,10 @@ function render() {
 }
 
 $('#filter').addEventListener('input', render);
+
+const masaustuKutu = $('#masaustu');
+masaustuKutu.checked = localStorage.getItem('masaustuAc') === '1';
+masaustuKutu.addEventListener('change', () => localStorage.setItem('masaustuAc', masaustuKutu.checked ? '1' : '0'));
 
 try {
   if (!type || !id) throw new Error('İçerik bilgisi yok. Bu sayfayı Stremio\'dan aç.');
