@@ -324,9 +324,15 @@ app.whenReady().then(() => {
     // ama üst üste binen istekleri biriktirmiyoruz.
     let gecikmeli = null;
     ana.on(olay, () => {
+      // Pencere taşınınca sayfadaki ölçü değişmiyor, dolayısıyla yeni ölçüm gelmiyor:
+      // mpv penceresini son bilinen alanla hemen kendimiz yerine koyuyoruz.
+      if (sonAlan) hizala(sonAlan);
       ana.webContents.send('kabuk:olcum-iste');
       clearTimeout(gecikmeli);
-      gecikmeli = setTimeout(() => ana?.webContents.send('kabuk:olcum-iste'), 150);
+      gecikmeli = setTimeout(() => {
+        if (sonAlan) hizala(sonAlan);
+        ana?.webContents.send('kabuk:olcum-iste');
+      }, 150);
     });
   }
   // Simge durumuna inince mpv penceresi ekranda kalmasın; geri gelince yerine dönsün.
