@@ -10,7 +10,23 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 
-const MPV = process.env.MPV_YOLU || 'C:/Program Files/MPV Player/mpv.exe';
+// mpv kurulum yeri kişiden kişiye değişiyor; bilinen yerlere ve PATH'e bakıyoruz.
+const MPV_ADAYLARI = [
+  process.env.MPV_YOLU,
+  path.join(process.resourcesPath || '', 'mpv', 'mpv.exe'),
+  'C:/Program Files/MPV Player/mpv.exe',
+  'C:/Program Files/mpv/mpv.exe',
+  'C:/Program Files (x86)/mpv/mpv.exe',
+  path.join(os.homedir(), 'scoop', 'apps', 'mpv', 'current', 'mpv.exe'),
+  path.join(process.env.LOCALAPPDATA || '', 'Programs', 'mpv', 'mpv.exe'),
+].filter(Boolean);
+
+function mpvBul() {
+  for (const aday of MPV_ADAYLARI) if (fs.existsSync(aday)) return aday;
+  return 'mpv'; // PATH'te olabilir
+}
+
+const MPV = mpvBul();
 const ODA_URL = process.env.ODA_URL || '';
 const DURUM_MS = 200;
 
@@ -127,7 +143,24 @@ async function mpvBaslat() {
     pipeName: `birlikte-izle-kabuk-${process.pid}`,
     args: [`--wid=${hwndOf(videoPenceresi)}`, '--no-config', '--keep-open=yes', '--idle=yes', '--osc=no'],
   });
-  await mpv.start();
+  try {
+    await mpv.start();
+  } catch (err) {
+    mpv = null;
+    const { dialog } = require('electron');
+    const secim = dialog.showMessageBoxSync(ana, {
+      type: 'error',
+      title: 'mpv bulunamadı',
+      message: 'Video oynatıcı (mpv) başlatılamadı.',
+      detail: `Aranan yer: ${MPV}\n\nmpv kurulu değilse mpv.io/installation adresinden kurabilirsin. `
+        + 'Başka bir yerdeyse MPV_YOLU ortam değişkeniyle yolunu verebilirsin.\n\n'
+        + err.message,
+      buttons: ['mpv indirme sayfasını aç', 'Kapat'],
+      defaultId: 0,
+    });
+    if (secim === 0) shell.openExternal('https://mpv.io/installation/');
+    return;
+  }
   mpv.on('exit', () => { mpv = null; });
   mpv.on('file-loaded', altyaziEkle);
   // Sayfa bu sırada hâlâ kurulmuyor olabilir (katılma ekranı), o yüzden bir de gecikmeli yolluyoruz.

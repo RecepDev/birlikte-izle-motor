@@ -6,10 +6,35 @@
   "description": "Birlikte İzle masaüstü istemcisi: Electron kabuğu + gömülü mpv",
   "main": "electron/ana.cjs",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "paketle": "electron-builder --win"
+  },
+  "build": {
+    "appId": "xyz.birlikteizle.masaustu",
+    "productName": "Birlikte Izle",
+    "directories": {
+      "output": "dagitim"
+    },
+    "files": [
+      "electron/**",
+      "*.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "devDependencies": {
-    "electron": "^33.4.11"
+    "@electron/packager": "^20.3.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
     "socket.io-client": "^4.8.3"

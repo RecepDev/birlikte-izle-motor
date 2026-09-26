@@ -206,6 +206,17 @@ Bilinen sorun: Windows görev çubuğu videonun alt şeridinin üstünde kalıyo
 
 **Oda linkiyle giriş** (`baslangic.html`) denendi, çalışıyor.
 
+**Faz 2 - paketleme (2026-09-26).** `npm run paketle` (`@electron/packager`) çalışan bir Windows
+klasörü üretiyor: `masaustu/dagitim/Birlikte Izle-win32-x64/Birlikte Izle.exe`, 271 MB.
+Paketlenmiş uygulamayla oda, mpv oynatma, iki ses parçası ve altyazı doğrulandı.
+
+`electron-builder` ile NSIS kurulumu **yapılamadı**: imzalama araçları önbelleğe açılırken
+sembolik bağ oluşturmak yönetici/geliştirici modu istiyor ("Gereken ayrıcalık istemci tarafından
+sağlanmıyor"). Kurulum paketi gerekirse geliştirici modu açılmalı.
+
+mpv artık aranıyor: `MPV_YOLU`, uygulama içindeki `resources/mpv`, Program Files, scoop,
+LOCALAPPDATA, sonra PATH. Bulunamazsa indirme sayfasına yönlendiren bir hata kutusu çıkıyor.
+
 **Kalan işler:**
 - Görüntü oranı düğmeleri (şimdilik gizli; mpv kendi sığdırmasını yapıyor), izleyici katmanı
   (mpv doğal pencere olduğu için üstüne çizilemiyor).
