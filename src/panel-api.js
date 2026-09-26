@@ -148,6 +148,23 @@ export function createPanelApp({
   // ?retry=Name1,Name2 re-asks only those addons (the ones that failed) and
   // keeps whatever already succeeded, instead of throwing away every addon's
   // results just because one of them didn't answer.
+  // Panelden film/dizi arama: Stremio'ya hiç girmeden oda açabilmek için.
+  app.get('/api/search', wrap(async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json([]);
+    const [filmler, diziler] = await Promise.all([addons.search('movie', q), addons.search('series', q)]);
+    res.json([...filmler.slice(0, 12), ...diziler.slice(0, 12)]);
+  }));
+
+  app.get('/api/series/:id/episodes', wrap(async (req, res) => {
+    if (!isContentId(req.params.id)) return res.status(400).json({ error: 'Geçersiz id' });
+    try {
+      res.json(await addons.seriesEpisodes(req.params.id));
+    } catch {
+      res.json([]);
+    }
+  }));
+
   app.get('/api/streams', wrap(async (req, res) => {
     const { type, id, retry } = req.query;
     if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
