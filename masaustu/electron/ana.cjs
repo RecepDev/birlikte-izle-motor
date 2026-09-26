@@ -37,6 +37,10 @@ let durumZamanlayici = null;
 // Sayfa, mpv hazır olmadan da kaynak verebilir (odaya girer girmez oluyor);
 // o adresi saklayıp mpv açılınca yüklüyoruz.
 let bekleyenYukleme = null;
+// Son ölçülen video alanı ve "bir diyalog açık mı": pencere geri gelince
+// mpv penceresini doğru yere, yalnızca gerekiyorsa geri koyuyoruz.
+let sonAlan = null;
+let ortuluMu = false;
 // Seçili altyazının geçici dosyası. loadfile her yeni dosyada altyazıyı düşürdüğü
 // için 'file-loaded' olayında yeniden eklenir.
 let altyaziDosyasi = null;
@@ -99,6 +103,7 @@ const hwndOf = (win) => {
 
 function hizala(rect) {
   if (!videoPenceresi || videoPenceresi.isDestroyed() || !ana) return;
+  if (ana.isMinimized()) return;
   const b = ana.getContentBounds();
   if (process.env.KABUK_DEBUG) {
     console.log('hizala | icerik', JSON.stringify(b), '| alan', JSON.stringify(rect));
@@ -237,15 +242,19 @@ app.whenReady().then(() => {
   videoPenceresi.setIgnoreMouseEvents(true);
 
   ipcMain.on('kabuk:video-alani', async (_e, rect) => {
+    sonAlan = rect;
     hizala(rect);
-    if (!videoPenceresi.isVisible()) videoPenceresi.show();
+    // Pencere simge durumundayken göstermeye çalışmak görev çubuğunda yanıp sönmeye
+    // yol açıyor; showInactive de odağı çalmıyor.
+    if (!ana.isMinimized() && !videoPenceresi.isVisible()) videoPenceresi.showInactive();
     if (!mpv) await mpvBaslat();
   });
   // Diyalog açıkken mpv penceresi gizlenir; yoksa diyaloğun üstünü örter.
   ipcMain.on('kabuk:ortu', (_e, ortulu) => {
+    ortuluMu = ortulu;
     if (!videoPenceresi || videoPenceresi.isDestroyed()) return;
     if (ortulu) videoPenceresi.hide();
-    else if (mpv) videoPenceresi.show();
+    else if (mpv && !ana.isMinimized()) videoPenceresi.showInactive();
   });
   ipcMain.on('mpv:yukle', (_e, url) => {
     if (!mpv) bekleyenYukleme = url;
@@ -312,6 +321,14 @@ app.whenReady().then(() => {
       setTimeout(() => ana?.webContents.send('kabuk:olcum-iste'), 150);
     });
   }
+  // Simge durumuna inince mpv penceresi ekranda kalmasın; geri gelince yerine dönsün.
+  ana.on('minimize', () => videoPenceresi?.hide());
+  ana.on('restore', () => {
+    if (!mpv || ortuluMu) return;
+    if (sonAlan) hizala(sonAlan);
+    videoPenceresi?.showInactive();
+  });
+
   ana.on('closed', () => {
     clearInterval(durumZamanlayici);
     for (const dosya of altyaziDosyalari.splice(0)) fs.rmSync(dosya, { force: true });
