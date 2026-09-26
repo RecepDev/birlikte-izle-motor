@@ -199,8 +199,15 @@ function odayaGit(url) {
 // Tek örnek: ikinci kez açılınca (şema bağlantısıyla) çalışan pencere odaya gider.
 const tekOrnek = app.requestSingleInstanceLock();
 if (!tekOrnek) app.quit();
-else app.on('second-instance', (_e, arglar) => odayaGit(semadanUrl(arglar)));
-app.setAsDefaultProtocolClient(SEMA);
+else {
+  app.on('second-instance', (_e, arglar) => {
+    if (process.env.KABUK_DEBUG) console.log('ikinci-ornek', JSON.stringify(arglar));
+    odayaGit(semadanUrl(arglar));
+  });
+}
+// Yalnızca paketlenmiş uygulama şemayı üstlensin: geliştirme sırasında çalıştırmak
+// kaydı çıplak electron.exe'ye çevirip bağlantıyı bozuyor.
+if (app.isPackaged) app.setAsDefaultProtocolClient(SEMA);
 
 app.whenReady().then(() => {
   if (!tekOrnek) return; // pencere açmadan kapanıyoruz
