@@ -318,6 +318,10 @@ function stopCompat() {
 // picture without sound, unsupported video (HEVC) plays sound without picture.
 let mediaProblem = null; // 'audio' | 'video' | null
 function detectMediaProblem() {
+  // Masaüstü (mpv) ve telefon (ExoPlayer) kabuğunda bu tahmine gerek yok: çözücü ilk
+  // kareyi hazırlarken genişlik bir süre 0 kalıyor ve HEVC "açılamıyor" sanılıyordu.
+  // Gerçekten açamazlarsa oynatıcı 'error' olayı yolluyor.
+  if (window.masaustuSes) return;
   if (!player.stream() || video.readyState < 1) return;
   if (loaded.compat) {
     // Copied picture the browser still cannot decode (quality mode): ask the viewer.

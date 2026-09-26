@@ -86,6 +86,10 @@
       yuklemeDurumu(Boolean(kaynak));
       A.yukle(mutlak(kaynak));
     });
+    // Sayfa oynatmadan önce "bu biçimi açabilir miyim" diye soruyor (codecs.js). WebView
+    // HEVC/AC3'e çoğu telefonda "hayır" diyor ve sayfa dosyayı hiç vermeden "açılamaz"
+    // sayıyordu. Oynatan ExoPlayer; telefonun donanımıyla açıyor, açamazsa hata bildiriyor.
+    video.canPlayType = () => 'probably';
     video.play = () => {
       A.oynat(true);
       return Promise.resolve();
