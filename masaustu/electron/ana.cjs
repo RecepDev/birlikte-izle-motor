@@ -108,12 +108,16 @@ function hizala(rect) {
   if (process.env.KABUK_DEBUG) {
     console.log('hizala | icerik', JSON.stringify(b), '| alan', JSON.stringify(rect));
   }
-  videoPenceresi.setBounds({
+  const yeni = {
     x: Math.round(b.x + rect.x),
     y: Math.round(b.y + rect.y),
     width: Math.max(1, Math.round(rect.width)),
     height: Math.max(1, Math.round(rect.height)),
-  });
+  };
+  // Aynı sınırları tekrar yazmak pencereyi boşuna taşıyor ve oynatmayı takıltıyor.
+  const simdiki = videoPenceresi.getBounds();
+  if (simdiki.x === yeni.x && simdiki.y === yeni.y && simdiki.width === yeni.width && simdiki.height === yeni.height) return;
+  videoPenceresi.setBounds(yeni);
 }
 
 // mpv'den okunan değerleri sayfaya iter. Sayfa bunları <video> gibi görür.
@@ -316,9 +320,13 @@ app.whenReady().then(() => {
   });
 
   for (const olay of ['resize', 'move', 'enter-full-screen', 'leave-full-screen', 'maximize', 'unmaximize', 'restore']) {
+    // Son ölçümü bir kez de gecikmeli istiyoruz (boyut değişimi bitince düzelsin),
+    // ama üst üste binen istekleri biriktirmiyoruz.
+    let gecikmeli = null;
     ana.on(olay, () => {
       ana.webContents.send('kabuk:olcum-iste');
-      setTimeout(() => ana?.webContents.send('kabuk:olcum-iste'), 150);
+      clearTimeout(gecikmeli);
+      gecikmeli = setTimeout(() => ana?.webContents.send('kabuk:olcum-iste'), 150);
     });
   }
   // Simge durumuna inince mpv penceresi ekranda kalmasın; geri gelince yerine dönsün.

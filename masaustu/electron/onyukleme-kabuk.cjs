@@ -19,11 +19,23 @@ function stilEkle() {
 function olcumKur() {
   const alan = document.getElementById('video');
   if (!alan) return false;
+  // Ölçüm boyut değişiminde saniyede onlarca kez tetikleniyor; her seferinde IPC
+  // yollamak ve pencereyi taşımak oynatmayı takıltıyordu. Kareye bir kez ve yalnızca
+  // ölçü gerçekten değiştiyse yolluyoruz.
+  let bekleyen = false;
+  let son = '';
   const bildir = () => {
-    const r = alan.getBoundingClientRect();
-    if (r.width > 0 && r.height > 0) {
+    if (bekleyen) return;
+    bekleyen = true;
+    requestAnimationFrame(() => {
+      bekleyen = false;
+      const r = alan.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return;
+      const olcu = `${Math.round(r.x)}|${Math.round(r.y)}|${Math.round(r.width)}|${Math.round(r.height)}`;
+      if (olcu === son) return;
+      son = olcu;
       ipcRenderer.send('kabuk:video-alani', { x: r.x, y: r.y, width: r.width, height: r.height });
-    }
+    });
   };
   new ResizeObserver(bildir).observe(alan);
   ipcRenderer.on('kabuk:olcum-iste', bildir);
