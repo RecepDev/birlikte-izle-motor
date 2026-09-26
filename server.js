@@ -17,6 +17,7 @@ import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
 import { normalizeStreams, normalizeAddonStreams } from './src/streams.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
+import { createStremioRestarter } from './src/stremio-restart.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
 import { createTunnel, installCloudflared } from './src/tunnel.js';
@@ -39,6 +40,12 @@ const log = createLogger({ file: path.join(DATA, 'logs', 'server.log') });
 const config = createConfigStore(path.join(DATA, 'config.json'), log);
 const addons = createAddonsClient();
 const stremioLocal = createStremioLocal();
+const stremioRestarter = createStremioRestarter({ stremioLocal, log });
+// Otomatik yeniden başlatmalar arası en az süre: takılma sürerse döngüye girmesin.
+const AUTO_RESTART_COOLDOWN_MS = 5 * 60_000;
+// Birisi bekliyorken host'un torrent'i bu kadar süre hiç veri indirmezse Stremio takılmış sayılır.
+const STALL_MS = 45_000;
+let lastAutoRestart = 0;
 // infoHash -> tests running right now. Several files of one torrent share a Stremio torrent,
 // so it may only be closed once the last of them has finished.
 const activeChecks = new Map();
@@ -114,6 +121,14 @@ socketCtl = attachSocket(io, {
         room.subsRefreshedAt = Date.now();
         refreshSubtitles(room);
         return { msgs: [] };
+      },
+      // Host'un elle "Stremio'yu yeniden başlat" düğmesi.
+      restartStremio: (room, uid) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        stremioRestarter.restart('host').then((res) => {
+          dispatch(room, [room.systemChat(res.ok ? 'Stremio yeniden başladı.' : 'Stremio yeniden başlatılamadı; elle kapatıp açmayı dene.')]);
+        });
+        return { msgs: [room.systemChat('Stremio yayın sunucusu yeniden başlatılıyor…')] };
       },
       requestRelay: (room, uid) => room.requestRelay(uid),
       releaseRelay: (room, uid) => room.releaseRelay(uid),
@@ -235,11 +250,33 @@ const statsTimer = setInterval(async () => {
         if (stats) next[id] = stats;
       }
       dispatch(room, room.setTorrentStats(next));
+      watchStall(room, next[room.hostStreamId]);
     }
   } finally {
     statsBusy = false;
   }
 }, 3000);
+
+// Stremio bazen takılıp hiçbir torrent için hız vermiyor; elle kapatıp açmak düzeltiyordu.
+// Biri beklerken host'un torrent'i uzun süre hiç indirmiyorsa yayın sunucusunu kendimiz
+// yeniden başlatıyoruz (seyrek: arada en az 5 dakika).
+function watchStall(room, stats) {
+  const waiting = room.connectedUsers().some((u) => ['loading', 'buffering'].includes(u.status?.state));
+  const dead = !stats || (stats.downMbps < 0.05 && !(stats.progress >= 0.99));
+  if (!waiting || !dead) {
+    room.stallSince = null;
+    return;
+  }
+  room.stallSince ||= Date.now();
+  if (Date.now() - room.stallSince < STALL_MS) return;
+  if (Date.now() - lastAutoRestart < AUTO_RESTART_COOLDOWN_MS) return;
+  lastAutoRestart = Date.now();
+  room.stallSince = null;
+  dispatch(room, [room.systemChat('Stremio takıldı gibi görünüyor, yayın sunucusu yeniden başlatılıyor…')]);
+  stremioRestarter.restart('takılma').then((res) => {
+    dispatch(room, [room.systemChat(res.ok ? 'Stremio yeniden başladı.' : 'Stremio yeniden başlatılamadı; elle kapatıp açmayı dene.')]);
+  });
+}
 statsTimer.unref();
 
 // "Stop other downloads" room setting: while such a room has people in it, only the torrents

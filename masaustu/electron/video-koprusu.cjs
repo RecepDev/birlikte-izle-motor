@@ -56,6 +56,12 @@ const mutlak = (url) => (url ? new URL(url, location.href).href : '');
 
 function bagla(video) {
   el = video;
+  // Sayfa sesi köprü kurulmadan önce ayarlamış olabilir (kayıtlı ses düzeyi):
+  // o değeri alıp mpv'ye de yolluyoruz, yoksa her açılışta %100'den başlıyordu.
+  volume = Number.isFinite(video.volume) ? video.volume : 1;
+  muted = Boolean(video.muted);
+  ipcRenderer.send('mpv:ozellik', 'volume', Math.round(Math.cbrt(volume) * 100));
+  ipcRenderer.send('mpv:ozellik', 'mute', muted);
   const tanim = (ad, get, set) => Object.defineProperty(video, ad, { configurable: true, get, set });
 
   tanim('currentTime', () => durum.position, (v) => ipcRenderer.send('mpv:sar', Number(v) || 0));
@@ -70,7 +76,9 @@ function bagla(video) {
   tanim('playbackRate', () => durum.rate, (v) => ipcRenderer.send('mpv:ozellik', 'speed', Number(v) || 1));
   tanim('volume', () => volume, (v) => {
     volume = Math.max(0, Math.min(1, Number(v) || 0));
-    ipcRenderer.send('mpv:ozellik', 'volume', Math.round(volume * 100));
+    // mpv'nin ses ayarı kübik (%50 = sesin sekizde biri); tarayıcınınki doğrusal.
+    // Küpkökünü verince kaydırıcı tarayıcıdaki gibi davranıyor, %50 altında ses kaybolmuyor.
+    ipcRenderer.send('mpv:ozellik', 'volume', Math.round(Math.cbrt(volume) * 100));
   });
   tanim('muted', () => muted, (v) => {
     muted = Boolean(v);
@@ -163,6 +171,10 @@ ipcRenderer.on('mpv:sesler', (_e, liste) => {
   // sayfanın kurduğu bir geri çağırmaya güvenilemez.
   window.dispatchEvent(new Event('masaustu-sesler'));
 });
+// Ayar değişince kısa bilgi: HTML bildirim mpv'nin altında kalıyor, o yüzden
+// yazıyı mpv kendi ekranında (alt ortada) gösteriyor.
+window.masaustuBilgi = (metin) => ipcRenderer.send('mpv:bilgi', String(metin));
+
 // Görüntü oranı düğmesi: sayfanın modlarını mpv özelliklerine çeviriyoruz.
 let sonOran = null;
 window.masaustuOran = (mod) => {

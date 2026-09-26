@@ -72,6 +72,7 @@ let sonStil = null;
 // Sayfanın görüntü oranı modları -> mpv. "Doldur" kırparak ekranı kaplar (panscan),
 // "Uzat" oranı bozar (keepaspect kapalı), sabit oranlar görüntüyü o şekle zorlar.
 let sonOran = 'fit';
+const sonOzellikler = {};
 function oranUygula() {
   if (!mpv) return;
   const sabit = { '16:9': '16:9', '4:3': '4:3', '21:9': '21:9' }[sonOran];
@@ -189,6 +190,8 @@ async function mpvBaslat() {
       '--target-colorspace-hint=yes',
       // Torrent akışı dalgalı: önden daha çok tamponla, kısa kesintiler görünmesin.
       '--cache=yes', '--demuxer-max-bytes=512MiB', '--demuxer-readahead-secs=120',
+      // Ayar bilgileri (oran, ses…) görüntünün alt ortasında.
+      '--osd-align-x=center', '--osd-align-y=bottom', '--osd-margin-y=48', '--osd-font-size=34',
     ],
   });
   try {
@@ -216,6 +219,7 @@ async function mpvBaslat() {
   mpv.on('track-switched', sesleriYolla);
   altyaziStilUygula();
   oranUygula();
+  for (const [ad, deger] of Object.entries(sonOzellikler)) mpv.set(ad, deger).catch(() => {});
   durumZamanlayici = setInterval(durumDongusu, DURUM_MS);
   if (bekleyenYukleme) {
     await mpv.load(bekleyenYukleme).catch(() => {});
@@ -311,7 +315,11 @@ app.whenReady().then(() => {
     await mpv?.seek(saniye).catch(() => {});
     ana?.webContents.send('mpv:sarildi');
   });
-  ipcMain.on('mpv:ozellik', (_e, ad, deger) => mpv?.set(ad, deger).catch(() => {}));
+  ipcMain.on('mpv:ozellik', (_e, ad, deger) => {
+    // Ses gibi ayarlar mpv açılmadan gelebiliyor; son değerleri saklayıp açılışta uyguluyoruz.
+    if (ad === 'volume' || ad === 'mute') sonOzellikler[ad] = deger;
+    mpv?.set(ad, deger).catch(() => {});
+  });
   ipcMain.on('mpv:filtre', (_e, css) => {
     // CSS "brightness(1.2) contrast(0.9) saturate(1.1)" -> mpv 0-100 ölçeği
     const oku = (ad) => {
@@ -337,6 +345,7 @@ app.whenReady().then(() => {
     altyaziDosyasi = null;
     mpv?.set('sub-visibility', false).catch(() => {});
   });
+  ipcMain.on('mpv:bilgi', (_e, metin) => mpv?.command('show-text', metin, 1500).catch(() => {}));
   ipcMain.on('mpv:oran', (_e, mod) => {
     sonOran = mod;
     oranUygula();

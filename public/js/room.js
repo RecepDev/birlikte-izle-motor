@@ -668,6 +668,15 @@ async function refreshAddonStreams() {
 }
 $('#quality-refresh-addons').addEventListener('click', refreshAddonStreams);
 
+// Stremio takılıp hiçbir torrent için hız vermediğinde elle kapatıp açmak yerine.
+$('#restart-stremio').addEventListener('click', async () => {
+  const btn = $('#restart-stremio');
+  btn.disabled = true;
+  const res = await request('restartStremio');
+  if (res?.error) toast(errorText(res.error));
+  setTimeout(() => { btn.disabled = false; }, 15_000);
+});
+
 $('#quality-filter-btn').addEventListener('click', () => {
   $('#quality-filter-panel').hidden = !$('#quality-filter-panel').hidden;
 });
@@ -788,6 +797,7 @@ function renderQualityResFilter(streams) {
 function renderQualityTab() {
   renderQualityAddonTabs();
   $('#quality-refresh-addons').hidden = !isHost();
+  $('#restart-stremio').hidden = !isHost();
   const addonStreams = qualityAddonFilter === 'all'
     ? state.room.streams
     : state.room.streams.filter((s) => s.addonName === qualityAddonFilter);
@@ -1196,6 +1206,7 @@ volume.addEventListener('input', () => {
   video.volume = Number(volume.value);
   video.muted = video.volume === 0;
   storage.set('volume', volume.value);
+  window.masaustuBilgi?.(`Ses %${Math.round(Number(volume.value) * 100)}`);
 });
 $('#btn-mute').addEventListener('click', () => {
   video.muted = !video.muted;
@@ -1578,7 +1589,10 @@ $('#btn-aspect').addEventListener('click', () => {
   aspectMode = ASPECTS[(i + 1) % ASPECTS.length][0];
   storage.set('aspect', aspectMode);
   fitVideo();
-  toast(`Görüntü oranı: ${ASPECTS.find(([m]) => m === aspectMode)[1]}`, 1500);
+  const label = `Görüntü oranı: ${ASPECTS.find(([m]) => m === aspectMode)[1]}`;
+  // Masaüstünde bilgi player'ın alt ortasında (mpv'nin ekranında) çıkıyor.
+  if (window.masaustuBilgi) window.masaustuBilgi(label);
+  else toast(label, 1500);
 });
 new ResizeObserver(fitVideo).observe(playerEl);
 video.addEventListener('loadedmetadata', fitVideo);
