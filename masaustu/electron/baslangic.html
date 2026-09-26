@@ -15,6 +15,9 @@
   button { background:#7b5cff; border:none; border-radius:8px; padding:12px;
            color:#fff; font:inherit; font-weight:600; cursor:pointer; }
   button:hover { background:#9c86ff; }
+  .ikincil { background:#232633; }
+  .ikincil:hover { background:#2f3344; }
+  .ipucu { font-size:13px; }
 </style>
 </head>
 <body>
@@ -23,12 +26,18 @@
     <p>Oda linkini yapıştır. Video, tarayıcı yerine mpv ile oynatılır: gerçek HDR, tüm ses dilleri, donanım çözme.</p>
     <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
     <button type="submit">Odaya gir</button>
+    <button id="panel" type="button" class="ikincil">Film ara ve oda aç</button>
+    <p class="ipucu">Stremio'ya hiç girmeden de olur: panel bu uygulamanın içinde açılır.</p>
   </form>
 <script>
   document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = document.getElementById('link').value.trim();
     if (v) window.kabuk.odayaGit(v);
+  });
+  // Panel bu makinede çalışıyor (varsayılan 7001): film aramayı uygulama içinde yapıyoruz.
+  document.getElementById('panel').addEventListener('click', () => {
+    window.kabuk.odayaGit('http://127.0.0.1:7001/');
   });
 </script>
 </body>

@@ -69,8 +69,9 @@ export function createPanelApp({
          <p><a style="color:#9c86ff" href="${hedef}">Tarayıcıda devam et</a></p></body>`
       : `<!doctype html><meta charset="utf-8"><body style="background:#0e0f13;color:#e8e9ee;font:16px system-ui;padding:40px">
          <h2>Masaüstü uygulamasında açıldı</h2>
-         <p>Bu sekmeyi kapatabilirsin.</p>
-         <p><a style="color:#9c86ff" href="${hedef}">Yine de tarayıcıda aç</a></p></body>`);
+         <p>Bu sekme kendiliğinden kapanmazsa kapatabilirsin.</p>
+         <p><a style="color:#9c86ff" href="${hedef}">Yine de tarayıcıda aç</a></p>
+         <script>setTimeout(() => window.close(), 400);</script></body>`);
   });
   // Shared with the room page: which codecs this browser decodes.
   app.get('/js/codecs.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'codecs.js')));
