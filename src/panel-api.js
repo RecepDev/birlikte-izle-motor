@@ -53,6 +53,7 @@ export function createPanelApp({
   };
   app.get('/', page('index.html'));
   app.get('/new', page('new.html'));
+  app.get('/ara', page('ara.html'));
 
   // Stremio'dan gelen "masaüstünde aç" bağlantısı: uygulamayı burada başlatıyoruz,
   // tarayıcı sekmesi yalnızca sonucu gösteriyor.

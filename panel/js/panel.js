@@ -248,44 +248,6 @@ async function refreshLogs() {
   if (stick) box.scrollTop = box.scrollHeight;
 }
 
-// ---- film / dizi arama -----------------------------------------------------------------
-
-function bolumSec(sonuc) {
-  const kutu = $('#ara-sonuc');
-  kutu.replaceChildren(el('p', { class: 'muted', text: 'Bölümler yükleniyor…' }));
-  api(`/api/series/${encodeURIComponent(sonuc.id)}/episodes`).then((bolumler) => {
-    if (!bolumler.length) return (location.href = `/new?type=series&id=${encodeURIComponent(sonuc.id)}`);
-    kutu.replaceChildren(
-      el('div', { class: 'row' },
-        el('b', { text: sonuc.name }),
-        el('button', { type: 'button', text: '◀ Geri', onclick: () => ara() })),
-      el('div', { class: 'ara-liste' }, ...bolumler.map((b) => el('button', {
-        type: 'button',
-        text: `S${String(b.season).padStart(2, '0')}E${String(b.episode).padStart(2, '0')} · ${b.name}`,
-        onclick: () => { location.href = `/new?type=series&id=${encodeURIComponent(`${sonuc.id}:${b.season}:${b.episode}`)}`; },
-      }))),
-    );
-  });
-}
-
-async function ara() {
-  const q = $('#ara-input').value.trim();
-  const kutu = $('#ara-sonuc');
-  if (!q) return kutu.replaceChildren();
-  kutu.replaceChildren(el('p', { class: 'muted', text: 'Aranıyor…' }));
-  const sonuclar = await api(`/api/search?q=${encodeURIComponent(q)}`);
-  if (!sonuclar.length) return kutu.replaceChildren(el('p', { class: 'muted', text: 'Sonuç yok.' }));
-  kutu.replaceChildren(el('div', { class: 'ara-liste' }, ...sonuclar.map((s) => el('button', {
-    type: 'button',
-    text: `${s.type === 'series' ? '📺' : '🎬'} ${s.name}${s.year ? ` (${s.year})` : ''}`,
-    // Dizide önce bölüm seçilmeli: /new tek bir bölümün kaynaklarını listeliyor.
-    onclick: () => (s.type === 'series' ? bolumSec(s) : (location.href = `/new?type=movie&id=${encodeURIComponent(s.id)}`)),
-  }))));
-}
-
-$('#ara-btn').addEventListener('click', ara);
-$('#ara-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') ara(); });
-
 // ---- start ----------------------------------------------------------------------------
 
 config = await api('/api/config');

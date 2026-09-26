@@ -86,7 +86,15 @@ fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px
 .streams .kind.risk { color: var(--warn); }
 .streams .kind.fine { color: var(--ok); }
 
-/* Film/dizi arama sonuçları: tek sütun, tıklanabilir satırlar. */
-.ara-liste { display: grid; gap: 6px; margin-top: 10px; max-height: 320px; overflow: auto; }
-.ara-liste button { text-align: left; background: #171920; border: 1px solid #2a2e39; }
-.ara-liste button:hover { background: #1f2330; }
+/* Arama sonuçları: afişli ızgara. */
+.poster-izgara { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 12px; margin-top: 10px; }
+.poster-kart { display: grid; gap: 4px; padding: 6px; text-align: left; background: #171920; border: 1px solid #2a2e39; border-radius: 10px; cursor: pointer; }
+.poster-kart:hover { background: #1f2330; }
+.poster-kart img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; display: block; }
+.poster-yok { width: 100%; aspect-ratio: 2 / 3; display: grid; place-items: center; font-size: 32px; background: #0e0f13; border-radius: 6px; }
+.poster-ad { font-size: 13px; line-height: 1.25; }
+.bolum-liste { margin-top: 10px; max-height: 420px; overflow: auto; }
+.bolum-liste h3 { margin: 12px 0 6px; font-size: 14px; }
+.bolum-satir { display: grid; gap: 6px; }
+.bolum-satir button { text-align: left; background: #171920; border: 1px solid #2a2e39; }
+.bolum-satir button:hover { background: #1f2330; }
