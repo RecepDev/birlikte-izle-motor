@@ -66,6 +66,11 @@
 .viewers-ov[hidden] { display: none !important; }
 #viewers-toggle, #viewers-list { display: none !important; }
 #picture-info { position: static !important; }
+/* Tıklayınca kaybolmasın, küçülsün: izleyici düğmesi masaüstünde gizli olduğu için
+   tamamen kapanırsa geri açmanın yolu kalmıyordu. Küçükken yalnızca ilk satır görünür. */
+.viewers-ov.collapsed .pic-info:not([hidden]) { display: block !important; }
+.viewers-ov.collapsed .pic-info > :not(:first-child) { display: none !important; }
+.viewers-ov.collapsed .pic-info::after { content: ' ▸'; opacity: .6; }
 /* Altyazıyı mpv çiziyor; sayfanın katmanı boş bir kutu olarak görünüyordu. */
 .sub-overlay { display: none !important; }
 #btn-compat, #btn-aspect { display: none !important; }
