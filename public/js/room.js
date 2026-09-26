@@ -1691,6 +1691,15 @@ $('#copy-link').addEventListener('click', async () => {
   if (await copyText(`${base}/room/${roomId}`)) toast('Link kopyalandı.');
 });
 
+// Masaüstü uygulamasında aç. Kabuk zaten masaüstüyse düğme gereksiz.
+if (window.masaustuSes) $('#open-desktop').hidden = true;
+else {
+  $('#open-desktop').addEventListener('click', () => {
+    location.href = `birlikteizle://${encodeURIComponent(location.href)}`;
+    toast('Masaüstü uygulaması açılıyor. Kurulu değilse indirilen klasördeki "Birlikte Izle.exe" bir kez çalıştırılmalı.', 8000);
+  });
+}
+
 const dialog = $('#settings-dialog');
 $('#open-settings').addEventListener('click', () => {
   const s = state.room.settings;

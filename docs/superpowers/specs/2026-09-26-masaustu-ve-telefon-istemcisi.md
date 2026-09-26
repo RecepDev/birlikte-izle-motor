@@ -217,6 +217,14 @@ sağlanmıyor"). Kurulum paketi gerekirse geliştirici modu açılmalı.
 mpv artık aranıyor: `MPV_YOLU`, uygulama içindeki `resources/mpv`, Program Files, scoop,
 LOCALAPPDATA, sonra PATH. Bulunamazsa indirme sayfasına yönlendiren bir hata kutusu çıkıyor.
 
+**Tarayıcıdan masaüstüne geçiş (2026-09-26).** Oda sayfasındaki "🖥️ Masaüstünde aç" düğmesi
+`birlikteizle://<oda adresi>` bağlantısına gidiyor; uygulama bu şemayı kendine kaydediyor
+(`setAsDefaultProtocolClient`). Uygulama açıksa ikinci örnek kapanıp çalışan pencereyi odaya
+yolluyor. Şema, uygulama bir kez çalıştırıldıktan sonra kayıtlı oluyor.
+
+Tuzak: `requestSingleInstanceLock()` false dönünce `app.quit()` yetmiyor - `whenReady` yine
+çalışıp ikinci bir pencere açıyordu; erken dönüş eklendi.
+
 **Kalan işler:**
 - Görüntü oranı düğmeleri (şimdilik gizli; mpv kendi sığdırmasını yapıyor), izleyici katmanı
   (mpv doğal pencere olduğu için üstüne çizilemiyor).

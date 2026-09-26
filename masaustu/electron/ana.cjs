@@ -174,7 +174,36 @@ async function mpvBaslat() {
   }
 }
 
+// birlikteizle://<oda adresi> bağlantısı uygulamayı açsın. Tarayıcıdaki "Masaüstü
+// uygulamasında aç" düğmesi bu şemayı kullanıyor.
+const SEMA = 'birlikteizle';
+
+function semadanUrl(arglar) {
+  const bag = (arglar || []).find((a) => typeof a === 'string' && a.startsWith(`${SEMA}://`));
+  if (!bag) return '';
+  const kalan = bag.slice(`${SEMA}://`.length).replace(/\/$/, '');
+  try {
+    return decodeURIComponent(kalan);
+  } catch {
+    return kalan;
+  }
+}
+
+function odayaGit(url) {
+  if (!url || !ana) return;
+  ana.loadURL(url);
+  if (ana.isMinimized()) ana.restore();
+  ana.focus();
+}
+
+// Tek örnek: ikinci kez açılınca (şema bağlantısıyla) çalışan pencere odaya gider.
+const tekOrnek = app.requestSingleInstanceLock();
+if (!tekOrnek) app.quit();
+else app.on('second-instance', (_e, arglar) => odayaGit(semadanUrl(arglar)));
+app.setAsDefaultProtocolClient(SEMA);
+
 app.whenReady().then(() => {
+  if (!tekOrnek) return; // pencere açmadan kapanıyoruz
   ana = new BrowserWindow({
     width: 1280, height: 800, backgroundColor: '#0e0f13', title: 'Birlikte İzle',
     webPreferences: {
@@ -278,7 +307,9 @@ app.whenReady().then(() => {
     return { action: 'deny' };
   });
 
-  if (ODA_URL) ana.loadURL(ODA_URL);
+  const semaUrl = semadanUrl(process.argv);
+  if (semaUrl) ana.loadURL(semaUrl);
+  else if (ODA_URL) ana.loadURL(ODA_URL);
   else ana.loadFile(path.join(__dirname, 'baslangic.html'));
 });
 
