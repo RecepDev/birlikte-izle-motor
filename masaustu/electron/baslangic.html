@@ -26,8 +26,8 @@
     <p>Oda linkini yapıştır. Video, tarayıcı yerine mpv ile oynatılır: gerçek HDR, tüm ses dilleri, donanım çözme.</p>
     <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
     <button type="submit">Odaya gir</button>
-    <button id="panel" type="button" class="ikincil">Film ara ve oda aç</button>
-    <p class="ipucu">Stremio'ya hiç girmeden de olur: panelde ara, seç, oda açılsın.</p>
+    <button id="panel" type="button" class="ikincil" hidden>Film ara ve oda aç</button>
+    <p id="panel-ipucu" class="ipucu" hidden>Sunucu bu bilgisayarda çalışıyor: Stremio'ya girmeden ara, seç, oda aç.</p>
   </form>
 <script>
   document.getElementById('form').addEventListener('submit', (e) => {
@@ -35,10 +35,17 @@
     const v = document.getElementById('link').value.trim();
     if (v) window.kabuk.odayaGit(v);
   });
-  // Panel bu makinede çalışıyor (varsayılan 7001): film aramayı uygulama içinde yapıyoruz.
+  // Oda açma yalnızca sunucuyu çalıştıran kişide anlamlı. Misafirlerde sunucu yok,
+  // o yüzden düğmeyi ancak panel bu bilgisayarda cevap verirse gösteriyoruz.
   document.getElementById('panel').addEventListener('click', () => {
     window.kabuk.odayaGit('http://127.0.0.1:7001/ara');
   });
+  fetch('http://127.0.0.1:7001/api/ping', { mode: 'no-cors', cache: 'no-store' })
+    .then(() => {
+      document.getElementById('panel').hidden = false;
+      document.getElementById('panel-ipucu').hidden = false;
+    })
+    .catch(() => {});
 </script>
 </body>
 </html>
