@@ -12,6 +12,7 @@ const KEY = 'test-panel-key';
 const silentLog = { info() {}, warn() {}, error() {}, recent: () => [{ msg: 'x' }] };
 
 let server;
+let metaCagrisi = 0;
 let base;
 let rooms;
 let config;
@@ -43,7 +44,7 @@ before(async () => {
         if (url.includes('bad')) throw new Error('HTTP 404');
         return { name: 'Torrentio', resources: ['stream'] };
       },
-      meta: async () => ({ name: 'Dune', poster: null }),
+      meta: async () => { metaCagrisi += 1; return { name: 'Dune', poster: null }; },
       // Mirrors the real addons-client: only calls back for addons actually
       // present in `enabled`, so ?retry=Name filtering is meaningfully testable.
       streams: async (enabled, type, id, onAddon) => {
@@ -167,9 +168,13 @@ test('?retry re-asks only the named addons and keeps the rest of the cached list
   assert.equal(first.errors[0].addonName, 'Slow');
 
   // Retry only "Slow" — T must not be re-queried or duplicated in the merged list.
+  const oncekiMetaCagrisi = metaCagrisi;
   const res = await api(`/api/streams?type=movie&id=tt2&retry=Slow`);
   const lines = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
-  assert.deepEqual(lines.filter((l) => l.type === 'meta'), [], 'no re-fetch of meta on a retry');
+  const metaSatirlari = lines.filter((l) => l.type === 'meta');
+  assert.equal(metaSatirlari.length, 1, 'the page still needs the title on a retry');
+  assert.equal(metaSatirlari[0].meta.name, 'Dune');
+  assert.equal(metaCagrisi, oncekiMetaCagrisi, 'meta comes from the cache, not a new fetch');
   const addonLines = lines.filter((l) => l.type === 'addon');
   assert.deepEqual(addonLines.map((l) => l.addonName), ['Slow'], "only the retried addon's line is sent");
   const done = lines.find((l) => l.type === 'done');
