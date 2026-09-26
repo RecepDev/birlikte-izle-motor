@@ -10,13 +10,19 @@
   display: flex !important;
   flex-direction: column !important;
 }
+/* Video kalan boşluğu doldurur ama asla taşırmaz: esas boy 0'dan başlıyor.
+   "auto" olunca fitVideo'nun yazdığı boy esas alınıp sayfa aşağı taşıyor, sağda
+   kaydırma çubuğu çıkıp kontroller ekranın altına kayıyordu. */
 .player video {
-  flex: 1 1 auto !important;
+  flex: 1 1 0 !important;
   width: 100% !important;
-  height: auto !important;
+  height: 0 !important;
   min-height: 0 !important;
   margin: 0 !important;
 }
+html, body { overflow: hidden !important; }
+.player-col, .layout { min-height: 0 !important; overflow: hidden !important; }
+.side { min-height: 0 !important; overflow: auto !important; }
 
 .controls {
   position: static !important;
