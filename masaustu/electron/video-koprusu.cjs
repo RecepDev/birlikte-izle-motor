@@ -24,6 +24,18 @@ const durum = {
 let el = null;
 const yolla = (tip) => el && el.dispatchEvent(new Event(tip));
 
+// Yeni kaynak seçilince görüntü gelene kadar mpv siyah kalıyor. O sürede mpv
+// penceresini gizleyip yerine "yükleniyor" göstergesi koyuyoruz.
+let yukleniyor = false;
+let yerlestir = () => {};
+function yuklemeDurumu(deger) {
+  if (yukleniyor === deger) return;
+  yukleniyor = deger;
+  if (deger) yerlestir(); // üstte satırlar açılıp kapanınca videonun yeri kayabiliyor
+  el?.closest('.player')?.classList.toggle('mpv-yukleniyor', deger);
+  ipcRenderer.send('kabuk:yukleniyor', deger);
+}
+
 // readyState: sayfa >=1 ile "medya var mı", >=3 ile "oynatılabilir mi" diye bakıyor.
 function readyState() {
   if (!durum.loaded || durum.duration === null) return 0;
@@ -67,8 +79,21 @@ function bagla(video) {
   // Sayfa kaynağı src ile veriyor; biz bunu mpv'ye yükletiyoruz.
   tanim('src', () => kaynak, (v) => {
     kaynak = String(v || '');
+    yuklemeDurumu(Boolean(kaynak));
     ipcRenderer.send('mpv:yukle', mutlak(kaynak));
   });
+
+  const yerTutucu = document.createElement('div');
+  yerTutucu.className = 'mpv-yer-tutucu';
+  yerTutucu.innerHTML = '<div class="mpv-donen"></div><span>Kaynak yükleniyor…</span>';
+  video.after(yerTutucu);
+  // Gösterge videonun kapladığı alanı birebir örter.
+  yerlestir = () => Object.assign(yerTutucu.style, {
+    left: `${video.offsetLeft}px`, top: `${video.offsetTop}px`,
+    width: `${video.offsetWidth}px`, height: `${video.offsetHeight}px`,
+  });
+  new ResizeObserver(yerlestir).observe(video);
+  yerlestir();
 
   video.play = () => {
     ipcRenderer.send('mpv:ozellik', 'pause', false);
@@ -79,6 +104,7 @@ function bagla(video) {
   video.removeAttribute = (ad) => {
     if (ad === 'src') {
       kaynak = '';
+      yuklemeDurumu(false);
       ipcRenderer.send('mpv:durdur');
     }
   };
@@ -155,6 +181,8 @@ ipcRenderer.on('mpv:durum', (_e, next) => {
     if (oncekiSure === null && durum.duration !== null) yolla('loadedmetadata');
   }
   if (oncekiHazir < 3 && readyState() >= 3) yolla('canplay');
+  if (yukleniyor && readyState() >= 3 && durum.width > 0) yuklemeDurumu(false);
+  else if (yukleniyor) yerlestir();
   if (oncekiDuraklat !== durum.paused) yolla(durum.paused ? 'pause' : 'play');
   if (durum.cacheStalled) yolla('waiting');
   yolla('timeupdate');

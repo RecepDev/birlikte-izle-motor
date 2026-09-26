@@ -41,6 +41,20 @@ let bekleyenYukleme = null;
 // mpv penceresini doğru yere, yalnızca gerekiyorsa geri koyuyoruz.
 let sonAlan = null;
 let ortuluMu = false;
+// Kaynak yüklenirken mpv siyah; o sırada sayfanın "yükleniyor" göstergesi görünsün.
+let yukleniyor = false;
+
+// mpv penceresi yalnızca her şey uygunken görünür: mpv açık, diyalog yok,
+// kaynak yüklenmiş, pencere simge durumunda değil.
+function videoGorunurluk() {
+  if (!videoPenceresi || videoPenceresi.isDestroyed() || !ana) return;
+  if (!mpv || ortuluMu || yukleniyor || ana.isMinimized()) {
+    videoPenceresi.hide();
+    return;
+  }
+  if (sonAlan) hizala(sonAlan);
+  if (!videoPenceresi.isVisible()) videoPenceresi.showInactive();
+}
 // Seçili altyazının geçici dosyası. loadfile her yeni dosyada altyazıyı düşürdüğü
 // için 'file-loaded' olayında yeniden eklenir.
 let altyaziDosyasi = null;
@@ -254,17 +268,19 @@ app.whenReady().then(() => {
   ipcMain.on('kabuk:video-alani', async (_e, rect) => {
     sonAlan = rect;
     hizala(rect);
-    // Pencere simge durumundayken göstermeye çalışmak görev çubuğunda yanıp sönmeye
-    // yol açıyor; showInactive de odağı çalmıyor.
-    if (!ana.isMinimized() && !videoPenceresi.isVisible()) videoPenceresi.showInactive();
     if (!mpv) await mpvBaslat();
+    // Simge durumundayken göstermeye çalışmak görev çubuğunu yakıp söndürüyordu;
+    // karar videoGorunurluk'te, gösterirken de odak çalınmıyor (showInactive).
+    videoGorunurluk();
   });
   // Diyalog açıkken mpv penceresi gizlenir; yoksa diyaloğun üstünü örter.
   ipcMain.on('kabuk:ortu', (_e, ortulu) => {
     ortuluMu = ortulu;
-    if (!videoPenceresi || videoPenceresi.isDestroyed()) return;
-    if (ortulu) videoPenceresi.hide();
-    else if (mpv && !ana.isMinimized()) videoPenceresi.showInactive();
+    videoGorunurluk();
+  });
+  ipcMain.on('kabuk:yukleniyor', (_e, deger) => {
+    yukleniyor = deger;
+    videoGorunurluk();
   });
   ipcMain.on('mpv:yukle', (_e, url) => {
     if (!mpv) bekleyenYukleme = url;
@@ -343,11 +359,7 @@ app.whenReady().then(() => {
   }
   // Simge durumuna inince mpv penceresi ekranda kalmasın; geri gelince yerine dönsün.
   ana.on('minimize', () => videoPenceresi?.hide());
-  ana.on('restore', () => {
-    if (!mpv || ortuluMu) return;
-    if (sonAlan) hizala(sonAlan);
-    videoPenceresi?.showInactive();
-  });
+  ana.on('restore', videoGorunurluk);
 
   ana.on('closed', () => {
     clearInterval(durumZamanlayici);

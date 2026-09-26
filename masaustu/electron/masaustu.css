@@ -82,3 +82,19 @@ html, body { overflow: hidden !important; }
 #btn-compat, #btn-aspect { display: none !important; }
 /* Zaten masaüstündeyiz; uyumluluk ekranı da gereksiz (mpv her biçimi açıyor). */
 #open-desktop, #open-compat { display: none !important; }
+
+/* Kaynak yüklenirken: mpv penceresi gizli, videonun yerinde gösterge duruyor. */
+/* Video gizlenmiyor (display: none ölçüyü sıfırlar, mpv hiç başlamaz); gösterge
+   videonun tam üstüne konumlanıyor (bkz. video-koprusu.cjs). */
+.mpv-yer-tutucu { display: none; }
+.player.mpv-yukleniyor .mpv-yer-tutucu {
+  position: absolute; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  color: #9096a6; font-size: 15px; background: #000;
+}
+.mpv-donen {
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 4px solid #2a2e39; border-top-color: #7b5cff;
+  animation: mpv-don 0.9s linear infinite;
+}
+@keyframes mpv-don { to { transform: rotate(360deg); } }
