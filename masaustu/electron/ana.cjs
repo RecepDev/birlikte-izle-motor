@@ -108,11 +108,17 @@ function hizala(rect) {
   if (process.env.KABUK_DEBUG) {
     console.log('hizala | icerik', JSON.stringify(b), '| alan', JSON.stringify(rect));
   }
+  // Video alanını pencerenin içerik alanıyla kırpıyoruz: sayfa kayarsa ya da pencere
+  // küçülürse mpv penceresi uygulama penceresinin dışına taşmasın.
+  const sol = Math.max(0, rect.x);
+  const ust = Math.max(0, rect.y);
+  const sag = Math.min(b.width, rect.x + rect.width);
+  const alt = Math.min(b.height, rect.y + rect.height);
   const yeni = {
-    x: Math.round(b.x + rect.x),
-    y: Math.round(b.y + rect.y),
-    width: Math.max(1, Math.round(rect.width)),
-    height: Math.max(1, Math.round(rect.height)),
+    x: Math.round(b.x + sol),
+    y: Math.round(b.y + ust),
+    width: Math.max(1, Math.round(sag - sol)),
+    height: Math.max(1, Math.round(alt - ust)),
   };
   // Aynı sınırları tekrar yazmak pencereyi boşuna taşıyor ve oynatmayı takıltıyor.
   const simdiki = videoPenceresi.getBounds();
