@@ -152,8 +152,10 @@ function render() {
         el('div', { class: 'info' },
           el('div', { text: `${formatSize(s.sizeBytes)} ${s.title || s.name}`.trim() }),
           el('span', { class: 'kind', text: s.kind === 'torrent' ? '🧲 torrent' : '🔗 doğrudan link (debrid)' }),
-          s.notWebReady ? el('span', { class: 'kind', text: ' · tarayıcıda dönüştürme gerekebilir' }) : null,
+          // Masaüstü uygulamasında (mpv) her biçim açılıyor: tarayıcı notları gereksiz.
+          s.notWebReady && !kabuktayiz ? el('span', { class: 'kind', text: ' · tarayıcıda dönüştürme gerekebilir' }) : null,
           (() => {
+            if (kabuktayiz) return null;
             const note = pictureNote(s);
             return note ? el('span', { class: `kind ${note.ok ? 'fine' : 'risk'}`, text: note.text }) : null;
           })(),

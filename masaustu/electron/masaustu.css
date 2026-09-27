@@ -107,3 +107,6 @@ html, body { overflow: hidden !important; }
   background: #14161d !important;
 }
 .player.idle .controls { display: none !important; }
+
+/* Uyumlu mod masaüstünde yok (mpv her biçimi açıyor): ayarı ve uyarıları gizle. */
+label.check:has(#keep-quality), #quality-warning:empty { display: none !important; }

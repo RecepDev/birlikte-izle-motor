@@ -33,6 +33,9 @@ if (!userToken) {
 }
 
 const isTouch = matchMedia('(pointer: coarse)').matches;
+// Masaüstü uygulaması (mpv): her biçimi açıyor, uyumlu mod ve uyarıları hiç gösterilmiyor.
+// Köprü sayfadan sonra kurulabildiği için her seferinde bakılıyor.
+const desktopApp = () => Boolean(window.masaustuSes) && !window.mobilCihaz;
 const video = $('#video');
 const playerEl = $('#player');
 const state = {
@@ -573,7 +576,7 @@ const subs = createSubs({
   audioTracks: audioTracksList,
   onSelectAudio: selectAudioTrack,
   multiAudioLikely: () => Boolean(myStream()?.multiAudio),
-  compatActive: () => loaded.compat,
+  compatActive: () => loaded.compat || desktopApp(),
   onSwitchCompat: () => startCompat(),
   reencodeBlocked: () => qualityBlocked && Boolean(myStream()?.multiAudio),
   onForceCompat: () => startCompat({ allowReencode: true }),
@@ -648,6 +651,8 @@ function embeddedSubsText(s) {
 }
 
 // Icons for the quality list; the explanation sits behind an ⓘ.
+// Kalite adındaki ses türü -> telefonun bildirdiği çözücü anahtarı (OdaActivity.cihazBilgisi).
+const PHONE_AUDIO_KEY = { AC3: 'ac3', 'E-AC3': 'eac3', DTS: 'dts', 'DTS-HD': 'dts', TrueHD: 'truehd' };
 function pictureVerdict(s) {
   // Uygulamalarda (masaüstü mpv, telefon ExoPlayer) her görüntü ve ses biçimi açılıyor:
   // "açılır mı" simgeleri gereksiz ve ses için yanıltıcıydı; yalnızca HDR bilgisi kalıyor.
@@ -664,6 +669,12 @@ function pictureVerdict(s) {
     items.push({ icon: '💬', text: shell
       ? `Dosyanın içinde gömülü altyazı var${langs.length ? `: ${langs.join(', ')}` : ''}. Altyazı sekmesinden seçebilirsin.`
       : embeddedSubsText(s) });
+  }
+  // Telefon uygulaması: telefonun bu sesi çözecek donanımı yoksa uyar (ses dönüştürülerek açılır).
+  const phoneAudio = window.mobilCihaz?.ses;
+  const riskMime = PHONE_AUDIO_KEY[s.audioRisk];
+  if (s.audioRisk && phoneAudio && riskMime && phoneAudio[riskMime] === false) {
+    items.push({ icon: '🔇', text: `${s.audioRisk}: bu telefon bu sesi çözemiyor. Açılınca ses otomatik dönüştürülür (Uyumlu mod), görüntü aynı kalır; başlaması biraz gecikebilir.` });
   }
   if (s.audioRisk && !shell) {
     items.push(audioNeedsReencode(s)
@@ -1041,7 +1052,7 @@ function renderNotice() {
     }
   } else if (st.state === 'error') {
     const reason = player.lastError();
-    text = {
+    text = desktopApp() ? 'Video açılamadı.' : {
       unsupported: 'Tarayıcın bu videoyu açamıyor.',
       decode: 'Video çözülemedi.',
       network: 'Videoya ulaşılamadı.',
@@ -1050,7 +1061,7 @@ function renderNotice() {
       compat: 'Uyumlu mod bu cihazda kullanılamıyor.',
     }[reason] || 'Video açılamadı.';
     text += isHost() ? '\nKalite sekmesinden başka bir stream seçebilirsin.' : '\nKalite sekmesinden başka bir stream deneyebilirsin.';
-    if (!loaded.compat) actions.push(button('🛠 Uyumlu modu dene', startCompat, true));
+    if (!loaded.compat && !desktopApp()) actions.push(button('🛠 Uyumlu modu dene', startCompat, true));
     actions.push(button('Tekrar dene', () => loadMyStream(true)));
     actions.push(button('Kalite', () => selectTab('quality')));
   }

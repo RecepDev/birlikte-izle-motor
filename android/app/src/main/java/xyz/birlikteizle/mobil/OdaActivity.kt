@@ -163,7 +163,18 @@ class OdaActivity : AppCompatActivity() {
                 .filter { !it.isEncoder && it.supportedTypes.any { t -> t.equals(mime, true) } }
                 .maxOfOrNull { it.getCapabilitiesForType(mime).videoCapabilities.supportedHeights.upper } ?: 0
         }.getOrDefault(0)
+        // Ses çözücüleri: yoksa sayfa o kaynakta uyarı gösteriyor (ses dönüştürülerek açılır).
+        val cozuculer = runCatching {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.filter { !it.isEncoder }
+                .flatMap { it.supportedTypes.map { t -> t.lowercase() } }.toSet()
+        }.getOrDefault(emptySet())
+        val ses = JSONObject()
+            .put("ac3", "audio/ac3" in cozuculer)
+            .put("eac3", "audio/eac3" in cozuculer)
+            .put("dts", "audio/vnd.dts" in cozuculer || "audio/vnd.dts.hd" in cozuculer)
+            .put("truehd", "audio/true-hd" in cozuculer)
         val bilgi = JSONObject()
+            .put("ses", ses)
             .put("hevc", enBuyuk(MimeTypes.VIDEO_H265))
             .put("h264", enBuyuk(MimeTypes.VIDEO_H264))
             .put("av1", enBuyuk(MimeTypes.VIDEO_AV1))
