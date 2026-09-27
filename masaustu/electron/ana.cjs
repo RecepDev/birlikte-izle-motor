@@ -159,8 +159,9 @@ function altyaziStilUygula() {
     'sub-back-color': `#${iki(alfa)}000000`,
     // Altyazı pencereye değil videonun kendisine göre yerleşsin: siyah boşluklar
     // pencere boyutuyla değiştiği için tam ekran/pencere arasında yeri kayıyordu.
-    'sub-use-margins': false,
-    'sub-ass-force-margins': false,
+    // %100'ün üstü videonun altındaki siyah boşluğa iniyor; ancak o zaman pencere kenarları kullanılıyor.
+    'sub-use-margins': (Number(s.line) || 100) > 100,
+    'sub-ass-force-margins': (Number(s.line) || 100) > 100,
   };
   for (const [ad, deger] of Object.entries(ayar)) mpv.set(ad, deger).catch((e) => console.error('altyazi-stil', ad, e.message));
   // Konum %2.5 adımlarla gidiyor; eski mpv sub-pos'u yalnızca tam sayı kabul ediyor.

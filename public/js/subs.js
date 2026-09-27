@@ -93,7 +93,8 @@ export function createSubs({
     overlay.style.fontSize = `${px}px`;
     overlay.style.setProperty('--sub-bg', `rgba(0, 0, 0, ${bg})`);
     overlay.style.setProperty('--sub-shadow', OUTLINES[outline][1]);
-    overlay.style.bottom = `${100 - (line ?? DEFAULT_LINE)}%`;
+    // 100'ün üstü masaüstünde videonun altındaki siyah boşluğa iner; tarayıcıda alt kenarda kalır.
+    overlay.style.bottom = `${Math.max(0, 100 - (line ?? DEFAULT_LINE))}%`;
     window.masaustuAltyazi?.stil({ size, bg: Number(bg), outline, line: line ?? DEFAULT_LINE });
   }
   new ResizeObserver(applyStyle).observe(playerEl);
@@ -154,7 +155,7 @@ export function createSubs({
   }
 
   function moveLine(delta) {
-    line = delta === null ? null : Math.round(Math.min(100, Math.max(5, (line ?? DEFAULT_LINE) + delta)) * 10) / 10;
+    line = delta === null ? null : Math.round(Math.min(150, Math.max(0, (line ?? DEFAULT_LINE) + delta)) * 10) / 10;
     storage.set('cueLine', line === null ? '' : String(line));
     applyLine();
     render();
