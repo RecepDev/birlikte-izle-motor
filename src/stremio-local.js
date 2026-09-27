@@ -3,7 +3,10 @@
 
 import { STREMIO_BASE, torrentPath, localTorrentUrl } from '../public/js/shared/stream-url.js';
 
+const REMOVE_GAP_MS = 20_000;
+
 export function createStremioLocal({ base = STREMIO_BASE, fetchImpl = fetch, timeoutMs = 2000 } = {}) {
+  const kapatilan = new Map(); // infoHash -> son kapatma isteği
   // Live torrent stats from the host's Stremio; null when it has not opened the torrent.
   async function fetchStats(stream) {
     try {
@@ -47,7 +50,15 @@ export function createStremioLocal({ base = STREMIO_BASE, fetchImpl = fetch, tim
 
     // Closes the torrent in the host's Stremio. Stremio never closes one on its own, so
     // every torrent a check opens would otherwise keep downloading in the background.
+    // Aynı torrent'i kısa aralıkla iki kez kapatma: Stremio'nun dosya deposu ikinci kapatmada
+    // fs.close(null) çağırıp çöküyor ("The streaming server exited", ERR_INVALID_ARG_TYPE).
+    // Oda açılınca birden çok temizleyici aynı torrent'i aynı anda kapatıyordu.
     async removeTorrent(stream) {
+      const h = stream?.infoHash;
+      const once = kapatilan.get(h);
+      if (once && Date.now() - once < REMOVE_GAP_MS) return true;
+      kapatilan.set(h, Date.now());
+      for (const [k, t] of kapatilan) if (Date.now() - t > REMOVE_GAP_MS) kapatilan.delete(k);
       try {
         const res = await fetchImpl(`${base}/${stream.infoHash}/remove`, { signal: AbortSignal.timeout(timeoutMs) });
         return res.ok;
