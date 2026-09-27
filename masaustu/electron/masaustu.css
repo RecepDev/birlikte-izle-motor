@@ -60,23 +60,8 @@ html, body { overflow: hidden !important; }
 /* Videonun üstüne binen ve masaüstünde işe yaramayan katmanlar.
    Uyumlu mod gerekmiyor: mpv her biçimi kendi çözüyor. */
 .compat-popover { display: none !important; }
-/* İzleyici katmanı videonun üstüne çizilemiyor: yalnızca kaynak bilgisini,
-   videonun sol üstünde kendi satırında tutuyoruz. */
-.viewers-ov {
-  position: static !important;
-  order: -1;
-  align-self: flex-start !important;
-  background: none !important;
-  padding: 0 !important;
-}
-.viewers-ov[hidden] { display: none !important; }
-#viewers-toggle, #viewers-list { display: none !important; }
-#picture-info { position: static !important; }
-/* Tıklayınca kaybolmasın, küçülsün: izleyici düğmesi masaüstünde gizli olduğu için
-   tamamen kapanırsa geri açmanın yolu kalmıyordu. Küçükken yalnızca ilk satır görünür. */
-.viewers-ov.collapsed .pic-info:not([hidden]) { display: block !important; }
-.viewers-ov.collapsed .pic-info > :not(:first-child) { display: none !important; }
-.viewers-ov.collapsed .pic-info::after { content: ' ▸'; opacity: .6; }
+/* İzleyici katmanı videonun üstüne çizilemiyor; kaynak bilgisi kontrol çubuğundaki 📶 kutusunda. */
+.viewers-ov { display: none !important; }
 /* Altyazıyı mpv çiziyor; sayfanın katmanı boş bir kutu olarak görünüyordu. */
 .sub-overlay { display: none !important; }
 #btn-compat { display: none !important; }
@@ -99,10 +84,10 @@ html, body { overflow: hidden !important; }
 }
 @keyframes mpv-don { to { transform: rotate(360deg); } }
 
-/* Tam ekran Altyazı/Dil kutusu videonun üstünde durur: mpv penceresinde kutu kadar
-   delik açılıyor (bkz. ana.cjs delikAc), video küçülmüyor. */
-/* Delik dikdörtgen: yuvarlak köşe ve gölge deliğin kenarlarında siyah bırakıyordu. */
-.player.subs-panel-open > .tab-body[data-tab="subs"] {
+/* Kontrol kutuları videonun üstünde durur: mpv penceresinde kutu kadar delik açılıyor
+   (bkz. ana.cjs delikAc), video küçülmüyor. Delik dikdörtgen: yuvarlak köşe ve gölge
+   deliğin kenarlarında siyah bırakıyordu. */
+.player > .ctl-pop {
   z-index: 5; border-radius: 0 !important; box-shadow: none !important;
   background: rgb(20, 22, 29) !important;
 }

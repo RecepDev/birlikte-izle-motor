@@ -111,7 +111,10 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
       const { meta } = await getJson(`${CINEMETA}/meta/series/${id}.json`, metaTimeoutMs);
       return (meta?.videos || [])
         .filter((v) => Number.isInteger(v.season) && Number.isInteger(v.episode))
-        .map((v) => ({ season: v.season, episode: v.episode, name: v.name || v.title || `Bölüm ${v.episode}` }));
+        .map((v) => ({
+          season: v.season, episode: v.episode, name: v.name || v.title || `Bölüm ${v.episode}`,
+          thumbnail: v.thumbnail || null, released: v.released || v.firstAired || null,
+        }));
     },
 
     async meta(type, id) {

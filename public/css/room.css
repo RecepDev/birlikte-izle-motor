@@ -370,19 +370,53 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .chip.unknown { color: var(--muted); }
 .compat-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
-/* Tam ekranda Altyazı/Dil kutusu: Stremio'daki gibi sağ altta, kontrollerin üstünde, kendi
-   içinde kayan bir kutu. Telefonda ve tarayıcıda videonun üstünde yüzüyor. */
-.player.subs-panel-open { --subs-panel-w: min(640px, 55vw); --subs-panel-h: min(380px, 52vh); }
-.player.subs-panel-open > .tab-body[data-tab="subs"] {
-  position: absolute; right: 16px; bottom: 100px; width: var(--subs-panel-w); max-height: var(--subs-panel-h);
+/* Kontrol çubuğu kutuları (Stremio düzeni): sağ altta, kontrollerin üstünde, kendi içinde
+   kayan kutu. Altyazı/Dil ve Sohbet sekmeleri de yan panel görünmüyorsa buraya taşınıyor. */
+.player { --pop-w: min(640px, calc(100% - 32px)); --pop-h: min(420px, calc(100% - 130px)); }
+.player > .ctl-pop {
+  position: absolute; right: 16px; bottom: 100px; width: var(--pop-w); max-height: var(--pop-h);
   overflow-y: auto; overscroll-behavior: contain;
-  background: rgba(20, 22, 29, .96); border: 1px solid var(--line); border-radius: 14px;
+  background: rgba(20, 22, 29, .97); border: 1px solid var(--line); border-radius: 14px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .55);
   padding: 12px 14px; z-index: 30; font-size: 13px;
 }
-.player.subs-panel-open > .tab-body[data-tab="subs"] .row { gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
-.player.subs-panel-open > .tab-body[data-tab="subs"] button { padding: 3px 8px; font-size: 12px; }
-.player.subs-panel-open > .tab-body[data-tab="subs"] ul { margin: 0 0 6px; }
-.player.subs-panel-open > .tab-body[data-tab="subs"] li button { padding: 6px 10px; }
-.player.subs-panel-open > .tab-body[data-tab="subs"] h3 { margin: 8px 0 4px; font-size: 12px; }
-.player.subs-panel-open > .tab-body[data-tab="subs"] select { font-size: 12px; }
+.player > .ctl-pop[hidden] { display: none; }
+.player > .ctl-pop-dar { width: min(300px, calc(100% - 32px)); }
+.player > .ctl-pop h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.player > .tab-body.ctl-pop .row { gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
+.player > .tab-body.ctl-pop button { padding: 3px 8px; font-size: 12px; }
+.player > .tab-body.ctl-pop ul { margin: 0 0 6px; }
+.player > .tab-body.ctl-pop li button { padding: 6px 10px; }
+.player > .tab-body.ctl-pop h3 { margin: 8px 0 4px; font-size: 12px; }
+.player > .tab-body.ctl-pop select { font-size: 12px; }
+.player > .tab-body[data-tab="chat"].ctl-pop { display: flex; flex-direction: column; height: var(--pop-h); overflow: hidden; }
+.player > .tab-body[data-tab="chat"].ctl-pop .chat { flex: 1; min-height: 0; overflow-y: auto; }
+.ctl.active-pop { color: var(--accent-2); }
+#pop-info .pic-info { font-size: 13px; line-height: 1.6; color: var(--text); }
+#pop-info .pic-info b { color: var(--text); }
+#picture-info:not([hidden]) + #pic-info-bos { display: none; }
+.pop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.pop-list button { width: 100%; text-align: left; padding: 8px 10px; background: transparent; border: 1px solid transparent; border-radius: 8px; }
+.pop-list button:hover:not(:disabled) { background: var(--panel-2); }
+.pop-list button.current { border-color: var(--accent); background: #1d1a33; }
+.pop-list button:disabled { opacity: .45; }
+.pop-menu button { display: flex; gap: 12px; align-items: center; font-size: 14px; }
+.pop-ic { width: 20px; text-align: center; }
+.ep-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.ep-head button { background: transparent; border: none; color: var(--muted); padding: 4px 6px; }
+.ep-head button:disabled { opacity: .35; }
+.ep-head select { background: transparent; color: var(--text); border: none; font-size: 14px; }
+.ep-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ep-list li { display: flex; gap: 12px; align-items: center; padding: 4px; border-radius: 8px; }
+.ep-list li.secilebilir { cursor: pointer; }
+.ep-list li.secilebilir:hover { background: var(--panel-2); }
+.ep-list li.current { background: #1d1a33; outline: 1px solid var(--accent); }
+.ep-list img, .ep-bos { width: 112px; height: 63px; object-fit: cover; border-radius: 6px; flex: none; background: #0d0e12; }
+.ep-ad { font-size: 14px; }
+.ep-tarih { font-size: 12px; color: var(--muted); margin-top: 4px; }
+@media (max-width: 600px) {
+  .player > .ctl-pop { right: 8px; bottom: 90px; }
+  .ep-list img, .ep-bos { width: 88px; height: 50px; }
+  .ctl-row { gap: 0; }
+  .ctl-row .ctl { min-width: 36px; padding: 4px; font-size: 16px; }
+}

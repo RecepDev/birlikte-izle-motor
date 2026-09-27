@@ -226,9 +226,8 @@ socketCtl = attachSocket(io, {
         return { reply: { ok: true, results: [...movies, ...series].slice(0, 24) }, msgs: [] };
       },
       // Host picked a series in search: season/episode list for the picker.
+      // Misafirler de görebilir (oynatıcıdaki Bölümler kutusu); bölümü yine yalnızca host değiştirir.
       seriesEpisodes: async (room, uid, p) => {
-        const denied = room.requireHost(uid);
-        if (denied) return denied;
         const id = String(p?.id || '');
         if (!isContentId(id)) return { error: 'badContent' };
         const episodes = await addons.seriesEpisodes(id).catch(() => []);

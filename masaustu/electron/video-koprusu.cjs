@@ -197,6 +197,12 @@ window.masaustuSesGecikme = (saniye) => {
   ipcRenderer.send('mpv:ozellik', 'audio-delay', deger);
 };
 
+// ⋯ menüsü: VLC'de açma (bulunamazsa false) ve indirme (Electron'un kaydetme penceresi).
+window.masaustuHarici = {
+  vlc: (url, ad, saniye) => ipcRenderer.invoke('kabuk:vlc', String(url), String(ad || ''), Number(saniye) || 0),
+  indir: (url) => ipcRenderer.send('kabuk:indir', String(url)),
+};
+
 // Host odayı kapattı: açılış ekranına dön (oynatma durur).
 window.masaustuOdaKapandi = () => ipcRenderer.send('kabuk:baslangic');
 

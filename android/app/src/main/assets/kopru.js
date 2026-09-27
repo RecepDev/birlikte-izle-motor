@@ -325,6 +325,13 @@
 
   // Host odayı kapattı: açılış ekranına dön.
   window.masaustuOdaKapandi = () => A.odaKapandi?.();
+  // ⋯ menüsü: VLC'de aç / indir (APK 0.10 ve sonrası). Eski APK'da sayfanın kendi yolu kalır.
+  if (A.harici) {
+    window.masaustuHarici = {
+      vlc: (url, ad) => { A.harici(String(url), 'vlc', String(ad || '')); return Promise.resolve(true); },
+      indir: (url, ad) => A.harici(String(url), 'indir', String(ad || '')),
+    };
+  }
 
   // ---- ses parçaları ---------------------------------------------------------------
   let sesler = [];

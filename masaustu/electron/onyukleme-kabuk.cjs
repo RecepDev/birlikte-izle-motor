@@ -37,9 +37,9 @@ function olcumKur() {
       bekleyen = false;
       const r = alan.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return;
-      // Tam ekran Altyazı/Dil kutusu açıksa mpv penceresinde o kutu kadar delik açılıyor:
-      // video küçülmüyor, altyazının yeri kutu kapanınca da aynı kalıyor.
-      const k = document.querySelector('.player.subs-panel-open > .tab-body[data-tab="subs"]')?.getBoundingClientRect();
+      // Kontrol çubuğunun bir kutusu (altyazı, sohbet, bölümler…) açıksa mpv penceresinde
+      // o kutu kadar delik açılıyor: video küçülmüyor, altyazının yeri de değişmiyor.
+      const k = document.querySelector('.player > .ctl-pop:not([hidden])')?.getBoundingClientRect();
       const delik = k && k.width > 0 && k.height > 0 ? { x: k.x, y: k.y, width: k.width, height: k.height } : null;
       const olcu = [r.x, r.y, r.width, r.height, delik?.x, delik?.y, delik?.width, delik?.height].map((n) => Math.round(n ?? -1)).join('|');
       if (olcu === son) return;
@@ -48,10 +48,11 @@ function olcumKur() {
     });
   };
   new ResizeObserver(bildir).observe(alan);
-  const altyaziKutusu = document.querySelector('.tab-body[data-tab="subs"]');
-  if (altyaziKutusu) new ResizeObserver(bildir).observe(altyaziKutusu);
+  const kutuGozcusu = new ResizeObserver(bildir);
+  for (const k of document.querySelectorAll('.ctl-pop, .tab-body[data-tab="subs"], .tab-body[data-tab="chat"]')) kutuGozcusu.observe(k);
   const oynatici = alan.closest('.player');
-  if (oynatici) new MutationObserver(bildir).observe(oynatici, { attributes: true, attributeFilter: ['class'] });
+  // Kutular açılıp kapanınca ve sekmeler oynatıcıya taşınınca.
+  if (oynatici) new MutationObserver(bildir).observe(oynatici, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
   ipcRenderer.on('kabuk:olcum-iste', bildir);
   window.addEventListener('scroll', bildir, true);
   bildir();

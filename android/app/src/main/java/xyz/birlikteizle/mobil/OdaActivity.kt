@@ -386,6 +386,28 @@ class OdaActivity : AppCompatActivity() {
         // Tam ekran: yatay çevir, sistem çubuklarını gizle. Sayfa da oynatıcıyı ekrana yayıyor.
         @JavascriptInterface
         fun tamEkran(acik: Boolean) = ana.post { tamEkranUygula(acik) }
+
+        // ⋯ menüsü: "VLC'de aç" (VLC yoksa video açan başka uygulama) ve "indir".
+        @JavascriptInterface
+        fun harici(url: String, tur: String, ad: String) = ana.post {
+            val adres = Uri.parse(url)
+            if (tur == "indir") {
+                runCatching {
+                    val dosya = ad.ifBlank { "video" }.replace(Regex("[\\\\/:*?\"<>|]+"), " ").trim() + ".mkv"
+                    val istek = android.app.DownloadManager.Request(adres)
+                        .setTitle(ad.ifBlank { "Birlikte İzle" })
+                        .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, dosya)
+                    (getSystemService(DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(istek)
+                }.onSuccess { android.widget.Toast.makeText(this@OdaActivity, "İndirme başladı (bildirimlerde)", android.widget.Toast.LENGTH_SHORT).show() }
+                    .onFailure { android.widget.Toast.makeText(this@OdaActivity, "İndirilemedi: ${it.message}", android.widget.Toast.LENGTH_LONG).show() }
+                return@post
+            }
+            val niyet = Intent(Intent.ACTION_VIEW).setDataAndType(adres, "video/*").putExtra("title", ad)
+            runCatching { startActivity(Intent(niyet).setPackage("org.videolan.vlc")) }
+                .recoverCatching { startActivity(Intent.createChooser(niyet, "Şununla aç")) }
+                .onFailure { android.widget.Toast.makeText(this@OdaActivity, "Videoyu açabilecek uygulama yok", android.widget.Toast.LENGTH_LONG).show() }
+        }
     }
 
     private fun tamEkranUygula(acik: Boolean) {

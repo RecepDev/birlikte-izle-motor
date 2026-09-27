@@ -77,7 +77,6 @@
             <button id="banner-skip" type="button" hidden>Beklemeden devam et</button>
           </div>
           <div id="viewers-ov" class="viewers-ov">
-            <div id="picture-info" class="pic-info" hidden></div>
             <button id="viewers-toggle" type="button" title="İzleyicileri göster/gizle">👥 <span id="viewers-count">0</span></button>
             <ul id="viewers-list"></ul>
           </div>
@@ -94,6 +93,10 @@
               <div id="notice-actions" class="notice-actions"></div>
             </div>
           </div>
+          <div id="pop-info" class="ctl-pop" hidden><h3>Hız ve kaynak</h3><div id="picture-info" class="pic-info" hidden></div><p id="pic-info-bos" class="muted small">Video yüklenince burada görünür.</p></div>
+          <div id="pop-audio" class="ctl-pop ctl-pop-dar" hidden></div>
+          <div id="pop-episodes" class="ctl-pop" hidden></div>
+          <div id="pop-more" class="ctl-pop ctl-pop-dar" hidden></div>
           <div class="controls">
             <div class="seek-row">
               <span id="time" class="time">0:00</span>
@@ -105,13 +108,19 @@
             </div>
             <div class="ctl-row">
             <button id="btn-play" type="button" class="ctl" aria-label="Oynat">▶</button>
+            <button id="btn-next" type="button" class="ctl" hidden title="Sonraki bölüm" aria-label="Sonraki bölüm">⏭</button>
             <button id="btn-mute" type="button" class="ctl" aria-label="Sessiz">🔊</button>
             <input id="volume" class="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="Ses">
             <span class="ctl-bosluk"></span>
             <button id="btn-compat" type="button" class="ctl" aria-label="Uyumlu mod" title="Uyumlu mod">🛠</button>
+            <button id="btn-info" type="button" class="ctl" data-pop="pop-info" title="Hız ve kaynak bilgisi" aria-label="Hız ve kaynak bilgisi">📶</button>
             <button id="btn-aspect" type="button" class="ctl aspect-btn" title="Görüntü oranı (Sığdır / Doldur / Uzat / 16:9 / 4:3 / 21:9)">Sığdır</button>
-            <button id="btn-subs-panel" type="button" class="ctl" hidden title="Altyazı / Dil ayarları" aria-label="Altyazı / Dil ayarları">💬</button>
+            <button id="btn-audio" type="button" class="ctl" data-pop="pop-audio" hidden title="Ses dili" aria-label="Ses dili">🎧</button>
+            <button id="btn-subs-panel" type="button" class="ctl" title="Altyazı / Dil ayarları" aria-label="Altyazı / Dil ayarları">🔤</button>
+            <button id="btn-chat" type="button" class="ctl" title="Sohbet" aria-label="Sohbet">💬</button>
+            <button id="btn-episodes" type="button" class="ctl" data-pop="pop-episodes" hidden title="Bölümler" aria-label="Bölümler">☰</button>
             <button id="btn-fs" type="button" class="ctl" aria-label="Tam ekran">⛶</button>
+            <button id="btn-more" type="button" class="ctl" data-pop="pop-more" title="Diğer" aria-label="Diğer">⋯</button>
             </div>
           </div>
         </div>

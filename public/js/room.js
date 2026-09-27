@@ -1317,27 +1317,210 @@ function toggleFullscreen() {
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 
-// Tam ekranda Altyazı/Dil sekmesi: yan panel görünmediği için sekmeyi oynatıcının içine,
-// sağ sütuna taşıyoruz. Video kalan alana sığıyor; tam ekrandan çıkınca yerine dönüyor.
-const subsBody = document.querySelector('.tab-body[data-tab="subs"]');
-const subsHome = { parent: subsBody.parentElement, next: subsBody.nextElementSibling };
-function setSubsPanel(open) {
-  playerEl.classList.toggle('subs-panel-open', open);
-  if (open) {
-    playerEl.append(subsBody);
-    subsBody.hidden = false;
-    subs?.rerender();
-  } else if (subsBody.parentElement === playerEl) {
-    subsHome.parent.insertBefore(subsBody, subsHome.next);
-    subsBody.hidden = !document.querySelector('.tabs button[data-tab="subs"]')?.classList.contains('active');
-  }
+// ---- kontrol çubuğu kutuları (Stremio düzeni) ----
+// Altyazı/Dil ve Sohbet: yan panel görünüyorsa o sekmeye geçer; görünmüyorsa (tam ekran,
+// telefonda yatay) sekmenin kendisi oynatıcının içine, sağ alttaki kutuya taşınır.
+// Diğer kutular (bilgi, ses dili, bölümler, ⋯) her zaman oynatıcının üstünde açılır.
+const tabBodies = {};
+for (const name of ['subs', 'chat']) {
+  const body = document.querySelector(`.tab-body[data-tab="${name}"]`);
+  tabBodies[name] = { body, parent: body.parentElement, next: body.nextElementSibling };
 }
-$('#btn-subs-panel').addEventListener('click', () => setSubsPanel(!playerEl.classList.contains('subs-panel-open')));
-document.addEventListener('fullscreenchange', () => {
-  const full = Boolean(document.fullscreenElement);
-  $('#btn-subs-panel').hidden = !full;
-  if (!full) setSubsPanel(false);
+let openPop = null;
+function sideVisible() {
+  const side = document.querySelector('.side');
+  return Boolean(side && side.offsetParent !== null && !document.fullscreenElement);
+}
+function returnTab(name) {
+  const t = tabBodies[name];
+  if (t.body.parentElement !== playerEl) return;
+  t.body.classList.remove('ctl-pop');
+  t.parent.insertBefore(t.body, t.next);
+  t.body.hidden = !document.querySelector(`.tabs button[data-tab="${name}"]`)?.classList.contains('active');
+}
+function closePops() {
+  for (const p of document.querySelectorAll('.player > .ctl-pop[id^="pop-"]')) p.hidden = true;
+  returnTab('subs');
+  returnTab('chat');
+  for (const b of document.querySelectorAll('.ctl-row .ctl.active-pop')) b.classList.remove('active-pop');
+  openPop = null;
+}
+function togglePop(name, button) {
+  const again = openPop === name;
+  closePops();
+  if (again) return;
+  if (tabBodies[name]) {
+    if (sideVisible()) {
+      document.querySelector(`.tabs button[data-tab="${name}"]`)?.click();
+      return;
+    }
+    const { body } = tabBodies[name];
+    body.classList.add('ctl-pop');
+    playerEl.append(body);
+    body.hidden = false;
+    if (name === 'subs') subs?.rerender();
+    if (name === 'chat') $('#chat-list').scrollTop = $('#chat-list').scrollHeight;
+  } else {
+    POP_RENDER[name]?.(true);
+    $(`#${name}`).hidden = false;
+  }
+  openPop = name;
+  button?.classList.add('active-pop');
+}
+$('#btn-subs-panel').addEventListener('click', (e) => togglePop('subs', e.currentTarget));
+$('#btn-chat').addEventListener('click', (e) => togglePop('chat', e.currentTarget));
+for (const b of document.querySelectorAll('.ctl-row [data-pop]')) b.addEventListener('click', () => togglePop(b.dataset.pop, b));
+document.addEventListener('fullscreenchange', closePops);
+// Kutunun ve düğmelerin dışına tıklayınca kapanır.
+document.addEventListener('pointerdown', (e) => {
+  if (openPop && !e.target.closest('.player > .ctl-pop, .ctl-row, dialog')) closePops();
 });
+
+// Ses dili: dosyada birden fazla ses parçası varsa düğme görünür.
+function renderAudioPop() {
+  const tracks = audioTracksList();
+  $('#pop-audio').replaceChildren(
+    el('h3', { text: 'Ses dili' }),
+    el('ul', { class: 'pop-list' }, ...tracks.map((t) => el('li', {},
+      el('button', {
+        type: 'button', class: t.active ? 'current' : '', text: t.label,
+        onclick: () => { selectAudioTrack(t.id); setTimeout(renderAudioPop, 300); },
+      })))),
+  );
+}
+
+// Bölümler (dizide): sezon seçici ve resimli bölüm listesi; host tıklayınca bölüm değişir.
+let episodesCache = null;
+let popSeason = null;
+async function loadEpisodes(force = false) {
+  const series = currentSeries();
+  if (!series) return null;
+  if (!force && episodesCache?.id === series.id) return episodesCache;
+  const res = await request('seriesEpisodes', { id: series.id });
+  if (res?.error) return episodesCache?.id === series.id ? episodesCache : null;
+  episodesCache = { id: series.id, episodes: res.episodes, watched: new Set(res.watched || []) };
+  return episodesCache;
+}
+async function renderEpisodesPop(refresh = false) {
+  const box = $('#pop-episodes');
+  const series = currentSeries();
+  if (!series) return box.replaceChildren(el('p', { class: 'muted', text: 'Bu bir dizi değil.' }));
+  if (episodesCache?.id !== series.id) box.replaceChildren(el('p', { class: 'muted', text: 'Bölümler yükleniyor…' }));
+  const data = await loadEpisodes(refresh);
+  if (!data) return box.replaceChildren(el('p', { class: 'muted', text: 'Bölüm listesi alınamadı.' }));
+  const seasons = [...new Set(data.episodes.map((e) => e.season))].sort((a, b) => (a === 0 ? 1 : b === 0 ? -1 : a - b));
+  if (refresh || !seasons.includes(popSeason)) popSeason = seasons.includes(series.season) ? series.season : seasons[0];
+  const i = seasons.indexOf(popSeason);
+  const go = (d) => { popSeason = seasons[i + d]; renderEpisodesPop(); };
+  const seasonName = (n) => (n === 0 ? 'Özel' : `Sezon ${n}`);
+  const host = isHost();
+  const list = el('ul', { class: 'ep-list' }, ...data.episodes.filter((e) => e.season === popSeason).map((ep) => {
+    const playing = ep.season === series.season && ep.episode === series.episode;
+    const seen = data.watched.has(`${ep.season}:${ep.episode}`);
+    const date = ep.released ? new Date(ep.released).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const li = el('li', { class: [playing ? 'current' : '', host && !playing ? 'secilebilir' : ''].join(' ') },
+      ep.thumbnail ? el('img', { src: ep.thumbnail, alt: '', loading: 'lazy' }) : el('div', { class: 'ep-bos' }),
+      el('div', { class: 'ep-bilgi' },
+        el('div', { class: 'ep-ad', text: `${ep.episode}. ${ep.name}` }),
+        el('div', { class: 'ep-tarih', text: [date, playing ? '▶ şu an' : seen ? '✓ izlendi' : ''].filter(Boolean).join(' · ') })));
+    if (host && !playing) li.addEventListener('click', () => { closePops(); changeEpisode(series.id, ep); });
+    return li;
+  }));
+  box.replaceChildren(
+    el('h3', { text: `📺 ${series.name}` }),
+    el('div', { class: 'ep-head' },
+      el('button', { type: 'button', text: '‹ Önceki', disabled: i <= 0, onclick: () => go(-1) }),
+      el('select', { onchange: (e) => { popSeason = Number(e.target.value); renderEpisodesPop(); } },
+        ...seasons.map((n) => el('option', { value: String(n), selected: n === popSeason }, seasonName(n)))),
+      el('button', { type: 'button', text: 'Sonraki ›', disabled: i >= seasons.length - 1, onclick: () => go(1) })),
+    list,
+    host ? null : el('p', { class: 'muted small', text: 'Bölümü host değiştirebilir.' }),
+  );
+  const cur = list.querySelector('.current');
+  if (cur) box.scrollTop = cur.offsetTop - box.clientHeight / 2;
+}
+async function changeEpisode(id, ep) {
+  toast(`${ep.season}. sezon ${ep.episode}. bölüm açılıyor…`);
+  const res = await request('changeContent', { type: 'series', id: `${id}:${ep.season}:${ep.episode}` });
+  if (res?.error) toast(errorText(res.error));
+}
+// Oynat düğmesinin yanındaki ⏭: dizinin sıradaki bölümü (sezon geçişi dahil, özel bölümler hariç).
+$('#btn-next').addEventListener('click', async () => {
+  const series = currentSeries();
+  const data = series && (await loadEpisodes());
+  if (!data) return toast('Bölüm listesi alınamadı.');
+  const eps = data.episodes.filter((e) => e.season !== 0).sort((a, b) => a.season - b.season || a.episode - b.episode);
+  const i = eps.findIndex((e) => e.season === series.season && e.episode === series.episode);
+  const next = i >= 0 ? eps[i + 1] : null;
+  if (!next) return toast('Sonraki bölüm yok.');
+  changeEpisode(series.id, next);
+});
+function renderCtlButtons() {
+  const series = currentSeries();
+  $('#btn-episodes').hidden = !series;
+  $('#btn-next').hidden = !series || !isHost();
+  $('#btn-audio').hidden = audioTracksList().length < 2;
+}
+setInterval(renderCtlButtons, 1000);
+
+// ⋯ menüsü: yayın/magnet linki, indirme, VLC'de açma.
+function streamLink() {
+  const s = myStream();
+  if (!s) return null;
+  if (s.kind === 'torrent') {
+    if (player.status().source === 'relay' && state.relayKey) return `${location.origin}/relay/${roomId}/${state.relayKey}${torrentPath(s)}`;
+    return `${STREMIO_BASE}${torrentPath(s)}`;
+  }
+  return s.url ? new URL(s.url, location.href).href : null;
+}
+function magnetLink() {
+  const s = myStream();
+  if (s?.kind !== 'torrent' || !s.infoHash) return null;
+  const name = state.room?.meta?.name;
+  return `magnet:?xt=urn:btih:${s.infoHash}${name ? `&dn=${encodeURIComponent(name)}` : ''}`;
+}
+function titleForFile() {
+  return String(state.room?.meta?.name || 'video').replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'video';
+}
+async function playInVlc() {
+  const url = streamLink();
+  if (!url) return toast('Açık bir video yok.');
+  if (window.masaustuHarici) {
+    const ok = await window.masaustuHarici.vlc(url, titleForFile(), video.currentTime || 0);
+    if (!ok) toast("VLC bulunamadı. videolan.org'dan kurabilirsin.", 6000);
+    return;
+  }
+  // Tarayıcı: VLC'nin açtığı .m3u listesi indiriliyor (Stremio da böyle yapıyor).
+  const blob = new Blob([`#EXTM3U\n#EXTINF:-1,${titleForFile()}\n${url}\n`], { type: 'audio/x-mpegurl' });
+  const a = el('a', { href: URL.createObjectURL(blob), download: `${titleForFile()}.m3u` });
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+function downloadVideo() {
+  const url = streamLink();
+  if (!url) return toast('Açık bir video yok.');
+  if (window.masaustuHarici) return window.masaustuHarici.indir(url, titleForFile());
+  window.open(url, '_blank', 'noopener');
+}
+function renderMorePop() {
+  const item = (icon, text, fn, disabled = false) => el('li', {},
+    el('button', { type: 'button', disabled, onclick: () => { closePops(); fn(); } }, el('span', { class: 'pop-ic', text: icon }), text));
+  const link = streamLink();
+  const magnet = magnetLink();
+  $('#pop-more').replaceChildren(el('ul', { class: 'pop-list pop-menu' },
+    item('🔗', 'Yayın linkini kopyala', async () => { if (await copyText(link)) toast('Yayın linki kopyalandı.'); }, !link),
+    item('🧲', 'Magnet linkini kopyala', async () => { if (await copyText(magnet)) toast('Magnet linki kopyalandı.'); }, !magnet),
+    item('⬇️', 'Bu videoyu indir', downloadVideo, !link),
+    item('🔶', "VLC'de aç", playInVlc, !link)));
+}
+
+const POP_RENDER = {
+  'pop-info': () => renderPictureInfo(),
+  'pop-audio': renderAudioPop,
+  'pop-episodes': renderEpisodesPop,
+  'pop-more': renderMorePop,
+};
 video.addEventListener('dblclick', toggleFullscreen);
 
 // ---- content search (host only): switch the room to a different title ----
@@ -1790,9 +1973,6 @@ function toggleViewersOv() {
   storage.set('viewersCollapsed', ov.classList.contains('collapsed') ? '1' : '0');
 }
 $('#viewers-toggle').addEventListener('click', toggleViewersOv);
-// Tapping the picture-info box itself also collapses it: on phones it sits over
-// the video and blocks it until dismissed.
-$('#picture-info').addEventListener('click', toggleViewersOv);
 $('#viewers-ov').classList.toggle('collapsed', (storage.get('viewersCollapsed') ?? (isTouch ? '1' : '0')) === '1');
 $('#banner-skip').addEventListener('click', async () => {
   const res = await request('skipWaiting');

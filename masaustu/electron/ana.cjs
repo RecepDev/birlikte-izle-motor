@@ -618,6 +618,29 @@ app.whenReady().then(() => {
     sesleriYolla();
   });
   ipcMain.on('mpv:altyazi-gecikme', (_e, saniye) => mpv?.set('sub-delay', Number(saniye) || 0).catch(() => {}));
+  ipcMain.handle('kabuk:vlc', (_e, url, ad, saniye) => {
+    const vlc = [
+      process.env.VLC_YOLU,
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'VideoLAN', 'VLC', 'vlc.exe'),
+      path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'VideoLAN', 'VLC', 'vlc.exe'),
+    ].find((p) => p && fs.existsSync(p));
+    if (!vlc || !/^https?:\/\//.test(url)) return false;
+    const args = [url, `--meta-title=${ad}`];
+    if (saniye > 5) args.push(`--start-time=${Math.floor(saniye)}`);
+    // Sessiz kalmamalı: VLC açılamazsa sebebi konsolda görünsün.
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    try {
+      require('node:child_process').spawn(vlc, args, { detached: true, stdio: 'ignore', env }).unref();
+      return true;
+    } catch (e) {
+      console.error('vlc:', e.message);
+      return false;
+    }
+  });
+  ipcMain.on('kabuk:indir', (_e, url) => {
+    if (/^https?:\/\//.test(url)) ana?.webContents.downloadURL(url);
+  });
   ipcMain.on('mpv:altyazi-stil', (_e, s) => {
     sonStil = s;
     altyaziStilUygula();
