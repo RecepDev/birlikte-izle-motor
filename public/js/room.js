@@ -1766,8 +1766,15 @@ if ('mediaSession' in navigator) {
 // butonuna basmali. Cagrildigi yer: applySnapshot (ilk baglantida, reconnect'te degil).
 function maybeAutoCheckQuality() {
   if (isTouch || !isHost() || checkingAll) return;
+  // Aynı içerik için yarım saat içinde bir kez: uygulamada odaya sık yeniden giriliyor
+  // (güncelleme sonrası, açık odalar listesi, panelden "Uygulamada gir").
+  const key = `autoScan:${roomId}:${state.room?.contentId}`;
+  const last = Number(storage.get(key)) || 0;
+  if (Date.now() - last < 30 * 60_000) return;
   const targets = autoScanTargets(state.room?.streams || []);
-  if (targets.length) checkAllInTab(targets);
+  if (!targets.length) return;
+  storage.set(key, String(Date.now()));
+  checkAllInTab(targets);
 }
 
 function selectTab(name) {
