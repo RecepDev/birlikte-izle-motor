@@ -75,10 +75,12 @@
     tanim('volume', () => volume, (v) => {
       volume = Math.max(0, Math.min(1, Number(v) || 0));
       A.ses(muted ? 0 : volume);
+      yolla('volumechange');
     });
     tanim('muted', () => muted, (v) => {
       muted = Boolean(v);
       A.ses(muted ? 0 : volume);
+      yolla('volumechange');
     });
     tanim('src', () => kaynak, (v) => {
       kaynak = String(v || '');
@@ -255,11 +257,10 @@
     const sessiz = document.createElement('button');
     sessiz.type = 'button';
     sessiz.className = 'mobil-ses-sessiz';
-    const yaz = () => { sessiz.textContent = muted || volume === 0 ? '🔇' : '🔈'; };
+    const yaz = () => { sessiz.textContent = muted || volume === 0 ? '🔇' : volume < 0.34 ? '🔈' : volume < 0.67 ? '🔉' : '🔊'; };
     sessiz.addEventListener('click', (e) => {
       e.stopPropagation();
       el.muted = !muted;
-      el.dispatchEvent(new Event('volumechange'));
       yaz();
     });
     kaydirici.addEventListener('input', yaz);

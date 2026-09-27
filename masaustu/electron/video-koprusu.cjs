@@ -79,10 +79,12 @@ function bagla(video) {
     // mpv'nin ses ayarı kübik (%50 = sesin sekizde biri); tarayıcınınki doğrusal.
     // Küpkökünü verince kaydırıcı tarayıcıdaki gibi davranıyor, %50 altında ses kaybolmuyor.
     ipcRenderer.send('mpv:ozellik', 'volume', Math.round(Math.cbrt(volume) * 100));
+    yolla('volumechange');
   });
   tanim('muted', () => muted, (v) => {
     muted = Boolean(v);
     ipcRenderer.send('mpv:ozellik', 'mute', muted);
+    yolla('volumechange');
   });
   // Sayfa kaynağı src ile veriyor; biz bunu mpv'ye yükletiyoruz.
   tanim('src', () => kaynak, (v) => {

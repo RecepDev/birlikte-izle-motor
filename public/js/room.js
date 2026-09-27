@@ -1287,6 +1287,7 @@ video.addEventListener('pause', renderControls);
 const volume = $('#volume');
 video.volume = Number(storage.get('volume') ?? 1);
 volume.value = String(video.volume);
+$('#btn-mute').textContent = volumeIcon(); // kayıtlı düzeye göre başlasın
 volume.addEventListener('input', () => {
   video.volume = Number(volume.value);
   video.muted = video.volume === 0;
@@ -1296,9 +1297,16 @@ volume.addEventListener('input', () => {
 $('#btn-mute').addEventListener('click', () => {
   video.muted = !video.muted;
 });
+// Ses simgesi düzeye göre: 🔇 kapalı, 🔈 kısık, 🔉 orta, 🔊 yüksek.
+function volumeIcon() {
+  const v = video.volume;
+  return video.muted || v === 0 ? '🔇' : v < 0.34 ? '🔈' : v < 0.67 ? '🔉' : '🔊';
+}
 video.addEventListener('volumechange', () => {
-  $('#btn-mute').textContent = video.muted || video.volume === 0 ? '🔇' : '🔊';
+  $('#btn-mute').textContent = volumeIcon();
 });
+// Kaydırıcı sürüklenirken de anında güncellensin (masaüstü/telefon oynatıcısı olayı geç yolluyor).
+$('#volume').addEventListener('input', () => { $('#btn-mute').textContent = volumeIcon(); });
 
 function toggleFullscreen() {
   if (document.fullscreenElement) return document.exitFullscreen();
