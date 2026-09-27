@@ -310,6 +310,9 @@ function altyaziStilUygula() {
     // videoya göre hesaplanıp pencereye çevriliyor (bkz. altyaziKonumUygula).
     'sub-use-margins': true,
     'sub-ass-force-margins': true,
+    // Resim altyazılar (Blu-ray PGS) video alanına kırpılıyordu: siyah boşluğa inince
+    // kayboluyordu. Tüm ekrana yayılınca pencereye göre konumlanıyor (Blu-ray'deki gibi).
+    'stretch-image-subs-to-screen': true,
   };
   for (const [ad, deger] of Object.entries(ayar)) mpv.set(ad, deger).catch((e) => console.error('altyazi-stil', ad, e.message));
   // Konum %2.5 adımlarla gidiyor; eski mpv sub-pos'u yalnızca tam sayı kabul ediyor.

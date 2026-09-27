@@ -2055,13 +2055,34 @@ video.addEventListener('loadedmetadata', fitVideo);
 video.addEventListener('resize', fitVideo);
 video.addEventListener('emptied', fitVideo);
 
-// Info icons: hover shows the text (title); tap/click shows it too (touch screens).
+// Bilgi simgeleri: üzerinde bekleyince title görünüyor; tıklayınca (dokunmatikte de) aynı
+// metin simgenin yanında küçük bir kutuda. Toast kullanılmıyor: açık bir pencerenin
+// (Ayarlar) arkasında kalıyordu. Kutu pencerenin içine ekleniyor ki üstte görünsün.
+let infoTip = null;
+function closeInfoTip() {
+  infoTip?.remove();
+  infoTip = null;
+}
 document.addEventListener('click', (e) => {
   const icon = e.target.closest('.info-i');
-  if (!icon?.title) return;
-  e.preventDefault();
-  toast(icon.title, 7000);
+  if (!icon?.title) {
+    if (!e.target.closest('.info-tip')) closeInfoTip();
+    return;
+  }
+  e.preventDefault(); // label içindeyse kutucuğu işaretlemesin
+  const same = infoTip?.owner === icon;
+  closeInfoTip();
+  if (same) return;
+  infoTip = el('div', { class: 'info-tip', role: 'tooltip', text: icon.title });
+  infoTip.owner = icon;
+  (icon.closest('dialog') || document.body).append(infoTip);
+  const r = icon.getBoundingClientRect();
+  const w = infoTip.offsetWidth;
+  const h = infoTip.offsetHeight;
+  infoTip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  infoTip.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6}px`;
 });
+document.addEventListener('scroll', closeInfoTip, true);
 
 // ---- keep picture quality option ----
 function renderKeepQuality() {
