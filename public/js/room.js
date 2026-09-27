@@ -239,8 +239,25 @@ function slowLocal() {
   return Boolean(localWaitSince && Date.now() - localWaitSince > 25_000 && localWaitDismissed !== myStreamId()
     && !isHost() && state.room?.settings.relayEnabled && myStream()?.kind === 'torrent');
 }
+// Kendiliğinden yeniden deneme: video 20 sn'dir "yükleniyor"da kaldıysa ya da hata verdiyse
+// (çoğu zaman Stremio torrent'i ilk açarken geç cevap veriyor; elle "Tekrar dene" hemen
+// açıyordu) aynı kaynak sessizce yeniden yüklenir. Kaynak başına en fazla 2 kez.
+let loadingSince = null;
+const autoRetries = new Map();
+function autoRetry(reason) {
+  const id = myStreamId();
+  const n = autoRetries.get(id) || 0;
+  if (!id || n >= 2) return false;
+  autoRetries.set(id, n + 1);
+  loadingSince = null;
+  console.info('Kendiliğinden yeniden deneniyor', reason, n + 1);
+  loadMyStream(true);
+  return true;
+}
 setInterval(() => {
   const st = player.status();
+  loadingSince = st.state === 'loading' ? (loadingSince || Date.now()) : null;
+  if (loadingSince && Date.now() - loadingSince > 20_000) autoRetry('loading');
   const waiting = st.source === 'local' && ['loading', 'buffering'].includes(st.state);
   const was = slowLocal();
   localWaitSince = waiting ? (localWaitSince || Date.now()) : null;
@@ -266,6 +283,7 @@ const player = createPlayer({
   attachSource,
   onStatus: (st) => {
     if (st.state === 'error' && ['unsupported', 'decode'].includes(player.lastError())) startCompat();
+    else if (st.state === 'error' && autoRetry(player.lastError())) return;
     sendStatus();
     renderNotice();
     renderControls();
