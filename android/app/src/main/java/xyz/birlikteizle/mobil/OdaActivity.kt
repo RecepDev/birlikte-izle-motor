@@ -120,6 +120,13 @@ class OdaActivity : AppCompatActivity() {
                 override fun shouldOverrideUrlLoading(view: WebView, istek: WebResourceRequest): Boolean {
                     val hedef = istek.url
                     if (hedef.host == Uri.parse(odaUrl).host) return false
+                    // "Stremio'ya bağlan": Stremio açılıp yayın sunucusu ayağa kalkınca uygulamaya
+                    // kendiliğinden geri dön (sayfa bağlantıyı zaten kendisi kuruyor).
+                    if (hedef.scheme == "stremio") {
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW, hedef)) }
+                        stremioAcilincaDon()
+                        return true
+                    }
                     runCatching { startActivity(Intent(Intent.ACTION_VIEW, hedef)) }
                     return true
                 }
@@ -485,6 +492,24 @@ class OdaActivity : AppCompatActivity() {
         } else {
             web.visibility = View.VISIBLE
             js("window.__kopru && window.__kopru.yenidenOlc()")
+        }
+    }
+
+    private fun stremioAcilincaDon() {
+        thread {
+            val son = System.currentTimeMillis() + 30_000
+            var hazir = false
+            while (!hazir && System.currentTimeMillis() < son) {
+                Thread.sleep(1000)
+                hazir = Guncelleme.oku("http://127.0.0.1:11470/settings", 1500) != null
+            }
+            // Sunucu hazır olsa da olmasa da en geç 30 sn'de uygulamaya dön.
+            Thread.sleep(if (hazir) 800 else 0)
+            ana.post {
+                runCatching {
+                    startActivity(Intent(this, OdaActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                }
+            }
         }
     }
 
