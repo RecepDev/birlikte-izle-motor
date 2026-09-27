@@ -1,6 +1,6 @@
 {
   "name": "birlikte-izle-masaustu",
-  "version": "0.6.15",
+  "version": "0.6.16",
   "private": true,
   "type": "module",
   "description": "Birlikte Ä°zle masaÃ¼stÃ¼ istemcisi: Electron kabuÄŸu + gÃ¶mÃ¼lÃ¼ mpv",

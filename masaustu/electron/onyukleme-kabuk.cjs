@@ -37,12 +37,12 @@ function olcumKur() {
       bekleyen = false;
       const r = alan.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return;
-      // Kontrol kutuları (altyazı, sohbet, bölümler…), çubuk ipucu, "Girişi atla" ve tam
-      // ekranda görünen kontrol çubuğu için mpv penceresinde delik açılıyor: HTML videonun
+      // Kontrol kutuları (altyazı, sohbet, bölümler…), çubuk ipucu, "Girişi atla" ve görünen
+      // kontrol çubuğu için mpv penceresinde delik açılıyor: HTML videonun
       // üstünde görünüyor, video küçülmüyor.
       const oyn = alan.closest('.player');
       const secici = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])', '.intro-ask:not([hidden])', '.next-ep:not([hidden])'];
-      if (document.fullscreenElement && oyn && !oyn.classList.contains('idle')) secici.push('.player .controls');
+      if (oyn && !oyn.classList.contains('idle')) secici.push('.player .controls');
       const delikler = secici.flatMap((q) => [...document.querySelectorAll(q)])
         .map((e) => e.getBoundingClientRect())
         .filter((k) => k.width > 0 && k.height > 0)
