@@ -833,13 +833,13 @@ function stopCheckAll() {
   cancelAllRequested = true;
   renderQualityTab();
 }
-async function checkAllInTab(streams) {
+async function checkAllInTab(streams, { concurrency = 10 } = {}) {
   if (checkingAll) return;
   checkingAll = true;
   cancelAllRequested = false;
   renderQualityTab();
   const queue = streams.filter((s) => s.kind === 'torrent' && !streamChecks.get(s.streamId)?.checking);
-  const CONCURRENCY = 10;
+  const CONCURRENCY = concurrency;
   let next = 0;
   async function worker() {
     while (next < queue.length && !cancelAllRequested) {
@@ -2481,10 +2481,21 @@ if ('mediaSession' in navigator) {
 // checkAllInTab) - mobilde veri kullanimi/pil daha kritik oldugundan bu otomasyon
 // SADECE masaustunde (dokunmatik olmayan) calisir; mobilde kullanici elle "Test et"
 // butonuna basmali. Cagrildigi yer: applySnapshot (ilk baglantida, reconnect'te degil).
+// Seçilen video önce açılsın: otomatik tarama, video oynamaya başlayıp önünde 30 sn hazır veri
+// olana kadar bekliyor (tarama Stremio'da çok sayıda torrent açıp hızı paylaşıyordu; video
+// tarama bitene kadar açılmıyordu). Sonra da aynı anda yalnızca 2 torrent deneniyor.
+let autoScanTimer = null;
 function maybeAutoCheckQuality() {
   if (isTouch || !isHost() || checkingAll) return;
-  const targets = autoScanTargets(state.room?.streams || []);
-  if (targets.length) checkAllInTab(targets);
+  clearInterval(autoScanTimer);
+  const forContent = state.room?.contentId;
+  autoScanTimer = setInterval(() => {
+    if (state.room?.contentId !== forContent || !isHost()) return clearInterval(autoScanTimer);
+    if (player.status().state !== 'ready' || (liveDownload().ahead || 0) < 30) return;
+    clearInterval(autoScanTimer);
+    const targets = autoScanTargets(state.room?.streams || []);
+    if (targets.length && !checkingAll) checkAllInTab(targets, { concurrency: 2 });
+  }, 3000);
 }
 
 function selectTab(name) {
