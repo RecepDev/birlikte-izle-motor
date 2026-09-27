@@ -41,17 +41,18 @@ html, body { overflow: hidden !important; }
   align-self: center !important;
   margin: 6px auto !important;
 }
-/* :not([hidden]) şart: düz "display: flex !important" gizli bildirimi de görünür
-   kılıyor ve videonun altında boş bir kutu bırakıyordu. */
+/* Bildirim kartı (ör. "Kalite sekmesinden başka bir stream seçebilirsin") videonun ortasında;
+   mpv penceresinde kart kadar delik açılıyor (bkz. onyukleme-kabuk.cjs). Eskiden videonun
+   altında akışta duruyordu, üstüne binen kontrol çubuğunun altında kalıyordu.
+   :not([hidden]) şart: düz "display: flex !important" gizli bildirimi de görünür kılıyordu. */
 .notice:not([hidden]) {
-  position: static !important;
-  background: transparent !important;
-  display: flex !important;
-  justify-content: center !important;
-  padding: 8px 0 !important;
+  position: absolute !important; inset: 0 !important; z-index: 15;
+  background: transparent !important; pointer-events: none;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  padding: 16px !important;
 }
 .notice[hidden] { display: none !important; }
-.notice-card { max-width: none; }
+.notice-card { pointer-events: auto; border-radius: 0 !important; background: rgb(20, 22, 29) !important; }
 
 /* mpv yerel pencerede çiziyor: bir diyalog açıkken pencereyi gizliyoruz, yoksa
    diyaloğun üstünü örtüyor (bkz. onyukleme-kabuk.cjs). */
