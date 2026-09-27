@@ -367,9 +367,9 @@ async function mpvBaslat() {
       // 4K'da 10-20 dakika birkaç GB ediyor, bellekte tutulamaz.
       '--cache=yes', '--cache-on-disk=yes', `--demuxer-cache-dir=${path.join(os.tmpdir(), 'birlikte-izle-onbellek')}`,
       '--demuxer-max-bytes=6GiB', `--demuxer-readahead-secs=${onbellekSn()}`,
-      // Önbellek biterse saniyelik kesik kesik oynamak yerine 15 sn doldurup öyle devam et.
-      '--cache-pause-wait=15',
-      // Açılışta ve her sarmadan sonra da önce 15 sn hazırla, sonra oynat: sarınca hemen
+      // Önbellek biterse saniyelik kesik kesik oynamak yerine 30 sn doldurup öyle devam et.
+      '--cache-pause-wait=30',
+      // Açılışta ve her sarmadan sonra da önce 30 sn hazırla, sonra oynat: sarınca hemen
       // oynayıp saniyede bir takılmasın (bu arada oda o kişiyi bekliyor).
       '--cache-pause-initial=yes',
       // Ayar bilgileri (oran, ses…) görüntünün alt ortasında.
