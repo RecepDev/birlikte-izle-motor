@@ -95,6 +95,7 @@ function renderRefresh() {
 async function createRoom(stream, button) {
   if (stream.kind === 'http' && !confirm(DEBRID_WARNING)) return;
   button.disabled = true;
+  olusturuluyor = true;
   button.textContent = 'Oda açılıyor…';
   try {
     const res = await api('/api/rooms', { method: 'POST', body: { type, id, streamId: stream.streamId } });
@@ -109,10 +110,46 @@ async function createRoom(stream, button) {
     }
     location.href = res.roomUrl;
   } catch (err) {
+    olusturuluyor = false;
     alert(`Oda açılamadı: ${err.message}`);
     button.disabled = false;
     button.textContent = 'Bununla oda aç';
   }
+}
+
+// Canlı denetim: Stremio'da açık torrent'lerin bağlı kişi sayısı ve hızı (3 sn'de bir).
+// Sayfa açılınca en iyi 4 aday kendiliğinden denetleniyor; "Görünenleri denetle" ile daha fazlası.
+let durum = {};
+let olusturuluyor = false;
+const denetleniyor = new Map(); // infoHash -> başlama zamanı
+async function durumYenile() {
+  durum = await api('/api/torrent-durum').catch(() => ({}));
+  for (const h of Object.keys(durum)) if (!denetleniyor.has(h)) denetleniyor.set(h, Date.now());
+  // Oda açılırken listeyi yeniden çizme: basılan düğmenin "açılıyor" hali kaybolmasın.
+  if (!olusturuluyor) render();
+}
+setInterval(durumYenile, 3000);
+function canliEtiket(s) {
+  if (s.kind !== 'torrent') return null;
+  const d = durum[s.infoHash];
+  if (!d) return null;
+  const sure = Date.now() - (denetleniyor.get(s.infoHash) || Date.now());
+  if (d.peers > 0) {
+    const iyi = d.peers >= 8 || d.downMbps >= 10;
+    return el('span', { class: `kind ${iyi ? 'fine' : 'risk'}`, text: ` · 🧲 ${d.peers} kişiye bağlandı${d.downMbps ? ` · ↓ ${d.downMbps} Mbps` : ''} (canlı)` });
+  }
+  return sure > 25_000
+    ? el('span', { class: 'kind risk', text: ` · ⚠️ ${d.found ? `${d.found} adres bulundu ama ` : ''}kimseye bağlanılamadı` })
+    : el('span', { class: 'kind', text: ' · ⏳ denetleniyor, kaynak aranıyor…' });
+}
+async function gorunenleriDenetle() {
+  const q = $('#filter').value.trim().toLowerCase();
+  const ids = streams.filter((s) => s.kind === 'torrent' && !durum[s.infoHash]
+    && (!q || `${s.name} ${s.title} ${s.quality}`.toLowerCase().includes(q))
+    && (!qualityFilter || qualityOf(s) === qualityFilter)).slice(0, 12).map((s) => s.streamId);
+  if (!ids.length) return;
+  await api('/api/torrent-denetle', { method: 'POST', body: { type, id, streamIds: ids } }).catch(() => {});
+  durumYenile();
 }
 
 function render() {
@@ -160,7 +197,8 @@ function render() {
             return note ? el('span', { class: `kind ${note.ok ? 'fine' : 'risk'}`, text: note.text }) : null;
           })(),
           s.hdr ? el('span', { class: 'kind risk', text: ` · 🌗 ${s.hdr}: HDR olmayan ekranda karanlık görünebilir` }) : null,
-          s.embeddedSubs ? el('span', { class: 'kind', text: ` · 💬 gömülü altyazı${s.embeddedSubs.langs.length ? ` (${s.embeddedSubs.langs.join(', ')})` : ''}` }) : null),
+          s.embeddedSubs ? el('span', { class: 'kind', text: ` · 💬 gömülü altyazı${s.embeddedSubs.langs.length ? ` (${s.embeddedSubs.langs.join(', ')})` : ''}` }) : null,
+          canliEtiket(s)),
         button,
       );
     }),
@@ -194,6 +232,7 @@ $('#geri').addEventListener('click', () => {
 });
 $('#filter').addEventListener('input', render);
 $('#refresh-addons').addEventListener('click', refreshAll);
+$('#check-visible').addEventListener('click', gorunenleriDenetle);
 
 const masaustuKutu = $('#masaustu');
 // Zaten masaüstü kabuğundaysak seçenek anlamsız: oda aynı pencerede açılıyor.

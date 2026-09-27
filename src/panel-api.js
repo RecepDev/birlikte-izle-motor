@@ -231,6 +231,37 @@ export function createPanelApp({
     res.end();
   }));
 
+  // Oda aç ekranı: Stremio'da açık (denetlenen) torrent'lerin canlı durumu: bağlı kişi, hız.
+  app.get('/api/torrent-durum', wrap(async (req, res) => {
+    try {
+      const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(4000) })).json();
+      const out = {};
+      for (const t of Object.values(stats || {})) {
+        out[t.infoHash] = { peers: t.peers || 0, downMbps: Math.round(((t.downloadSpeed || 0) * 8) / 1e5) / 10, found: t.swarmSize || 0 };
+      }
+      res.json(out);
+    } catch {
+      res.json({});
+    }
+  }));
+
+  // Oda aç ekranı: seçilen torrent'leri denetle (Stremio'da açıp kaynak aramaya başlat).
+  app.post('/api/torrent-denetle', wrap(async (req, res) => {
+    const { type, id, streamIds } = req.body || {};
+    if (!validContent(type, id) || !Array.isArray(streamIds)) return res.status(400).json({ error: 'Geçersiz' });
+    const entry = streamCache.get(`${type}|${id}`);
+    if (!entry) return res.status(404).json({ error: 'Liste yok' });
+    let n = 0;
+    for (const sid of streamIds.slice(0, 12)) {
+      const s = entry.streams.find((x) => x.streamId === sid);
+      if (s?.kind === 'torrent') {
+        isit(s);
+        n += 1;
+      }
+    }
+    res.json({ ok: true, n });
+  }));
+
   app.post('/api/rooms', wrap(async (req, res) => {
     const { type, id, streamId } = req.body || {};
     if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
