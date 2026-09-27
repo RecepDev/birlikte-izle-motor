@@ -90,6 +90,8 @@
     // HEVC/AC3'e çoğu telefonda "hayır" diyor ve sayfa dosyayı hiç vermeden "açılamaz"
     // sayıyordu. Oynatan ExoPlayer; telefonun donanımıyla açıyor, açamazsa hata bildiriyor.
     video.canPlayType = () => 'probably';
+    // Kapak resmi de çizilmesin (varsayılan gri oynat simgesi).
+    video.setAttribute('poster', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
     video.play = () => {
       A.oynat(true);
       return Promise.resolve();
@@ -264,6 +266,10 @@
   const STIL = `
     html, body { background: transparent !important; }
     .player, .player video { background: transparent !important; }
+    /* Android WebView boş <video> için gri zeminli büyük bir oynat simgesi çiziyor ve
+       arkadaki ExoPlayer görüntüsünü örtüyordu (ses/altyazı gelip görüntü gelmiyordu).
+       Öğe yerinde kalsın (ölçü için) ama hiç çizilmesin. */
+    .player video { opacity: 0 !important; }
     #open-desktop, #open-compat, #btn-compat, .compat-popover { display: none !important; }
     .mobil-tam-oge {
       position: fixed !important; inset: 0 !important; z-index: 1000 !important;
