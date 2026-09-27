@@ -221,7 +221,7 @@ socketCtl = attachSocket(io, {
               name: String(t.name || t.infoHash),
               infoHash: t.infoHash,
               downMbps: Math.round(((t.downloadSpeed || 0) * 8) / 1e5) / 10,
-              upMbps: Math.round(((t.uploadSpeed || 0) * 8) / 1e5) / 10,
+              upMbps: yuklemeHizi(t),
               peers: t.peers || 0,
               role: izlenen.get(t.infoHash) || (activeChecks.has(t.infoHash) ? 'hız denetimi'
                 : rooms.list().some((r) => r.prefetch?.infoHash === t.infoHash) ? 'sonraki bölüm' : 'açık kalmış'),
@@ -481,6 +481,18 @@ const birikmeTimer = setInterval(async () => {
   ]);
 }, 60_000);
 birikmeTimer.unref();
+
+// Stremio'nun uploadSpeed alanı indirme hızının aynısını gösteriyor (hatalı); gerçek yükleme
+// hızı "uploaded" sayacının iki okuma arasındaki farkından.
+const yuklemeSayac = new Map();
+function yuklemeHizi(t) {
+  const simdi = Date.now();
+  const once = yuklemeSayac.get(t.infoHash);
+  yuklemeSayac.set(t.infoHash, { bayt: Number(t.uploaded) || 0, zaman: simdi });
+  if (!once || simdi - once.zaman < 500) return 0;
+  const hiz = (((Number(t.uploaded) || 0) - once.bayt) * 8) / 1e6 / ((simdi - once.zaman) / 1000);
+  return Math.max(0, Math.round(hiz * 10) / 10);
+}
 
 // Kaldığın yer: oynayan odaların konumu 15 sn'de bir geçmişe yazılıyor; aynı film/bölüm
 // yeniden açılınca oradan başlıyor (başta ya da sonda değilse).
