@@ -157,9 +157,15 @@ function altyaziStilUygula() {
     'sub-shadow-offset': kenar[1],
     'sub-border-style': alfa > 0 ? 'background-box' : 'outline-and-shadow',
     'sub-back-color': `#${iki(alfa)}000000`,
-    'sub-pos': Math.round(Number(s.line) || 100),
+    // Altyazı pencereye değil videonun kendisine göre yerleşsin: siyah boşluklar
+    // pencere boyutuyla değiştiği için tam ekran/pencere arasında yeri kayıyordu.
+    'sub-use-margins': false,
+    'sub-ass-force-margins': false,
   };
   for (const [ad, deger] of Object.entries(ayar)) mpv.set(ad, deger).catch((e) => console.error('altyazi-stil', ad, e.message));
+  // Konum %2.5 adımlarla gidiyor; eski mpv sub-pos'u yalnızca tam sayı kabul ediyor.
+  const konum = Number(s.line) || 100;
+  mpv.set('sub-pos', konum).catch(() => mpv.set('sub-pos', Math.round(konum)).catch((e) => console.error('altyazi-stil sub-pos', e.message)));
 }
 
 async function altyaziEkle() {

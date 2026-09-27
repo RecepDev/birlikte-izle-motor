@@ -147,14 +147,14 @@ export function createSubs({
   }
 
   function resize(delta) {
-    size = Math.round(Math.min(2.5, Math.max(0.6, size + delta)) * 10) / 10;
+    size = Math.round(Math.min(4, Math.max(0.3, size + delta)) * 10) / 10;
     storage.set('cueSize', String(size));
     applyStyle();
     render();
   }
 
   function moveLine(delta) {
-    line = delta === null ? null : Math.min(100, Math.max(10, (line ?? DEFAULT_LINE) + delta));
+    line = delta === null ? null : Math.round(Math.min(100, Math.max(5, (line ?? DEFAULT_LINE) + delta)) * 10) / 10;
     storage.set('cueLine', line === null ? '' : String(line));
     applyLine();
     render();
@@ -382,7 +382,9 @@ export function createSubs({
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: 'Gecikme' }),
         el('button', { type: 'button', text: `−${STEP}`, disabled: !eff.subId, onclick: () => nudge(-STEP) }),
+        el('button', { type: 'button', text: '−0.1', disabled: !eff.subId, onclick: () => nudge(-0.1) }),
         el('span', { text: offsetText }),
+        el('button', { type: 'button', text: '+0.1', disabled: !eff.subId, onclick: () => nudge(0.1) }),
         el('button', { type: 'button', text: `+${STEP}`, disabled: !eff.subId, onclick: () => nudge(STEP) })),
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: 'Yazı' }),
@@ -393,25 +395,25 @@ export function createSubs({
         el('button', { type: 'button', text: `Kenarlık: ${OUTLINES[outline][0]}`, title: 'Harflerin etrafındaki çizgi: Yok / İnce / Kalın / Gölge', onclick: cycleOutline })),
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: 'Konum' }),
-        el('button', { type: 'button', text: '▲ Yukarı', title: 'Altyazıyı yukarı taşı', onclick: () => moveLine(-5) }),
-        el('button', { type: 'button', text: '▼ Aşağı', title: 'Altyazıyı aşağı taşı', onclick: () => moveLine(5) }),
+        el('button', { type: 'button', text: '▲ Yukarı', title: 'Altyazıyı yukarı taşı', onclick: () => moveLine(-2.5) }),
+        el('button', { type: 'button', text: '▼ Aşağı', title: 'Altyazıyı aşağı taşı', onclick: () => moveLine(2.5) }),
         el('span', { class: 'muted small', text: line === null ? 'otomatik' : `%${line}` }),
         line === null ? null : el('button', { type: 'button', text: 'Sıfırla', onclick: () => moveLine(null) })),
       el('div', { class: 'row' },
         fileInput,
         el('button', { type: 'button', text: '📄 .srt / .vtt yükle', onclick: () => fileInput.click() }),
         el('span', { class: 'muted small', text: isHost() ? 'herkese eklenir' : 'sadece sende görünür' })),
-      el('ul', {}, el('li', {}, el('button', { type: 'button', class: eff.subId ? '' : 'current', onclick: () => choose(null), text: 'Kapalı' }))),
-      ...embeddedGroup,
-      el('div', { class: 'row' },
-        el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),
-        el('button', { type: 'button', text: '↻ Listeyi yenile', title: "Altyazıları addon'lardan yeniden çek", onclick: refreshList })),
-      // Açıkken de görünsün ki geri kapatılabilsin.
+      // Altyazı listesinin en üstünde; açıkken de görünsün ki geri kapatılabilsin.
       hiddenCount || showAllLangs
         ? el('label', { class: 'row muted small' },
           el('input', { type: 'checkbox', checked: showAllLangs || null, onchange: (e) => { showAllLangs = e.target.checked; storage.set('tumAltyaziDilleri', showAllLangs ? '1' : '0'); render(); } }),
           hiddenCount ? ` Diğer dilleri de göster (${hiddenCount})` : ' Diğer dilleri de göster')
         : null,
+      el('ul', {}, el('li', {}, el('button', { type: 'button', class: eff.subId ? '' : 'current', onclick: () => choose(null), text: 'Kapalı' }))),
+      ...embeddedGroup,
+      el('div', { class: 'row' },
+        el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),
+        el('button', { type: 'button', text: '↻ Listeyi yenile', title: "Altyazıları addon'lardan yeniden çek", onclick: refreshList })),
       // Dil grupları her platformda aynı sırada: kendi dosyaların, Türkçe, İngilizce, diğerleri.
       ...visibleGroups
         .flatMap(([name, subs]) => {

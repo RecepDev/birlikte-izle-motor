@@ -101,4 +101,9 @@ html, body { overflow: hidden !important; }
 
 /* Tam ekran Altyazı/Dil kutusu videonun üstünde durur: mpv penceresinde kutu kadar
    delik açılıyor (bkz. ana.cjs delikAc), video küçülmüyor. */
-.player.subs-panel-open > .tab-body[data-tab="subs"] { z-index: 5; }
+/* Delik dikdörtgen: yuvarlak köşe ve gölge deliğin kenarlarında siyah bırakıyordu. */
+.player.subs-panel-open > .tab-body[data-tab="subs"] {
+  z-index: 5; border-radius: 0 !important; box-shadow: none !important;
+  background: rgb(20, 22, 29) !important;
+}
+.controls { padding: 8px 14px 4px !important; }

@@ -95,13 +95,19 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .player { align-items: center; justify-content: center; }
 .player video { flex: none; display: block; width: 100%; height: 100%; background: transparent; }
 .controls {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 14px 6px;
   background: linear-gradient(transparent, rgba(0, 0, 0, .85)); position: absolute; left: 0; right: 0; bottom: 0;
   transition: opacity .2s;
 }
+/* Stremio düzeni: üstte süre - çubuk - toplam süre, altta düğmeler (solda oynat/ses, sağda diğerleri). */
+.seek-row, .ctl-row { display: flex; align-items: center; gap: 12px; width: 100%; }
+.ctl-row { gap: 6px; }
+.ctl-bosluk { flex: 1; }
+.seek-row .time { min-width: 56px; font-size: 12px; opacity: .85; }
+.seek-row .time:last-child { text-align: right; }
 .player.idle .controls, .player.idle .viewers-ov, .player.idle .compat-popover { opacity: 0; pointer-events: none; }
 .compat-popover {
-  position: absolute; left: 12px; right: 12px; bottom: 64px; z-index: 3;
+  position: absolute; left: 12px; right: 12px; bottom: 100px; z-index: 3;
   display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; transition: opacity .2s;
   background: rgba(20, 20, 28, .92); border: 1px solid var(--line);
   border-radius: 12px; padding: 8px;
@@ -327,6 +333,11 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .volume, .hide-narrow { display: none; }
   .ctl { min-width: 44px; min-height: 44px; }
   .topbar { padding: 8px 12px; }
+  /* Telefonda video alanı küçük: bildirim kutusu sıkışık ama tamamı görünsün, gerekirse kaysın. */
+  .notice { padding: 8px; }
+  .notice-card { padding: 10px 12px; gap: 8px; max-height: 100%; overflow-y: auto; font-size: 12.5px; }
+  .notice-card p { line-height: 1.35; }
+  .notice-actions button { padding: 5px 10px; font-size: 12.5px; }
 }
 @media (max-width: 900px) and (orientation: landscape) {
   .topbar, .side, .lock-hint { display: none; }
@@ -363,7 +374,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
    içinde kayan bir kutu. Telefonda ve tarayıcıda videonun üstünde yüzüyor. */
 .player.subs-panel-open { --subs-panel-w: min(640px, 55vw); --subs-panel-h: min(380px, 52vh); }
 .player.subs-panel-open > .tab-body[data-tab="subs"] {
-  position: absolute; right: 16px; bottom: 64px; width: var(--subs-panel-w); max-height: var(--subs-panel-h);
+  position: absolute; right: 16px; bottom: 100px; width: var(--subs-panel-w); max-height: var(--subs-panel-h);
   overflow-y: auto; overscroll-behavior: contain;
   background: rgba(20, 22, 29, .96); border: 1px solid var(--line); border-radius: 14px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .55);

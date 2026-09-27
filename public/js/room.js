@@ -995,10 +995,10 @@ function renderNotice() {
     }
   } else if (st.state === 'noStremio') {
     const relayNote = state.room?.settings.relayEnabled && !isHost()
-      ? '\n\nStremio\'n yoksa "Host üzerinden izle" ile host\'un bilgisayarından izleyebilirsin (host\'un internetini kullanır).'
+      ? (isTouch ? '\nYoksa "Host üzerinden izle".' : '\n\nStremio\'n yoksa "Host üzerinden izle" ile host\'un bilgisayarından izleyebilirsin (host\'un internetini kullanır).')
       : '';
     text = (isTouch
-      ? 'Bu cihazda Stremio\'ya bağlanılamadı.\nTelefonunda Stremio kuruluysa "Stremio\'ya bağlan"a bas.'
+      ? 'Stremio\'ya bağlanılamadı.'
       : 'Stremio açık değil.\nBilgisayarında Stremio varsa "Stremio\'ya bağlan"a bas, açılınca kendiliğinden bağlanır.\nTarayıcı "yerel ağdaki cihazlara erişim" izni sorarsa İzin ver\'e bas.') + relayNote;
     if (state.relayError && !isHost()) text += `\n\nHost üzerinden izleme: ${errorText(state.relayError)}`;
     actions.push(button("🔌 Stremio'ya bağlan", connectStremio, true));
@@ -1264,7 +1264,8 @@ setInterval(renderSeekBar, 1000);
 
 seek.addEventListener('input', () => {
   seeking = true;
-  $('#time').textContent = `${formatTime(Number(seek.value))} / ${formatTime(video.duration)}`;
+  $('#time').textContent = formatTime(Number(seek.value));
+  $('#dur').textContent = formatTime(video.duration);
   renderSeekBar();
 });
 seek.addEventListener('change', () => {
@@ -1273,7 +1274,8 @@ seek.addEventListener('change', () => {
 });
 video.addEventListener('timeupdate', () => {
   if (!seeking) seek.value = String(video.currentTime);
-  $('#time').textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+  $('#time').textContent = formatTime(video.currentTime);
+  $('#dur').textContent = formatTime(video.duration);
   renderSeekBar();
 });
 video.addEventListener('durationchange', () => {
