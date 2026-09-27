@@ -94,140 +94,6 @@ function oranUygula() {
 // mpv yeniden açılınca sıfırlanıyor (bkz. mpvBaslat).
 let oranDegerleri = { 'video-aspect-override': '-1', panscan: 0, keepaspect: true };
 
-// Çubuk önizlemesi: tarayıcının <video>'su HEVC/MKV açamadığı için kareyi ayrı, görünmez
-// bir mpv çıkarıyor. Bu mpv açık kalıyor: dosya bir kez açılıyor, sonraki her kare yalnızca
-// en yakın anahtar kareye atlayıp küçültülmüş ekran görüntüsü almak (her seferinde yeni
-// süreç açıp dosyayı baştan okumaktan kat kat hızlı). Açılamazsa tek seferlik sürece düşüyor.
-// Aynı anda tek istek; beklerken gelenlerden yalnızca sonuncusu işleniyor.
-const onizlemeOnbellek = new Map();
-let onizlemeSuruyor = false;
-let onizlemeSiradaki = null;
-let kucuk = null; // { mpv, pencere, url }
-let kucukHazirlaniyor = null;
-
-async function kucukMpv() {
-  if (kucuk?.mpv) return kucuk;
-  if (kucukHazirlaniyor) return kucukHazirlaniyor;
-  kucukHazirlaniyor = (async () => {
-    const { createMpv } = await import('../mpv.js');
-    // mpv'nin çizeceği, hiç gösterilmeyen küçük pencere.
-    const pencere = new BrowserWindow({ show: false, width: 320, height: 180, frame: false, skipTaskbar: true, focusable: false });
-    const m = createMpv({
-      binary: MPV,
-      pipeName: `birlikte-izle-onizleme-${process.pid}`,
-      args: [
-        `--wid=${hwndOf(pencere)}`, '--no-config', '--pause=yes', '--no-audio', '--sid=no', '--osd-level=0',
-        '--hr-seek=no', '--cache=no', '--demuxer-readahead-secs=0', '--ytdl=no',
-        // 4K HEVC anahtar karesini ekran kartı çözüyor (işlemciyle 4-5 kat yavaş); küçültme
-        // için kare belleğe kopyalanıyor. Yalnızca anahtar kareler çözülüyor.
-        '--hwdec=auto-copy-safe', '--vd-lavc-skipframe=nonkey',
-        // Dosyayı açarken uzun çözümleme yok: ilk kare daha çabuk.
-        '--demuxer-lavf-analyzeduration=0.5', '--demuxer-lavf-probescore=24',
-        '--vd-lavc-skiploopfilter=all', '--vd-lavc-fast', '--vd-lavc-threads=2', '--vf=scale=288:-2',
-        '--screenshot-format=jpg', '--screenshot-jpeg-quality=70',
-      ],
-    });
-    await m.start();
-    m.on('exit', () => {
-      if (kucuk?.mpv === m) kucuk = null;
-      if (!pencere.isDestroyed()) pencere.destroy();
-    });
-    kucuk = { mpv: m, pencere, url: null };
-    return kucuk;
-  })();
-  try {
-    return await kucukHazirlaniyor;
-  } finally {
-    kucukHazirlaniyor = null;
-  }
-}
-
-// Kare hazır olunca mpv 'playback-restart' yolluyor (yüklemede ve her atlamada).
-function kareBekle(m, ms) {
-  return new Promise((resolve) => {
-    const bitti = (ok) => {
-      clearTimeout(zaman);
-      m.off('playback-restart', tamam);
-      m.off('end-file', hata);
-      resolve(ok);
-    };
-    const tamam = () => bitti(true);
-    const hata = () => bitti(false);
-    const zaman = setTimeout(() => bitti(false), ms);
-    m.on('playback-restart', tamam);
-    m.on('end-file', hata);
-  });
-}
-
-async function onizlemeCikar(url, saniye) {
-  const k = await kucukMpv();
-  const hedef = String(Math.max(0, Math.floor(saniye)));
-  let ok;
-  if (k.url !== url) {
-    k.url = url;
-    const bekle = kareBekle(k.mpv, 15_000);
-    await k.mpv.command('loadfile', url, 'replace', -1, `start=${hedef}`);
-    ok = await bekle;
-    if (!ok) k.url = null;
-  } else {
-    const bekle = kareBekle(k.mpv, 8_000);
-    await k.mpv.command('seek', hedef, 'absolute+keyframes');
-    ok = await bekle;
-  }
-  if (!ok) return null;
-  const dosya = path.join(os.tmpdir(), `bi-onizleme-${process.pid}.jpg`);
-  await k.mpv.command('screenshot-to-file', dosya, 'video');
-  kucukKapatZamanla();
-  const veri = fs.readFileSync(dosya);
-  fs.rm(dosya, { force: true }, () => {});
-  return `data:image/jpeg;base64,${veri.toString('base64')}`;
-}
-
-// Açık kalan önizleme bağlantısı Stremio'da ikinci bir "şuradan oku" isteği gibi duruyor:
-// Stremio hızı o noktayla oynatılan yer arasında bölüyor, asıl video takılıyordu.
-// Son önizlemeden 4 sn sonra dosya kapatılıyor (süreç açık kalıyor, yeniden açmak hızlı).
-let kucukZamanlayici = null;
-function kucukKapatZamanla() {
-  clearTimeout(kucukZamanlayici);
-  kucukZamanlayici = setTimeout(() => {
-    if (!kucuk?.mpv) return;
-    // O an bir kare çıkarılıyorsa bitince tekrar dene (eskiden hiç kapanmıyordu: önizleme
-    // bağlantısı açık kalıp Stremio hızı videoyla paylaşıyordu).
-    if (onizlemeSuruyor) return kucukKapatZamanla();
-    onizlemeKapat();
-  }, 4000);
-}
-function onizlemeKapat() {
-  if (!kucuk?.mpv || !kucuk.url) return;
-  kucuk.url = null;
-  kucuk.mpv.command('stop').catch(() => {});
-}
-
-// Kalıcı mpv açılamazsa: her kare için tek seferlik süreç (yavaş ama çalışır).
-function onizlemeTekSefer(url, saniye) {
-  return new Promise((resolve) => {
-    const klasor = fs.mkdtempSync(path.join(os.tmpdir(), 'bi-onizleme-'));
-    const cocuk = require('node:child_process').spawn(MPV, [
-      url, '--no-config', '--really-quiet', '--no-audio', '--sid=no', '--hr-seek=no', `--start=${Math.floor(saniye)}`,
-      '--frames=1', '--vo=image', '--vo-image-format=jpg', '--vo-image-jpeg-quality=70', `--vo-image-outdir=${klasor}`,
-      '--vf=scale=320:-2', '--hwdec=no', '--ytdl=no',
-    ], { windowsHide: true, stdio: 'ignore' });
-    const bitir = () => {
-      clearTimeout(zaman);
-      let sonuc = null;
-      try {
-        const dosya = fs.readdirSync(klasor).find((f) => f.endsWith('.jpg'));
-        if (dosya) sonuc = `data:image/jpeg;base64,${fs.readFileSync(path.join(klasor, dosya)).toString('base64')}`;
-      } catch { /* kare çıkmadı */ }
-      fs.rm(klasor, { recursive: true, force: true }, () => {});
-      resolve(sonuc);
-    };
-    const zaman = setTimeout(() => cocuk.kill(), 10_000);
-    cocuk.on('exit', bitir);
-    cocuk.on('error', bitir);
-  });
-}
-let kaliciBozuk = false;
 let sonOnbellekSn = 0;
 // İzlenen torrent'in Stremio'daki gerçek indirme hızı (Mbps), 2 sn'de bir.
 let torrentHizi = null;
@@ -244,42 +110,6 @@ setInterval(async () => {
     torrentHizi = null;
   }
 }, 2000).unref?.();
-async function onizleme(gelenUrl, saniye) {
-  const url = await vekilAdres(gelenUrl).catch(() => gelenUrl);
-  if (!/^https?:\/\//.test(url)) return null;
-  // Asıl videonun önünde 30 sn'den az hazır veri varken önizleme torrent'ten parça
-  // istemesin: Stremio o parçalara da hız ayırıyor, oynatma takılıyordu.
-  if (mpv && sonYuklenen && sonOnbellekSn < 30) return null;
-  const anahtar = `${url}|${Math.round(saniye)}`;
-  if (onizlemeOnbellek.has(anahtar)) return onizlemeOnbellek.get(anahtar);
-  if (onizlemeSuruyor) {
-    // Öncekini bekleyen istek varsa boşa çıkıyor: yalnızca en son istenen kare önemli.
-    onizlemeSiradaki?.resolve(null);
-    return new Promise((resolve) => { onizlemeSiradaki = { url, saniye, resolve }; });
-  }
-  onizlemeSuruyor = true;
-  let sonuc = null;
-  if (!kaliciBozuk) {
-    sonuc = await onizlemeCikar(url, saniye).catch((e) => {
-      // Gizli pencerede çizim ya da IPC çalışmıyorsa bir daha denemiyoruz.
-      console.error('onizleme:', e.message);
-      kaliciBozuk = true;
-      kucuk?.mpv.stop().catch(() => {});
-      return null;
-    });
-  }
-  if (kaliciBozuk) sonuc = await onizlemeTekSefer(url, saniye);
-  if (sonuc) {
-    onizlemeOnbellek.set(anahtar, sonuc);
-    if (onizlemeOnbellek.size > 300) onizlemeOnbellek.delete(onizlemeOnbellek.keys().next().value);
-  }
-  onizlemeSuruyor = false;
-  const sira = onizlemeSiradaki;
-  onizlemeSiradaki = null;
-  if (sira) onizleme(sira.url, sira.saniye).then(sira.resolve);
-  return sonuc;
-}
-
 // Dosyanın içindeki altyazılar (dışarıdan eklediğimiz .vtt'ler hariç).
 async function gomuluYolla() {
   if (!mpv || !ana) return;
@@ -842,8 +672,6 @@ app.whenReady().then(() => {
   });
   ipcMain.on('mpv:durdur', () => mpv?.command('stop').catch(() => {}));
   ipcMain.on('mpv:sar', async (_e, saniye) => {
-    // Sarınca önizleme bağlantısı kapansın: hız yeni yerin verisine gitsin.
-    if (!onizlemeSuruyor) onizlemeKapat();
     await mpv?.seek(saniye).catch(() => {});
     ana?.webContents.send('mpv:sarildi');
   });
@@ -918,11 +746,6 @@ app.whenReady().then(() => {
       return false;
     }
   });
-  ipcMain.handle('kabuk:onizleme', (_e, url, saniye) => onizleme(String(url), Number(saniye) || 0));
-  // Video açılınca önizleme oynatıcısı dosyayı önceden açıyor: ilk kare beklemeden gelsin.
-  ipcMain.on('kabuk:onizleme-hazirla', (_e, url) => {
-    if (/^https?:\/\//.test(String(url))) onizleme(String(url), 0).catch(() => {});
-  });
   ipcMain.on('kabuk:indir', (_e, url) => {
     if (/^https?:\/\//.test(url)) ana?.webContents.downloadURL(url);
   });
@@ -971,7 +794,6 @@ app.whenReady().then(() => {
     clearInterval(durumZamanlayici);
     for (const dosya of altyaziDosyalari.splice(0)) fs.rmSync(dosya, { force: true });
     mpv?.stop().catch(() => {});
-    kucuk?.mpv.stop().catch(() => {});
     app.quit();
   });
   // Dış bağlantılar (yardım linkleri) uygulamanın içinde değil tarayıcıda açılsın.
@@ -1014,7 +836,6 @@ ipcMain.on('kabuk:baslangic', () => {
   if (ana.isKiosk()) ana.setKiosk(false);
   sonYuklenen = null;
   mpv?.command('stop').catch(() => {});
-  kucuk?.mpv.stop().catch(() => {});
   yukleniyor = false;
   videoPenceresi?.hide();
   ana.loadFile(path.join(__dirname, 'baslangic.html'));

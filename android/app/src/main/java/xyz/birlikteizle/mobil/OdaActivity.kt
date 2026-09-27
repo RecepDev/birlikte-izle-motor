@@ -73,7 +73,9 @@ class OdaActivity : AppCompatActivity() {
         // Kısıtlı donanım çözücüsü olan telefonlarda yazılım çözücüye düşebilsin.
         val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
         // Telefondaki Stremio'dan parça parça oku (bkz. ParcaliKaynak); diğer adresler aynen.
+        // enginefs-prio: telefondaki Stremio izlenen yerin parçalarını her şeyden önce indirsin.
         val http = androidx.media3.datasource.DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
+            .setDefaultRequestProperties(mapOf("enginefs-prio" to "10"))
         val kaynak = androidx.media3.datasource.DataSource.Factory { ParcaliKaynak(http.createDataSource()) }
         // Başlarken/sarınca 6 sn, takıldıktan sonra 8 sn hazırlanmadan oynatma: torrent'te
         // hemen başlayıp saniyede bir takılmak yerine kısa bir bekleme.

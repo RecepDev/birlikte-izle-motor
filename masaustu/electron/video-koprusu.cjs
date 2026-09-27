@@ -245,9 +245,7 @@ window.masaustuHarici = {
   vlc: (url, ad, saniye) => ipcRenderer.invoke('kabuk:vlc', String(url), String(ad || ''), Number(saniye) || 0),
   indir: (url) => ipcRenderer.send('kabuk:indir', String(url)),
 };
-// Çubuk önizlemesi: o saniyenin küçük resmi (data: adresi) ya da null.
-window.masaustuOnizleme = (url, saniye) => ipcRenderer.invoke('kabuk:onizleme', String(url), Number(saniye) || 0);
-window.masaustuOnizlemeHazirla = (url) => ipcRenderer.send('kabuk:onizleme-hazirla', String(url));
+
 
 // Sayfadan çıkılınca (Geri, başka sayfa) video da dursun: yoksa mpv arkada oynamaya devam ediyordu.
 window.addEventListener('pagehide', () => ipcRenderer.send('mpv:durdur'));

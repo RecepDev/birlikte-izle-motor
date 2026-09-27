@@ -25,7 +25,9 @@ const gorulen = new Set(); // ilk (ucu açık) isteği geçmiş dosyalar
 
 function yukari(yol, aralik, method = 'GET') {
   return new Promise((resolve, reject) => {
-    const istek = http.request({ ...STREMIO, path: yol, method, headers: aralik ? { Range: aralik } : {} }, resolve);
+    // enginefs-prio: Stremio bu okumanın parçalarını diğer her şeyden önce indirsin (izlenen
+    // yer; ileri atlayınca yeni yere hemen odaklansın).
+    const istek = http.request({ ...STREMIO, path: yol, method, headers: { ...(aralik ? { Range: aralik } : {}), 'enginefs-prio': '10' } }, resolve);
     istek.on('error', reject);
     istek.end();
   });

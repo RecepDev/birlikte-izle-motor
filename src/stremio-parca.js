@@ -24,7 +24,8 @@ export function ilkIstekMi(yol) {
 
 function iste(target, aralik) {
   return new Promise((resolve, reject) => {
-    const r = http.request(target, { method: 'GET', headers: { range: aralik } }, resolve);
+    // enginefs-prio: izlenen yerin parçaları Stremio'da her şeyden önce insin.
+    const r = http.request(target, { method: 'GET', headers: { range: aralik, 'enginefs-prio': '10' } }, resolve);
     r.on('error', reject);
     r.end();
   });
