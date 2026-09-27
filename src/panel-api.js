@@ -252,6 +252,16 @@ export function createPanelApp({
     }
   }));
 
+  // Oda aç ekranı: denetimi biten torrent'i Stremio'da kapat (seçilmeyenler hız yemesin).
+  app.post('/api/torrent-kapat', wrap(async (req, res) => {
+    const infoHash = String(req.body?.infoHash || '').toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(infoHash)) return res.status(400).json({ error: 'Geçersiz' });
+    // Bir odada izleniyorsa dokunma.
+    const izleniyor = rooms.list().some((r) => r.streams.some((s) => s.streamId === r.hostStreamId && s.infoHash === infoHash));
+    if (!izleniyor) await stremioLocal.removeTorrent({ infoHash }).catch(() => {});
+    res.json({ ok: true });
+  }));
+
   // Oda aç ekranı: seçilen torrent'leri denetle (Stremio'da açıp kaynak aramaya başlat).
   app.post('/api/torrent-denetle', wrap(async (req, res) => {
     const { type, id, streamIds } = req.body || {};

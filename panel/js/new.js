@@ -132,15 +132,36 @@ async function createRoom(stream, button) {
 let durum = {};
 let olusturuluyor = false;
 const denetleniyor = new Map(); // infoHash -> başlama zamanı
+// Denetim sonucu belli olunca (bağlantı kuruldu ve hız ölçüldü: 12 sn; ya da 25 sn'de kimse
+// yok) sonuç sabitleniyor ve torrent Stremio'da kapatılıyor: seçilmeyen kaynaklar hızı
+// boşuna yemesin. Sonuç listede "denendi" olarak kalıyor.
+const sonuclar = new Map(); // infoHash -> { peers, downMbps }
+const enIyi = new Map(); // infoHash -> denetim sırasında görülen en yüksek değerler
 async function durumYenile() {
   durum = await api('/api/torrent-durum').catch(() => ({}));
   for (const h of Object.keys(durum)) if (!denetleniyor.has(h)) denetleniyor.set(h, Date.now());
+  for (const [h, d] of Object.entries(durum)) {
+    if (sonuclar.has(h)) continue;
+    const e = enIyi.get(h) || { peers: 0, downMbps: 0 };
+    enIyi.set(h, { peers: Math.max(e.peers, d.peers), downMbps: Math.max(e.downMbps, d.downMbps), found: d.found });
+    const sure = Date.now() - denetleniyor.get(h);
+    if ((d.peers > 0 && sure > 12_000) || sure > 25_000) {
+      sonuclar.set(h, enIyi.get(h));
+      api('/api/torrent-kapat', { method: 'POST', body: { infoHash: h } }).catch(() => {});
+    }
+  }
   // Oda açılırken listeyi yeniden çizme: basılan düğmenin "açılıyor" hali kaybolmasın.
   if (!olusturuluyor) render();
 }
 setInterval(durumYenile, 3000);
 function canliEtiket(s) {
   if (s.kind !== 'torrent') return null;
+  const son = sonuclar.get(s.infoHash);
+  if (son) {
+    if (!son.peers) return el('span', { class: 'kind risk', text: ` · ⚠️ ${son.found ? `${son.found} adres bulundu ama ` : ''}kimseye bağlanılamadı (denendi)` });
+    const iyi = son.peers >= 8 || son.downMbps >= 10;
+    return el('span', { class: `kind ${iyi ? 'fine' : 'risk'}`, text: ` · 🧲 ${son.peers} kişi${son.downMbps ? ` · ↓ ${son.downMbps} Mbps` : ''} (denendi)` });
+  }
   const d = durum[s.infoHash];
   if (!d) return null;
   const sure = Date.now() - (denetleniyor.get(s.infoHash) || Date.now());
@@ -154,7 +175,7 @@ function canliEtiket(s) {
 }
 async function gorunenleriDenetle() {
   const q = $('#filter').value.trim().toLowerCase();
-  const ids = [...streams].sort(siraliStream).filter((s) => s.kind === 'torrent' && !durum[s.infoHash]
+  const ids = [...streams].sort(siraliStream).filter((s) => s.kind === 'torrent' && !durum[s.infoHash] && !sonuclar.has(s.infoHash)
     && (!q || `${s.name} ${s.title} ${s.quality}`.toLowerCase().includes(q))
     && (!qualityFilter || qualityOf(s) === qualityFilter)).slice(0, 12).map((s) => s.streamId);
   if (!ids.length) return;
