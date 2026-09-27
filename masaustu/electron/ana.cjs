@@ -79,11 +79,14 @@ function oranUygula() {
   // Yalnızca değişeni yazıyoruz: her yazım videoyu yeniden ölçeklendiriyor, üçü birden
   // yazılınca 16:9'a geçerken görüntü iki kez büyüyüp küçülüyordu.
   const yeni = { 'video-aspect-override': sabit || '-1', panscan: sonOran === 'fill' ? 1 : 0, keepaspect: sonOran !== 'stretch' };
+  const komutlar = [];
   for (const [ad, deger] of Object.entries(yeni)) {
     if (oranDegerleri[ad] === deger) continue;
     oranDegerleri[ad] = deger;
-    mpv.set(ad, deger).catch(() => {});
+    komutlar.push(`no-osd set ${ad} ${typeof deger === 'boolean' ? (deger ? 'yes' : 'no') : deger}`);
   }
+  // Hepsi tek satırda: mpv aynı turda uyguluyor, ara adımda görüntü bir büyüyüp küçülmüyor.
+  if (komutlar.length) mpv.raw(komutlar.join('; '));
 }
 // mpv yeniden açılınca sıfırlanıyor (bkz. mpvBaslat).
 let oranDegerleri = { 'video-aspect-override': '-1', panscan: 0, keepaspect: true };

@@ -96,6 +96,9 @@ export function createMpv({ binary = 'mpv', pipeName = 'birlikte-izle', args = [
     observe: (id, name) => command('observe_property', id, name),
     load: (url) => command('loadfile', url, 'replace'),
     seek: (position) => command('seek', position, 'absolute'),
+    // Düz metin komut satırı: ';' ile ayrılan komutlar mpv'de aynı turda işlenir, arada
+    // kare çizilmez (birkaç ayarı tek seferde değiştirmek için). Cevap beklenmez.
+    raw: (line) => socket?.write(`${line}\n`),
     on: (event, fn) => events.on(event, fn),
     off: (event, fn) => events.off(event, fn),
     async stop() {
