@@ -237,10 +237,16 @@ function renderQualityChips() {
 }
 
 // Geri: arama/bölüm listesine (geçmiş varsa oraya, yoksa arama sayfasına).
+// Dizide: o dizinin sezon/bölüm listesine (arama sayfasında açık gelir). Filmde: aramaya.
+const diziAdresi = () => `/ara?${new URLSearchParams({ dizi: String(id).split(':')[0], ad: $('#title').textContent.replace(/\s+S\d+E\d+.*$/, '').trim() })}`;
 $('#geri').addEventListener('click', () => {
-  if (history.length > 1 && document.referrer) history.back();
+  if (type === 'series') location.href = diziAdresi();
+  else if (history.length > 1 && document.referrer) history.back();
   else location.href = '/ara';
 });
+// Bölüm seçmeden dizinin kendisiyle gelindiyse (tüm sezonların kaynakları karışık listelenirdi):
+// önce bölüm seçilsin.
+if (type === 'series' && id && !String(id).includes(':')) location.replace(diziAdresi());
 $('#filter').addEventListener('input', render);
 $('#refresh-addons').addEventListener('click', refreshAll);
 $('#check-visible').addEventListener('click', gorunenleriDenetle);

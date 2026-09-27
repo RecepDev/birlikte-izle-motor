@@ -121,5 +121,11 @@ window.addEventListener('popstate', (e) => {
 });
 // Kaynak listesinden geri gelindi ya da sayfa yenilendi: son arama ve açık dizi geri gelsin.
 try { $('#ara-input').value = sessionStorage.getItem('araQ') || ''; } catch { /* yok */ }
-if (history.state?.dizi) bolumleriAc(history.state.dizi, { gecmiseEkle: false });
+// Kaynak listesinden "Geri" ile gelindi (/ara?dizi=…): o dizinin bölümleri açık gelsin.
+const gelenDizi = new URLSearchParams(location.search).get('dizi');
+if (gelenDizi) {
+  const dizi = { id: gelenDizi, name: new URLSearchParams(location.search).get('ad') || gelenDizi };
+  history.replaceState({ dizi }, '', '/ara#bolumler');
+  bolumleriAc(dizi, { gecmiseEkle: false });
+} else if (history.state?.dizi) bolumleriAc(history.state.dizi, { gecmiseEkle: false });
 else if ($('#ara-input').value.trim()) ara();
