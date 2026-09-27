@@ -181,7 +181,7 @@ socketCtl = attachSocket(io, {
         const pick = bestStream(streams, onceki?.quality);
         if (!pick) return { reply: { ok: false }, msgs: [] };
         room.prefetch = { contentId: nextId, meta, streams, pickId: pick.streamId, infoHash: pick.infoHash, at: Date.now() };
-        if (pick.kind === 'torrent') isit(pick);
+        // Torrent önceden açılmıyor: ekranda görünmeyen hiçbir torrent arkada indirmesin.
         log.info('Sonraki bölüm hazırlanıyor', { roomId: room.id, next: nextId });
         return { reply: { ok: true }, msgs: [] };
       },
@@ -546,7 +546,6 @@ const sahipsizTimer = setInterval(async () => {
       const h = r.streams.find((s) => s.streamId === id)?.infoHash;
       if (h) kullanilan.add(h);
     }
-    if (r.prefetch?.infoHash) kullanilan.add(r.prefetch.infoHash);
   }
   let acik = [];
   try { acik = await stremioLocal.openTorrents(); } catch { return; }

@@ -1185,7 +1185,8 @@ function applySnapshot(snap, publicUrl) {
   loadMyStream(hadRelay);
   state.joinedOnce = true;
   if (firstJoin) {
-    maybeAutoCheckQuality();
+    // Otomatik kalite taraması yok: ekranda görünmeyen torrent'ler arkada açılmasın. Kalite
+    // sekmesindeki "Tümünü test et" ile elle yapılıyor.
     refreshCompat({ auto: true });
   }
 }

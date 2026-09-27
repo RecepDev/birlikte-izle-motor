@@ -24,6 +24,8 @@ export function bizimMi(infoHash) {
   return bilinen.has(infoHash);
 }
 
-export function yeniMi(infoHash, ms = 90_000) {
+// Açık kalma payı: "Oda aç" sayfası açıkken 8 sn'de bir dokunuyor; sayfa kapanınca/arka plana
+// geçince en geç bu kadar sonra kapanıyor.
+export function yeniMi(infoHash, ms = 25_000) {
   return Date.now() - (sonKullanim.get(infoHash) || 0) < ms;
 }

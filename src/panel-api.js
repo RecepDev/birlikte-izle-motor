@@ -240,6 +240,25 @@ export function createPanelApp({
     res.end();
   }));
 
+  // Oda aç ekranı açık ve görünürken 8 sn'de bir: o içeriğin torrent'leri açık kalabilir.
+  // Sayfa kapanınca/arka plana geçince hemen kapatılıyor (görünmeyen torrent arkada indirmesin).
+  const icerikHashleri = (body) => {
+    const entry = streamCache.get(`${body?.type}|${body?.id}`);
+    return (entry?.streams || []).filter((s) => s.kind === 'torrent' && s.infoHash).map((s) => s.infoHash);
+  };
+  app.post('/api/bakiyor', wrap(async (req, res) => {
+    for (const h of icerikHashleri(req.body)) torrentDokun(h);
+    res.json({ ok: true });
+  }));
+  app.post('/api/sayfa-kapandi', wrap(async (req, res) => {
+    const acik = new Set(await stremioLocal.openTorrents().catch(() => []));
+    const odada = new Set(rooms.list().flatMap((r) => r.streams.map((s) => s.infoHash)));
+    for (const h of icerikHashleri(req.body)) {
+      if (acik.has(h) && !odada.has(h)) stremioLocal.removeTorrent({ infoHash: h }).catch(() => {});
+    }
+    res.json({ ok: true });
+  }));
+
   // Oda aç ekranı: Stremio'da açık (denetlenen) torrent'lerin canlı durumu: bağlı kişi, hız.
   app.get('/api/torrent-durum', wrap(async (req, res) => {
     try {

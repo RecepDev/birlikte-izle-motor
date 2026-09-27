@@ -279,6 +279,25 @@ if (kabuktayiz) masaustuKutu.closest('.row').hidden = true;
 masaustuKutu.checked = !kabuktayiz && localStorage.getItem('masaustuAc') === '1';
 masaustuKutu.addEventListener('change', () => localStorage.setItem('masaustuAc', masaustuKutu.checked ? '1' : '0'));
 
+// Bu sayfa açık ve görünürken torrent'ler açık kalıyor; kapanınca/arka plana geçince (sekme
+// değişti, pencere küçüldü) sunucu hepsini hemen kapatıyor. Geri gelince görünenler yeniden denetleniyor.
+const KEY = document.querySelector('meta[name="panel-key"]').content;
+const sayfaBildir = (yol) => fetch(yol, {
+  method: 'POST', keepalive: true,
+  headers: { 'x-panel-key': KEY, 'content-type': 'application/json' },
+  body: JSON.stringify({ type, id }),
+}).catch(() => {});
+setInterval(() => { if (!document.hidden && !olusturuluyor) sayfaBildir('/api/bakiyor'); }, 8000);
+document.addEventListener('visibilitychange', () => {
+  if (olusturuluyor) return;
+  if (document.hidden) sayfaBildir('/api/sayfa-kapandi');
+  else {
+    sayfaBildir('/api/bakiyor');
+    if (loadDone) gorunenleriDenetle();
+  }
+});
+window.addEventListener('pagehide', () => { if (!olusturuluyor) sayfaBildir('/api/sayfa-kapandi'); });
+
 try {
   if (!type || !id) throw new Error('İçerik bilgisi yok. Bu sayfayı Stremio\'dan aç.');
   render();
