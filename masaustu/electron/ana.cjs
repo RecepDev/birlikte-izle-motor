@@ -47,9 +47,11 @@ let yukleniyor = false;
 
 // mpv penceresi yalnızca her şey uygunken görünür: mpv açık, diyalog yok,
 // kaynak yüklenmiş, pencere simge durumunda değil.
+// Oda sayfasında mıyız? Değilsek (açılış, arama, kaynak listesi) video penceresi hiç görünmez.
+let odadaMi = false;
 function videoGorunurluk() {
   if (!videoPenceresi || videoPenceresi.isDestroyed() || !ana) return;
-  if (!mpv || ortuluMu || yukleniyor || ana.isMinimized()) {
+  if (!mpv || !odadaMi || ortuluMu || yukleniyor || ana.isMinimized()) {
     videoPenceresi.hide();
     return;
   }
@@ -953,6 +955,17 @@ app.whenReady().then(() => {
     app.quit();
   });
   // Dış bağlantılar (yardım linkleri) uygulamanın içinde değil tarayıcıda açılsın.
+  // Odadan başka sayfaya geçilince (Geri, oda kapandı) video penceresi ve delikleri kalmasın,
+  // oynatma dursun: yoksa kaynak listesinin üstünde siyah bir kutu asılı kalıyordu.
+  ana.webContents.on('did-navigate', (_e, url) => {
+    odadaMi = /\/room\/[A-Z0-9]{6}/i.test(url);
+    if (!odadaMi) {
+      sonAlan = null;
+      sonYuklenen = null;
+      mpv?.command('stop').catch(() => {});
+    }
+    videoGorunurluk();
+  });
   ana.webContents.on('did-finish-load', () => {
     const adres = ana.webContents.getURL();
     odaSayfasiYuklendi(adres);
