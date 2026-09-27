@@ -1924,16 +1924,21 @@ async function checkWeakSource() {
   }
   const ts = state.room.torrentStats?.[s.streamId];
   const need = requiredMbps(s.sizeBytes, player.duration()) || 8;
-  const weak = ts && ts.peers < 5 && (Number(ts.downMbps) || 0) < need;
+  // Zayıf: az kişi ve yavaş, ya da video hiç başlayamıyor (yükleniyor/donuyor).
+  const st = player.status();
+  const stuck = ['loading', 'buffering'].includes(st.state) && (Number(ts?.downMbps) || 0) < need;
+  const weak = (ts && ts.peers < 5 && (Number(ts.downMbps) || 0) < need) || stuck;
   if (!weak) {
     weakSince = null;
     return;
   }
   weakSince ||= Date.now();
-  if (Date.now() - weakSince < 60_000 || weakCheckedFor === s.streamId) return;
+  // Önce seçilen kaynağa süre tanı: 45 sn boyunca zayıf kalırsa diğerlerini ara.
+  if (Date.now() - weakSince < 45_000 || weakCheckedFor === s.streamId) return;
   weakCheckedFor = s.streamId;
   // Adaylar: aynı kalite önce, sezon paketi sona, çok kaynaklı önce.
-  const score = (x) => (Number(x.seeders) || 0) * (x.pack ? 0.35 : 1) * (x.quality === s.quality ? 3 : 1);
+  const hedefKalite = preferredQuality || s.quality;
+  const score = (x) => (Number(x.seeders) || 0) * (x.pack ? 0.35 : 1) * (x.quality === hedefKalite ? 3 : 1);
   const candidates = state.room.streams
     .filter((x) => x.kind === 'torrent' && x.streamId !== s.streamId && x.infoHash !== s.infoHash)
     .sort((a, b) => score(b) - score(a))
@@ -1946,9 +1951,22 @@ async function checkWeakSource() {
     .sort((a, b) => b.r.downMbps - a.r.downMbps);
   const best = tested[0];
   const cur = Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0;
-  if (!best || best.r.downMbps < Math.max(cur * 1.5, cur + 5)) return;
+  if (!best || best.r.downMbps < Math.max(cur * 1.5, cur + 5)) {
+    // Daha iyisi yok: bir süre sonra tekrar bakılabilsin.
+    setTimeout(() => { if (weakCheckedFor === s.streamId) weakCheckedFor = null; }, 3 * 60_000);
+    return;
+  }
   weakSuggestion = best.s.streamId;
-  $('#weak-src-text').textContent = `Bu kaynak zayıf (${ts.peers} kişi, ${cur.toFixed(0)} Mbps). `
+  // Video hiç başlayamadıysa sormadan geç (kaybedilecek bir şey yok).
+  if (player.status().state === 'loading' && (video.currentTime || 0) < 2) {
+    const res = await request('setHostStream', { streamId: best.s.streamId });
+    if (!res?.error) {
+      toast(`Seçilen kaynak açılamadı; daha hızlısına geçildi (${best.s.quality || '?'} · ${best.r.downMbps.toFixed(0)} Mbps).`, 6000);
+      playAfterSwitch();
+      return;
+    }
+  }
+  $('#weak-src-text').textContent = `Bu kaynak zayıf (${ts?.peers ?? 0} kişi, ${cur.toFixed(0)} Mbps). `
     + `Daha hızlısı: ${best.s.quality || '?'}${best.s.hdr ? ` ${best.s.hdr}` : ''} · ${best.r.downMbps.toFixed(0)} Mbps · ${best.r.peers} kişi`;
   $('#weak-src').hidden = false;
 }
@@ -2042,7 +2060,9 @@ function checkPreferredStreams() {
     .slice(0, 4);
   for (const s of top) checkStream(s.streamId);
 }
-setInterval(() => { askPreferredQuality(); checkPreferredStreams(); }, 3000);
+// Açılışta yalnızca seçilen kaynak: tercih kalitesinin diğer kaynakları ancak seçilen kaynak
+// zayıf kalırsa (bkz. checkWeakSource) deneniyor.
+setInterval(askPreferredQuality, 3000);
 
 // ---- content search (host only): switch the room to a different title ----
 let searchSeq = 0;
