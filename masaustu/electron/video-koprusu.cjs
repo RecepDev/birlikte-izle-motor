@@ -64,7 +64,17 @@ function bagla(video) {
   ipcRenderer.send('mpv:ozellik', 'mute', muted);
   const tanim = (ad, get, set) => Object.defineProperty(video, ad, { configurable: true, get, set });
 
-  tanim('currentTime', () => durum.position, (v) => ipcRenderer.send('mpv:sar', Number(v) || 0));
+  // Konum: mpv'den 200 ms'de bir geliyor. Aradaki zamanı tahmin ediyoruz (oynuyorsa geçen süre
+  // kadar ileri), sarınca da yeni konumu hemen gösteriyoruz: yoksa senkron eski konumu görüp
+  // "geride kaldı" sanıyor, tekrar tekrar sarıyordu.
+  tanim('currentTime', konumTahmini, (v) => {
+    const t = Number(v) || 0;
+    sarma = { hedef: t, zaman: Date.now() };
+    durum.position = t;
+    durumZamani = Date.now();
+    durum.seeking = true;
+    ipcRenderer.send('mpv:sar', t);
+  });
   tanim('duration', () => (durum.duration === null ? NaN : durum.duration));
   tanim('paused', () => durum.paused);
   tanim('seeking', () => durum.seeking);
@@ -75,7 +85,10 @@ function bagla(video) {
   tanim('ended', () => false);
   // Sayfa kare kaybını buradan okuyor (bilgi kutusunda "% kare kaybı").
   video.getVideoPlaybackQuality = () => ({ totalVideoFrames: durum.totalFrames || 0, droppedVideoFrames: durum.droppedFrames || 0 });
-  tanim('playbackRate', () => durum.rate, (v) => ipcRenderer.send('mpv:ozellik', 'speed', Number(v) || 1));
+  tanim('playbackRate', () => durum.rate, (v) => {
+    durum.rate = Number(v) || 1;
+    ipcRenderer.send('mpv:ozellik', 'speed', durum.rate);
+  });
   tanim('volume', () => volume, (v) => {
     volume = Math.max(0, Math.min(1, Number(v) || 0));
     // mpv'nin ses ayarı kübik (%50 = sesin sekizde biri); tarayıcınınki doğrusal.
@@ -107,11 +120,25 @@ function bagla(video) {
   new ResizeObserver(yerlestir).observe(video);
   yerlestir();
 
+  // Oynat/durdur da hemen yansısın: olay mpv'nin cevabını beklerse senkron onu kullanıcı
+  // hareketi sanıp odaya yeniden yolluyordu.
   video.play = () => {
     ipcRenderer.send('mpv:ozellik', 'pause', false);
+    if (durum.paused) {
+      durum.paused = false;
+      durumZamani = Date.now();
+      yolla('play');
+    }
     return Promise.resolve();
   };
-  video.pause = () => ipcRenderer.send('mpv:ozellik', 'pause', true);
+  video.pause = () => {
+    ipcRenderer.send('mpv:ozellik', 'pause', true);
+    if (!durum.paused) {
+      durum.position = konumTahmini();
+      durum.paused = true;
+      yolla('pause');
+    }
+  };
   video.load = () => {};
   video.removeAttribute = (ad) => {
     if (ad === 'src') {
@@ -140,6 +167,13 @@ function bagla(video) {
 
 let kaynak = '';
 let volume = 1;
+let durumZamani = 0;
+let sarma = null; // { hedef, zaman }: bizim yaptığımız son sarma
+function konumTahmini() {
+  if (durum.paused || durum.seeking || durum.cacheStalled || !durumZamani) return durum.position;
+  const gecen = Math.min(0.5, (Date.now() - durumZamani) / 1000);
+  return durum.position + gecen * (durum.rate || 1);
+}
 let muted = false;
 
 // Altyazı köprüsü (subs.js buradaki kancayı arıyor). Sayfa altyazıyı kendi HTML
@@ -234,7 +268,15 @@ ipcRenderer.on('mpv:durum', (_e, next) => {
   const oncekiDuraklat = durum.paused;
   const oncekiHazir = readyState();
   const oncekiSure = durum.duration;
+  // Sarmadan önce sorulmuş bir cevap eski konumu getirebiliyor: sarma sonrası 2 sn içinde
+  // hedeften uzak gelen konumu yok say (mpv yeni konuma ulaşınca normal akış sürer).
+  if (sarma && Date.now() - sarma.zaman < 2000 && Math.abs(next.position - sarma.hedef) > 1.5) {
+    next = { ...next, position: sarma.hedef, seeking: true };
+  } else if (sarma && Math.abs(next.position - sarma.hedef) <= 1.5) {
+    sarma = null;
+  }
   Object.assign(durum, next);
+  durumZamani = Date.now();
   if (!el) return;
   if (oncekiSure !== durum.duration) {
     // Süre değişince ikisi de gerekiyor: sayfa süreyi 'durationchange' ile okuyor,
