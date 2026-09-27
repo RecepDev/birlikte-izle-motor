@@ -93,5 +93,5 @@ html, body { overflow: hidden !important; }
 }
 .controls { padding: 8px 14px 4px !important; }
 
-/* Çubuk ipucu videonun üstüne çıkamıyor (mpv); çubuğun altında görünür. */
-.seek-tip { bottom: auto !important; top: 18px; z-index: 5; }
+/* Çubuk ipucu (zaman + önizleme) videonun üstüne taşıyor: mpv penceresinde onun için de delik açılıyor. */
+.seek-tip { z-index: 5; }

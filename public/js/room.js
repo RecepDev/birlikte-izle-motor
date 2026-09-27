@@ -1270,19 +1270,89 @@ seek.addEventListener('input', () => {
   $('#dur').textContent = formatTime(video.duration);
   renderSeekBar();
 });
-// Çubuğun üstünde gezinince imlecin denk geldiği an (dakika:saniye).
-const seekTip = el('div', { class: 'seek-tip', hidden: true });
+// Çubuğun üstünde gezinince (telefonda sürüklerken) o anın dakikası/saniyesi ve küçük
+// önizleme resmi. Önizleme ayrı, sessiz bir <video> ile o saniyeye atlayarak çiziliyor;
+// torrentte o dakikanın parçası da indiriliyor, bu yüzden Ayarlar'dan kapatılabiliyor.
+let seekPreviewOn = storage.get('seekPreview') !== '0';
+const previewVideo = el('video', { class: 'seek-onizleme', muted: true, playsinline: true, preload: 'metadata', hidden: true });
+previewVideo.muted = true;
+const seekTipTime = el('span');
+const seekTip = el('div', { class: 'seek-tip', hidden: true }, previewVideo, seekTipTime);
 seek.parentElement.append(seekTip);
-seek.addEventListener('pointermove', (e) => {
+let previewFor = null;
+let previewFailed = null;
+let previewWant = null;
+function previewSource() {
+  if (!seekPreviewOn || loaded.compat) return null;
+  // Relay'de önizleme host'un upload'unu yer; hls/blob kaynaklarda atlanamıyor.
+  if (player.status().source === 'relay') return null;
+  const url = streamLink();
+  return url && /^https?:/.test(url) ? url : null;
+}
+function previewSeek() {
+  if (previewWant === null || previewVideo.seeking || previewVideo.readyState < 1) return;
+  if (Math.abs(previewVideo.currentTime - previewWant) < 1) return;
+  previewVideo.currentTime = previewWant;
+}
+previewVideo.addEventListener('loadedmetadata', previewSeek);
+previewVideo.addEventListener('seeked', () => {
+  previewVideo.hidden = false;
+  previewSeek();
+});
+previewVideo.addEventListener('error', () => {
+  previewFailed = previewFor;
+  previewVideo.hidden = true;
+});
+function showSeekTip(x, width) {
   const d = video.duration;
   if (!Number.isFinite(d) || d <= 0) return;
-  const r = seek.getBoundingClientRect();
-  const x = Math.max(0, Math.min(r.width, e.clientX - r.left));
-  seekTip.textContent = formatTime((x / r.width) * d);
-  seekTip.style.left = `${x}px`;
+  const t = (x / width) * d;
+  seekTipTime.textContent = formatTime(t);
+  // Kutu çubuğun kenarından taşmasın.
+  const half = (previewVideo.hidden ? 30 : 90);
+  seekTip.style.left = `${Math.max(half, Math.min(width - half, x))}px`;
   seekTip.hidden = false;
+  const src = previewSource();
+  if (!src || src === previewFailed) {
+    previewVideo.hidden = true;
+    return;
+  }
+  if (src !== previewFor) {
+    previewFor = src;
+    previewVideo.hidden = true;
+    previewVideo.src = src;
+  }
+  previewWant = t;
+  previewSeek();
+}
+function hideSeekTip() {
+  seekTip.hidden = true;
+  previewWant = null;
+}
+seek.addEventListener('pointermove', (e) => {
+  const r = seek.getBoundingClientRect();
+  showSeekTip(Math.max(0, Math.min(r.width, e.clientX - r.left)), r.width);
 });
-seek.addEventListener('pointerleave', () => { seekTip.hidden = true; });
+seek.addEventListener('pointerleave', hideSeekTip);
+seek.addEventListener('input', () => {
+  const d = video.duration;
+  if (Number.isFinite(d) && d > 0) showSeekTip((Number(seek.value) / d) * seek.clientWidth, seek.clientWidth);
+});
+seek.addEventListener('change', hideSeekTip);
+// Kaynak değişince önizleme eski dosyayı tutmasın.
+function resetPreview() {
+  previewFor = null;
+  previewVideo.removeAttribute('src');
+  previewVideo.load();
+  previewVideo.hidden = true;
+}
+video.addEventListener('emptied', resetPreview);
+$('#set-seek-preview').checked = seekPreviewOn;
+$('#set-seek-preview').addEventListener('change', (e) => {
+  seekPreviewOn = e.target.checked;
+  storage.set('seekPreview', seekPreviewOn ? '1' : '0');
+  if (!seekPreviewOn) resetPreview();
+});
 seek.addEventListener('change', () => {
   seeking = false;
   sync.seek(Number(seek.value));
