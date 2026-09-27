@@ -1,0 +1,15 @@
+{
+  "appId": "xyz.birlikteizle.masaustu",
+  "productName": "Birlikte Izle",
+  "directories": { "output": "dagitim-setup" },
+  "win": { "target": ["nsis"], "signAndEditExecutable": false },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "createDesktopShortcut": "always",
+    "createStartMenuShortcut": true,
+    "shortcutName": "Birlikte İzle",
+    "runAfterFinish": true,
+    "artifactName": "Birlikte Izle Kurulum.exe"
+  }
+}

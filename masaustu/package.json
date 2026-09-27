@@ -7,7 +7,8 @@
   "main": "electron/baslat.cjs",
   "scripts": {
     "start": "electron .",
-    "paketle": "electron-packager . \"Birlikte Izle\" --platform=win32 --arch=x64 --out=dagitim --overwrite --extra-resource=mpv --ignore=\"(^/node_modules$|^/dagitim|^/mpv$|^/electron/gomme-kaniti|^/electron/kanit\\.html|^/electron/onyukleme\\.cjs$)\""
+    "paketle": "electron-packager . \"Birlikte Izle\" --platform=win32 --arch=x64 --out=dagitim --overwrite --extra-resource=mpv --ignore=\"(^/node_modules$|^/dagitim|^/mpv$|^/electron/gomme-kaniti|^/electron/kanit\\.html|^/electron/onyukleme\\.cjs$)\"",
+    "kurulum": "npm run paketle -- --out=dagitim-kurulum && electron-builder --win nsis --x64 --prepackaged \"dagitim-kurulum/Birlikte Izle-win32-x64\" --config kurulum.config.json"
   },
   "build": {
     "appId": "xyz.birlikteizle.masaustu",
