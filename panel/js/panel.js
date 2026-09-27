@@ -52,6 +52,8 @@ $('#shutdown').addEventListener('click', async () => {
   const warn = rooms.length ? `\n${rooms.length} aktif oda kapanacak.` : '';
   if (!confirm(`Birlikte İzle sunucusu kapatılsın mı?${warn}`)) return;
   await api('/api/shutdown', { method: 'POST' }).catch(() => {});
+  // Panel penceresini sunucu kapatıyor; normal tarayıcı sekmesindeyse de kapanmayı dene.
+  window.close();
   document.body.replaceChildren(el('main', { class: 'narrow' }, el('section', { class: 'card' },
     el('h2', { text: 'Sunucu kapatıldı' }),
     el('p', { class: 'muted', text: 'Bu pencereyi kapatabilirsin. Tekrar açmak için masaüstündeki "Birlikte İzle" kısayolunu kullan.' }))));

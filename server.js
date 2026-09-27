@@ -2,6 +2,7 @@
 //   :7000  public  (addon, room pages, Socket.IO, relay)  <- cloudflared tunnel
 //   :7001  panel   (GUI, room creation)                   <- 127.0.0.1 only
 
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import dns from 'node:dns';
 import path from 'node:path';
@@ -368,10 +369,21 @@ function listen(server, port, name) {
 }
 
 let shuttingDown = false;
+// Panel, baslat.vbs'nin açtığı ayrı profilli Edge uygulama penceresinde (data\edge-panel)
+// çalışıyor. Sunucu "Kapat" ile kapanınca o pencere de kapansın. Yalnızca o profile ait
+// Edge süreçlerine dokunuyoruz; kullanıcının kendi tarayıcısı etkilenmiyor.
+function panelPenceresiniKapat() {
+  if (process.platform !== 'win32') return;
+  const betik = "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | "
+    + "Where-Object { $_.CommandLine -match 'edge-panel' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }";
+  spawn('powershell', ['-NoProfile', '-Command', betik], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
+
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('Sunucu kapatılıyor');
+  panelPenceresiniKapat();
   tunnel.stop();
   socketCtl.stop();
   relay.stop();
