@@ -1455,6 +1455,7 @@ function applyIntroState(res) {
   introAsked = res?.asked !== false;
   renderIntroAsk();
   renderIntroSettings();
+  renderShortcuts();
 }
 function refreshIntro() {
   const id = state.room?.contentId ?? null;
@@ -2505,6 +2506,36 @@ else {
     location.href = `birlikteizle://${encodeURIComponent(location.href)}`;
     toast('Masaüstü uygulaması açılıyor. Kurulu değilse indirilen klasördeki "Birlikte Izle.exe" bir kez çalıştırılmalı.', 8000);
   });
+}
+
+// Ayarlar'daki kısayol listesi: bu cihazda hangileri geçerliyse (dokunmatik ya da klavye).
+function renderShortcuts() {
+  const row = (k, t) => el('div', { class: 'shortcut' }, el('kbd', { text: k }), el('span', { text: t }));
+  const host = isHost();
+  // Dokunma hareketleri telefon uygulamasının (window.mobilCihaz) köprüsünde; telefon
+  // tarayıcısında yalnızca ekrandaki düğmeler var.
+  const rows = isTouch && !window.mobilCihaz
+    ? [row('Videoya dokun', 'Kontrolleri göster'), row('—', 'Kaydırma ve çift dokunma kısayolları telefon uygulamasında')]
+    : isTouch
+    ? [
+      row('Çift dokun (sağ)', '10 sn ileri'),
+      row('Çift dokun (sol)', '10 sn geri'),
+      row('Sağda yukarı/aşağı kaydır', 'Ses'),
+      row('Solda yukarı/aşağı kaydır', 'Parlaklık'),
+      row('Ses simgesine dokun', 'Ses kaydırıcısı'),
+      row('Ana ekran tuşu', 'Video küçük pencerede sürer'),
+    ]
+    : [
+      row('Boşluk / K', 'Oynat / durdur'),
+      row('← / →', '10 sn geri / ileri'),
+      row('↑ / ↓', 'Ses %5'),
+      row('M', 'Sessiz'),
+      row('F / çift tıkla', 'Tam ekran'),
+      row('S', 'Altyazı / Dil kutusu'),
+      row('C', 'Sohbet'),
+      host ? row('N', 'Sonraki bölüm (dizide)') : null,
+    ];
+  $('#shortcut-list').replaceChildren(...rows.filter(Boolean));
 }
 
 const dialog = $('#settings-dialog');
