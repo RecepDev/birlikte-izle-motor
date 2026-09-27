@@ -158,16 +158,18 @@ export function evaluate({ device, streams, current = null, isHost = false, rela
 
 // Which torrents the automatic scan on room join should test. Every test opens the torrent in the
 // host's Stremio and pulls real data, so only well-seeded ones are scanned (best first, capped).
-// If nothing is well seeded nothing is scanned automatically; low-seed torrents and those whose
-// addon gives no seed count are left to the manual "test all" button.
+// If nothing is well seeded, the few best-seeded are tried instead. Streams whose addon gives no
+// seed count are left to the manual "test all" button.
 export const AUTO_SCAN_MIN_SEEDERS = 100;
 export const AUTO_SCAN_MAX = 3;
+export const AUTO_SCAN_FALLBACK = 5;
 
 export function autoScanTargets(streams) {
-  return streams
-    .filter((s) => s.kind === 'torrent' && Number.isFinite(s.seeders) && s.seeders >= AUTO_SCAN_MIN_SEEDERS)
-    .sort((a, b) => b.seeders - a.seeders)
-    .slice(0, AUTO_SCAN_MAX);
+  const ranked = streams
+    .filter((s) => s.kind === 'torrent' && Number.isFinite(s.seeders))
+    .sort((a, b) => b.seeders - a.seeders);
+  const strong = ranked.filter((s) => s.seeders >= AUTO_SCAN_MIN_SEEDERS);
+  return strong.length ? strong.slice(0, AUTO_SCAN_MAX) : ranked.slice(0, AUTO_SCAN_FALLBACK);
 }
 
 // Reads what this browser/screen/machine can do. Browser only.

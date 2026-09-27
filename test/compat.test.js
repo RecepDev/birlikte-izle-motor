@@ -123,9 +123,11 @@ test('auto scan takes the well-seeded torrents, best first and capped', async ()
   assert.deepEqual(picked.map((s) => s.seeders), [...picked.map((s) => s.seeders)].sort((a, b) => b - a));
 });
 
-test('auto scan scans nothing when nothing is well seeded, and skips unknown seeds and http', async () => {
-  const { autoScanTargets } = await import('../public/js/compat.js');
-  const few = [stream({ seeders: 5 }), stream({ seeders: 30 }), stream({ seeders: 99 }), stream({ seeders: null }), stream({ kind: 'http', seeders: 999 })];
-  assert.deepEqual(autoScanTargets(few), []);
+test('auto scan falls back to the top five when nothing is well seeded, and skips unknown seeds and http', async () => {
+  const { autoScanTargets, AUTO_SCAN_FALLBACK } = await import('../public/js/compat.js');
+  const few = [5, 30, 99, 12, 2, 40, 7].map((seeders) => stream({ seeders }));
+  const picked = autoScanTargets([...few, stream({ seeders: null }), stream({ kind: 'http', seeders: 999 })]);
+  assert.equal(picked.length, AUTO_SCAN_FALLBACK);
+  assert.deepEqual(picked.map((s) => s.seeders), [99, 40, 30, 12, 7]);
   assert.deepEqual(autoScanTargets([]), []);
 });
