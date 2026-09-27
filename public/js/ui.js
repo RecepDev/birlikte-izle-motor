@@ -71,6 +71,7 @@ export async function copyText(text) {
 export const ERROR_TEXT = {
   locked: 'Oynatmayı sadece host kontrol edebiliyor.',
   notHost: 'Bunu sadece host yapabilir.',
+  badIntro: 'Geçersiz süre: 1 sn ile 15 dk arası gir (ör. 1:25).',
   rate: 'Çok hızlı gidiyorsun, biraz yavaşla.',
   tooLong: 'Mesaj çok uzun.',
   timeout: 'Sunucu cevap vermedi.',

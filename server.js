@@ -236,15 +236,20 @@ socketCtl = attachSocket(io, {
         if (!episodes.length) return { error: 'noEpisodes' };
         return { reply: { ok: true, episodes, watched: gecmis.izlenenler(id) }, msgs: [] };
       },
-      // Girişi atla: dizinin öğrenilmiş giriş aralığı (yoksa null).
-      introInfo: async (room) => ({ reply: { ok: true, intro: room.type === 'series' ? giris.bul(room.contentId) : null }, msgs: [] }),
-      // Host bölümün başında ileri sardı: giriş aralığı olabilir, öğren.
-      introLearn: async (room, uid, p) => {
+      // Girişi atla: dizinin girişinin bittiği saniye (host bir kez giriyor) ve sorulup sorulmadığı.
+      introInfo: async (room) => ({
+        reply: { ok: true, ...(room.type === 'series' ? giris.durum(room.contentId) : { intro: null, asked: true }) },
+        msgs: [],
+      }),
+      // Host: { end } kaydet, { dismiss: true } bu dizi için sorma, { reset: true } sıfırla.
+      introSet: async (room, uid, p) => {
         const denied = room.requireHost(uid);
         if (denied) return denied;
-        if (room.type !== 'series') return { reply: { ok: false }, msgs: [] };
-        const ok = giris.ogren(room.contentId, p?.from, p?.to);
-        return { reply: { ok, intro: ok ? giris.bul(room.contentId) : null }, msgs: [] };
+        if (room.type !== 'series') return { error: 'badContent' };
+        if (p?.reset) giris.sifirla(room.contentId);
+        else if (p?.dismiss) giris.sorma(room.contentId);
+        else if (!giris.ayarla(room.contentId, p?.end)) return { error: 'badIntro' };
+        return { reply: { ok: true, ...giris.durum(room.contentId) }, msgs: [] };
       },
       // Host picks a search result: fetch its streams and switch the room to it.
       changeContent: async (room, uid, p) => {

@@ -94,6 +94,16 @@
             </div>
           </div>
           <button id="skip-intro" type="button" class="skip-intro" hidden>Girişi atla ⏭</button>
+          <form id="intro-ask" class="intro-ask" hidden>
+            <button id="intro-close" type="button" class="intro-close" title="Kapat, bu dizi için bir daha sorma" aria-label="Kapat">✕</button>
+            <strong>Girişi atla</strong>
+            <span class="muted small">Bu dizinin girişi (intro) kaçıncı saniyede bitiyor? Girersen tüm bölümlerde "Girişi atla" oraya atlar.</span>
+            <div class="intro-row">
+              <input id="intro-end" placeholder="ör. 1:25" autocomplete="off" inputmode="numeric">
+              <button id="intro-now" type="button" title="Videonun şu anki anını yaz">Şu an</button>
+              <button type="submit" class="primary">Kaydet</button>
+            </div>
+          </form>
           <div id="pop-info" class="ctl-pop" hidden><h3>Hız ve kaynak</h3><div id="picture-info" class="pic-info" hidden></div><p id="pic-info-bos" class="muted small">Video yüklenince burada görünür.</p></div>
           <div id="pop-audio" class="ctl-pop ctl-pop-dar" hidden></div>
           <div id="pop-episodes" class="ctl-pop" hidden></div>
@@ -237,6 +247,15 @@
         <label class="check"><input type="checkbox" id="set-seek-preview"> <span>Çubukta önizleme resmi göster</span> <span class="info-i" tabindex="0" title="Çubuğun üstünde gezinince o anın küçük resmi çıkar. Torrentte o dakikanın parçası da indirilir; internet yavaşsa kapat.">ⓘ</span></label>
       </fieldset>
       <div id="room-settings" class="settings-room" hidden>
+      <fieldset id="intro-settings" hidden>
+        <legend>Girişi atla (bu dizi)</legend>
+        <p id="intro-settings-state" class="small"></p>
+        <div class="intro-row">
+          <input id="intro-settings-end" placeholder="ör. 1:25" autocomplete="off" inputmode="numeric">
+          <button id="intro-settings-save" type="button">Kaydet</button>
+          <button id="intro-settings-reset" type="button">Sıfırla</button>
+        </div>
+      </fieldset>
       <h2>Oda ayarları</h2>
       <label class="check">
         <input type="checkbox" id="set-locked">

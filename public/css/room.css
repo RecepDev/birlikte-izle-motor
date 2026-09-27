@@ -451,3 +451,13 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   background: #23252f; color: var(--text); border: 1px solid var(--line); border-radius: 8px;
   font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); white-space: pre-line;
 }
+.intro-ask {
+  position: absolute; right: 16px; bottom: 100px; z-index: 26; width: min(340px, calc(100% - 32px));
+  display: grid; gap: 8px; padding: 12px 14px; font-size: 13px;
+  background: rgb(20, 22, 29); border: 1px solid var(--line); border-radius: 12px;
+}
+.intro-ask[hidden], #intro-settings[hidden] { display: none; }
+.intro-close { position: absolute; top: 6px; right: 6px; background: transparent; border: none; padding: 4px 8px; color: var(--muted); }
+.intro-row { display: flex; gap: 6px; align-items: center; }
+.intro-row input { width: 90px; flex: none; }
+.intro-row button { padding: 5px 10px; font-size: 13px; }

@@ -1404,37 +1404,50 @@ $('#set-seek-preview').addEventListener('change', (e) => {
 });
 seek.addEventListener('change', () => {
   seeking = false;
-  learnIntro(video.currentTime, Number(seek.value));
   sync.seek(Number(seek.value));
 });
 
-// ---- Girişi atla: host bölüm başında 30-180 sn ileri sararsa sunucu aralığı öğreniyor,
-// sonraki bölümlerde o aralıkta düğme çıkıyor (bkz. src/giris.js).
-let intro = null;
+// ---- Girişi atla: dizinin ilk izlenen bölümünde host'a sağ altta soruluyor: giriş kaçıncı
+// saniyede bitiyor? Girilirse dizinin tüm bölümlerinde "Girişi atla" oraya atlıyor; kutu
+// kapatılırsa o dizi için bir daha sorulmuyor. Değiştirme/sıfırlama Ayarlar'da (src/giris.js).
+let intro = null; // { end }
+let introAsked = true;
 let introFor = null;
-function learnIntro(from, to) {
-  if (!isHost() || state.room?.type !== 'series' || !Number.isFinite(from)) return;
-  const jump = to - from;
-  if (from > 600 || jump < 30 || jump > 180) return;
-  const hadIntro = Boolean(intro);
-  request('introLearn', { from, to }).then((res) => {
-    if (!res?.ok) return;
-    intro = res.intro;
-    if (!hadIntro) toast('Giriş aralığı kaydedildi: sonraki bölümlerde "Girişi atla" çıkacak.', 5000);
-  });
+// "1:25", "01:25", "85" -> saniye
+function parseClock(text) {
+  const parts = String(text).trim().split(':').map((p) => p.trim());
+  if (!parts.length || parts.some((p) => !/^\d+$/.test(p)) || parts.length > 3) return null;
+  return parts.reduce((sum, p) => sum * 60 + Number(p), 0);
+}
+function applyIntroState(res) {
+  intro = res?.intro || null;
+  introAsked = res?.asked !== false;
+  renderIntroAsk();
+  renderIntroSettings();
 }
 function refreshIntro() {
   const id = state.room?.contentId ?? null;
   if (id === introFor) return;
   introFor = id;
-  intro = null;
-  $('#skip-intro').hidden = true;
+  applyIntroState(null);
   if (state.room?.type !== 'series') return;
-  request('introInfo').then((res) => { if (introFor === id) intro = res?.intro || null; });
+  request('introInfo').then((res) => { if (introFor === id) applyIntroState(res); });
+}
+async function setIntro(body) {
+  const res = await request('introSet', body);
+  if (res?.error) {
+    toast(errorText(res.error));
+    return false;
+  }
+  applyIntroState(res);
+  return true;
 }
 function renderSkipIntro() {
   const t = video.currentTime;
-  $('#skip-intro').hidden = !(intro && canControl() && t >= intro.start - 2 && t < intro.end - 3);
+  $('#skip-intro').hidden = !(intro && canControl() && t < intro.end - 3 && t >= 0);
+}
+function renderIntroAsk() {
+  $('#intro-ask').hidden = !(isHost() && state.room?.type === 'series' && !introAsked);
 }
 video.addEventListener('timeupdate', renderSkipIntro);
 setInterval(refreshIntro, 1000);
@@ -1443,6 +1456,36 @@ $('#skip-intro').addEventListener('click', () => {
   $('#skip-intro').hidden = true;
   sync.seek(intro.end);
 });
+$('#intro-now').addEventListener('click', () => {
+  $('#intro-end').value = formatTime(video.currentTime || 0);
+});
+$('#intro-ask').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const end = parseClock($('#intro-end').value);
+  if (end === null) return toast('Süreyi 1:25 ya da 85 gibi yaz.');
+  if (await setIntro({ end })) toast(`Kaydedildi: bu dizide "Girişi atla" ${formatTime(end)}'e atlayacak.`, 5000);
+});
+$('#intro-close').addEventListener('click', () => setIntro({ dismiss: true }));
+
+// Ayarlar penceresi: dizinin giriş ayarı (yalnızca host, dizideyken).
+function renderIntroSettings() {
+  const box = $('#intro-settings');
+  box.hidden = !(isHost() && state.room?.type === 'series');
+  if (box.hidden) return;
+  $('#intro-settings-state').textContent = intro
+    ? `Giriş ${formatTime(intro.end)}'de bitiyor, "Girişi atla" oraya atlıyor.`
+    : introAsked ? 'Ayarlanmadı (sorulmaması seçildi).' : 'Ayarlanmadı.';
+  $('#intro-settings-end').value = intro ? formatTime(intro.end) : '';
+}
+$('#intro-settings-save').addEventListener('click', async () => {
+  const end = parseClock($('#intro-settings-end').value);
+  if (end === null) return toast('Süreyi 1:25 ya da 85 gibi yaz.');
+  if (await setIntro({ end })) toast('Giriş bitişi kaydedildi.');
+});
+$('#intro-settings-reset').addEventListener('click', async () => {
+  if (await setIntro({ reset: true })) toast('Sıfırlandı: bir sonraki açılışta yeniden sorulacak.');
+});
+
 video.addEventListener('timeupdate', () => {
   if (!seeking) seek.value = String(video.currentTime);
   $('#time').textContent = formatTime(video.currentTime);
@@ -1637,6 +1680,7 @@ function renderCtlButtons() {
   $('#btn-next').hidden = !series || !isHost();
   $('#btn-prev').hidden = !series || !isHost();
   $('#btn-audio').hidden = audioTracksList().length < 2;
+  renderIntroAsk();
 }
 setInterval(renderCtlButtons, 1000);
 
@@ -2252,6 +2296,7 @@ $('#open-settings').addEventListener('click', () => {
   $('#set-relay-limit').value = String(s.relayLimit);
   $('#set-relay4k').checked = Boolean(s.relay4k);
   $('#set-stop-others').checked = s.stopOtherDownloads !== false;
+  renderIntroSettings();
   dialog.showModal();
 });
 dialog.addEventListener('change', async (e) => {
