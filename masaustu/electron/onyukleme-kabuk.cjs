@@ -41,7 +41,7 @@ function olcumKur() {
       // kontrol çubuğu için mpv penceresinde delik açılıyor: HTML videonun
       // üstünde görünüyor, video küçülmüyor.
       const oyn = alan.closest('.player');
-      const secici = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])', '.intro-ask:not([hidden])', '.next-ep:not([hidden])', '.notice:not([hidden]) .notice-card'];
+      const secici = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])', '.intro-ask:not([hidden])', '.next-ep:not([hidden])', '.notice:not([hidden]) .notice-card', '.weak-src:not([hidden])'];
       if (oyn && !oyn.classList.contains('idle')) secici.push('.player .controls');
       const delikler = secici.flatMap((q) => [...document.querySelectorAll(q)])
         .map((e) => e.getBoundingClientRect())

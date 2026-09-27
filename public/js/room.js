@@ -658,6 +658,7 @@ function pictureVerdict(s) {
     items.push({ icon: v.ok ? '✅' : '⚠️', text: v.text.replace(/^(✅|⚠️)\s*/, '') });
   }
   if (s.hdr) items.push({ icon: '🌗', text: `${s.hdr}: HDR olmayan ekranda karanlık ya da soluk görünebilir (parlaklık ayarı yukarıda).` });
+  if (s.pack) items.push({ icon: '📦', text: 'Sezon paketi: izleyenler dağınık, kaynak çabuk azalabilir. Aynı kalitede tek bölümlük torrent genelde daha hızlı.' });
   if (s.embeddedSubs) {
     const langs = s.embeddedSubs.langs || [];
     items.push({ icon: '💬', text: shell
@@ -1608,7 +1609,7 @@ function toggleFullscreen() {
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
 for (const [id, name] of [['btn-prev', 'prev'], ['btn-next', 'next'], ['btn-compat', 'compat'], ['btn-info', 'info'], ['btn-audio', 'audio'],
-  ['btn-subs-panel', 'subs'], ['btn-chat', 'chat'], ['btn-episodes', 'episodes'], ['btn-fs', 'fs'], ['btn-more', 'more']]) setIcon($(`#${id}`), name);
+  ['btn-subs-panel', 'subs'], ['btn-chat', 'chat'], ['btn-react', 'react'], ['btn-episodes', 'episodes'], ['btn-fs', 'fs'], ['btn-more', 'more']]) setIcon($(`#${id}`), name);
 document.addEventListener('fullscreenchange', () => setIcon($('#btn-fs'), document.fullscreenElement ? 'fsExit' : 'fs'));
 
 // ---- kontrol çubuğu kutuları (Stremio düzeni) ----
@@ -1820,6 +1821,88 @@ const POP_RENDER = {
   'pop-more': renderMorePop,
 };
 video.addEventListener('dblclick', toggleFullscreen);
+
+// ---- Zayıf kaynak: izlenen torrent'e 1 dakikadır 5'ten az kişi bağlıysa ve hız videonun
+// ihtiyacının altındaysa, en iyi 4 aday arka planda gerçekten denenir (bağlanan kişi, gerçek
+// hız); belirgin şekilde daha hızlısı varsa host'a sağ altta tek tıkla geçiş önerilir.
+// Oda yeni açıldığında da aynı kontrol çalışıyor: ilk dakikada zayıfsa hemen öneriliyor.
+let weakSince = null;
+let weakCheckedFor = null;
+let weakSuggestion = null;
+async function checkWeakSource() {
+  const s = myStream();
+  if (!isHost() || s?.kind !== 'torrent' || state.room?.hostStreamId !== s.streamId) {
+    weakSince = null;
+    return;
+  }
+  const ts = state.room.torrentStats?.[s.streamId];
+  const need = requiredMbps(s.sizeBytes, player.duration()) || 8;
+  const weak = ts && ts.peers < 5 && (Number(ts.downMbps) || 0) < need;
+  if (!weak) {
+    weakSince = null;
+    return;
+  }
+  weakSince ||= Date.now();
+  if (Date.now() - weakSince < 60_000 || weakCheckedFor === s.streamId) return;
+  weakCheckedFor = s.streamId;
+  // Adaylar: aynı kalite önce, sezon paketi sona, çok kaynaklı önce.
+  const score = (x) => (Number(x.seeders) || 0) * (x.pack ? 0.35 : 1) * (x.quality === s.quality ? 3 : 1);
+  const candidates = state.room.streams
+    .filter((x) => x.kind === 'torrent' && x.streamId !== s.streamId && x.infoHash !== s.infoHash)
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 4);
+  if (!candidates.length) return;
+  await Promise.all(candidates.map((x) => checkStream(x.streamId)));
+  const tested = candidates
+    .map((x) => ({ s: x, r: streamChecks.get(x.streamId)?.result }))
+    .filter((x) => x.r?.alive && Number.isFinite(x.r.downMbps))
+    .sort((a, b) => b.r.downMbps - a.r.downMbps);
+  const best = tested[0];
+  const cur = Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0;
+  if (!best || best.r.downMbps < Math.max(cur * 1.5, cur + 5)) return;
+  weakSuggestion = best.s.streamId;
+  $('#weak-src-text').textContent = `Bu kaynak zayıf (${ts.peers} kişi, ${cur.toFixed(0)} Mbps). `
+    + `Daha hızlısı: ${best.s.quality || '?'}${best.s.hdr ? ` ${best.s.hdr}` : ''} · ${best.r.downMbps.toFixed(0)} Mbps · ${best.r.peers} kişi`;
+  $('#weak-src').hidden = false;
+}
+setInterval(checkWeakSource, 5000);
+$('#weak-src-go').addEventListener('click', async () => {
+  $('#weak-src').hidden = true;
+  if (!weakSuggestion) return;
+  const res = await request('setHostStream', { streamId: weakSuggestion });
+  if (res?.error) toast(errorText(res.error));
+});
+$('#weak-src-close').addEventListener('click', () => { $('#weak-src').hidden = true; });
+
+// ---- Sonraki bölümü önceden hazırla: dizide son 5 dakikada (bölüm başına bir kez) sunucu
+// sıradaki bölümün en iyi kaynağını seçip Stremio'da açıyor; geçişte bekleme olmuyor.
+let prefetchedFor = null;
+video.addEventListener('timeupdate', () => {
+  const d = video.duration;
+  const id = state.room?.contentId;
+  if (!isHost() || state.room?.type !== 'series' || !Number.isFinite(d) || d < 600) return;
+  if (d - video.currentTime > 300 || prefetchedFor === id) return;
+  prefetchedFor = id;
+  request('prefetchNext').catch(() => {});
+});
+
+// ---- Tepki emojileri: videonun üstünde uçuyor. Masaüstünde (mpv) HTML videonun üstüne
+// çıkamadığı için tam ekran sohbet katmanında gösteriliyor.
+const REACTIONS = ['😂', '🔥', '❤️', '😮', '👏', '😢'];
+$('#pop-react').replaceChildren(...REACTIONS.map((emoji) => el('button', {
+  type: 'button', class: 'react-btn', text: emoji,
+  onclick: () => request('react', { emoji }).then((res) => { if (res?.error) toast(errorText(res.error)); }),
+})));
+socket.on('reaction', ({ emoji, name }) => {
+  if (window.masaustuSohbet) {
+    window.masaustuSohbet(name, emoji);
+    return;
+  }
+  const node = el('div', { class: 'react-fly', text: emoji, title: name });
+  node.style.left = `${10 + Math.random() * 70}%`;
+  playerEl.append(node);
+  setTimeout(() => node.remove(), 2600);
+});
 
 // ---- content search (host only): switch the room to a different title ----
 let searchSeq = 0;
@@ -2317,6 +2400,15 @@ document.addEventListener('keydown', (e) => {
     if (canControl()) sync.toggle();
   } else if (e.key === 'f') toggleFullscreen();
   else if (e.key === 'm') video.muted = !video.muted;
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    // Ses %5 adımlarla; kaydırıcı ve simge de güncellensin.
+    e.preventDefault();
+    const v = Math.max(0, Math.min(1, Math.round((video.volume + (e.key === 'ArrowUp' ? 0.05 : -0.05)) * 20) / 20));
+    volume.value = String(v);
+    volume.dispatchEvent(new Event('input'));
+  } else if (e.key === 's') togglePop('subs', $('#btn-subs-panel'));
+  else if (e.key === 'c') togglePop('chat', $('#btn-chat'));
+  else if (e.key === 'n' && isHost() && state.room?.type === 'series') stepEpisode(1);
   else if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && canControl()) {
     sync.seek(Math.max(0, video.currentTime + (e.key === 'ArrowRight' ? 10 : -10)));
   }
@@ -2374,7 +2466,11 @@ async function renderNet() {
       rows.push(el('div', { class: 'net-row' },
         el('span', { class: 'net-name', title: t.name, text: `${t.role === 'bu oda' ? '🎬' : t.role === 'açık kalmış' ? '⚠️' : '🧲'} ${t.name}` },
           el('small', { class: 'muted', text: ` · ${t.role} · ${t.peers} kişi` })),
-        el('b', { text: `↓ ${mbps(t.downMbps)} · ↑ ${mbps(t.upMbps)}` })));
+        el('b', { text: `↓ ${mbps(t.downMbps)} · ↑ ${mbps(t.upMbps)}` }),
+        t.role === 'açık kalmış' ? el('button', {
+          type: 'button', class: 'net-close', text: 'Kapat', title: 'Bu torrent\'i Stremio\'da kapat (internet harcamasın)',
+          onclick: async () => { await request('closeTorrent', { infoHash: t.infoHash }); renderNet(); },
+        }) : null));
     }
     if ((res.torrents || []).length > 1) rows.push(el('div', { class: 'net-row net-total' }, el('span', { text: 'Toplam torrent' }), el('b', { text: `↓ ${mbps(down)} · ↑ ${mbps(up)}` })));
     rows.push(el('p', { class: 'muted small', text: '↑ torrent: Stremio indirdiği parçaları başkalarına da yüklüyor (torrent böyle çalışıyor).' }));
