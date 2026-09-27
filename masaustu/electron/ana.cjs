@@ -81,6 +81,58 @@ function oranUygula() {
   mpv.set('video-aspect-override', sabit || '-1').catch(() => {});
 }
 
+// Dosyanın içindeki altyazılar (dışarıdan eklediğimiz .vtt'ler hariç).
+async function gomuluYolla() {
+  if (!mpv || !ana) return;
+  const liste = await mpv.get('track-list').catch(() => null);
+  const gomulu = (liste || [])
+    .filter((t) => t.type === 'sub' && !t.external)
+    .map((t) => ({ id: String(t.id), title: t.title || '', lang: t.lang || '', active: Boolean(t.selected) }));
+  ana.webContents.send('mpv:gomulu', gomulu);
+}
+
+// Tam ekranda sohbet: son birkaç mesaj videonun sol altında, 8 sn sonra siliniyor.
+// mpv'nin osd-overlay'i ASS biçiminde yazı alıyor; ayarlar bilgisinden (alt orta)
+// bağımsız konumlanıyor.
+const sohbetSatirlari = [];
+let sohbetZamanlayici = null;
+function sohbetCiz() {
+  if (!mpv) return;
+  const kacis = (s) => s.replace(/\\/g, '\\\\').replace(/[{}]/g, '').replace(/\n/g, ' ');
+  const govde = sohbetSatirlari.map((s) => `{\\b1}${kacis(s.kim)}{\\b0}: ${kacis(s.metin)}`).join('\\N');
+  mpv.command({
+    name: 'osd-overlay', id: 7, format: 'ass-events', res_x: 1280, res_y: 720,
+    data: govde ? `{\\an1\\fs24\\bord2\\shad0\\1c&HFFFFFF&\\3c&H000000&}${govde}` : '',
+  }).catch(() => {});
+}
+function sohbetEkle(kim, metin) {
+  sohbetSatirlari.push({ kim: kim.slice(0, 24), metin: metin.slice(0, 160), zaman: Date.now() });
+  while (sohbetSatirlari.length > 4) sohbetSatirlari.shift();
+  sohbetCiz();
+  clearInterval(sohbetZamanlayici);
+  sohbetZamanlayici = setInterval(() => {
+    const once = sohbetSatirlari.length;
+    while (sohbetSatirlari.length && Date.now() - sohbetSatirlari[0].zaman > 8000) sohbetSatirlari.shift();
+    if (sohbetSatirlari.length !== once) sohbetCiz();
+    if (!sohbetSatirlari.length) clearInterval(sohbetZamanlayici);
+  }, 1000);
+}
+
+// Ağ koparsa (tünel sarsıntısı, Wi-Fi değişimi) mpv dosyayı hatayla kapatıyor:
+// kaldığı yerden birkaç kez yeniden deniyoruz.
+let sonYuklenen = null;
+let sonKonum = 0;
+let yenidenDeneme = 0;
+function dosyaBitti(olay) {
+  if (olay.reason !== 'error' || !sonYuklenen || yenidenDeneme >= 6) return;
+  yenidenDeneme++;
+  const url = sonYuklenen;
+  const konum = sonKonum;
+  setTimeout(() => {
+    if (mpv && sonYuklenen === url) mpv.command('loadfile', url, 'replace', -1, `start=${konum}`).catch(() => {});
+  }, 1500 * yenidenDeneme);
+}
+
 async function sesleriYolla() {
   if (!mpv || !ana) return;
   const liste = await mpv.get('track-list').catch(() => null);
@@ -161,6 +213,7 @@ async function durumDongusu() {
       mpv.get('speed'), mpv.get('dwidth'), mpv.get('dheight'),
       mpv.get('demuxer-cache-time'), mpv.get('core-idle'), mpv.get('paused-for-cache'),
     ].map((p) => p.catch(() => null)));
+    if (Number.isFinite(position) && position > 0) sonKonum = position;
     ana?.webContents.send('mpv:durum', {
       position: Number(position) || 0,
       duration: Number.isFinite(duration) ? duration : null,
@@ -186,6 +239,8 @@ async function mpvBaslat() {
       `--wid=${hwndOf(videoPenceresi)}`, '--no-config', '--keep-open=yes', '--idle=yes', '--osc=no',
       // --no-config donanım çözmeyi de kapatıyor: 4K HEVC/HDR işlemciyle çözülüp takılıyordu.
       '--hwdec=auto-safe',
+      // Dosyanın kendi "varsayılan" altyazısı kendiliğinden açılmasın: altyazıyı oda seçiyor.
+      '--sid=no',
       // Windows HDR açıksa HDR görüntüyü ekrana olduğu gibi ver (kapalıysa etkisi yok).
       '--target-colorspace-hint=yes',
       // Torrent akışı dalgalı: önden daha çok tamponla, kısa kesintiler görünmesin.
@@ -215,8 +270,14 @@ async function mpvBaslat() {
   mpv.on('exit', () => { mpv = null; });
   mpv.on('file-loaded', altyaziEkle);
   // Sayfa bu sırada hâlâ kurulmuyor olabilir (katılma ekranı), o yüzden bir de gecikmeli yolluyoruz.
-  mpv.on('file-loaded', () => { sesleriYolla(); setTimeout(sesleriYolla, 1500); });
-  mpv.on('track-switched', sesleriYolla);
+  mpv.on('file-loaded', () => {
+    yenidenDeneme = 0;
+    sesleriYolla();
+    gomuluYolla();
+    setTimeout(() => { sesleriYolla(); gomuluYolla(); }, 1500);
+  });
+  mpv.on('track-switched', () => { sesleriYolla(); gomuluYolla(); });
+  mpv.on('end-file', dosyaBitti);
   altyaziStilUygula();
   oranUygula();
   for (const [ad, deger] of Object.entries(sonOzellikler)) mpv.set(ad, deger).catch(() => {});
@@ -224,6 +285,57 @@ async function mpvBaslat() {
   if (bekleyenYukleme) {
     await mpv.load(bekleyenYukleme).catch(() => {});
     bekleyenYukleme = null;
+  }
+}
+
+// ---- güncelleme ----------------------------------------------------------------------
+// Odaya bağlanınca o host'un sunucusuna "daha yeni kod var mı" diye soruyoruz. Varsa
+// kod dosyalarını kullanıcı klasörüne indiriyoruz; başlatıcı (baslat.cjs) bir sonraki
+// açılışta onları çalıştırıyor. Electron ve mpv pakette kalıyor.
+const kabuk = global.kabuk || { surum: '0.0.0', dahaYeni: () => false, guncelKlasor: path.join(app.getPath('userData'), 'guncelleme') };
+let guncellemeBakildi = false;
+
+async function guncellemeDenetle(sayfaUrl) {
+  if (guncellemeBakildi) return;
+  let kok;
+  try {
+    kok = new URL(sayfaUrl).origin;
+  } catch {
+    return;
+  }
+  if (!kok.startsWith('http')) return;
+  guncellemeBakildi = true;
+  try {
+    const bilgi = await (await fetch(`${kok}/indir/surum.json`)).json();
+    if (!bilgi.masaustu || !kabuk.dahaYeni(bilgi.masaustu, kabuk.surum)) return;
+    const gecici = `${kabuk.guncelKlasor}-yeni`;
+    fs.rmSync(gecici, { recursive: true, force: true });
+    for (const ad of bilgi.masaustuDosyalari || []) {
+      const yanit = await fetch(`${kok}/indir/masaustu/${ad}`);
+      if (!yanit.ok) throw new Error(`${ad}: ${yanit.status}`);
+      const hedef = path.join(gecici, ...ad.split('/'));
+      fs.mkdirSync(path.dirname(hedef), { recursive: true });
+      fs.writeFileSync(hedef, Buffer.from(await yanit.arrayBuffer()));
+    }
+    fs.writeFileSync(path.join(gecici, 'surum.json'), JSON.stringify({ surum: bilgi.masaustu }));
+    // Hepsi indikten sonra yer değiştir: yarım inen güncelleme hiç çalışmasın.
+    fs.rmSync(kabuk.guncelKlasor, { recursive: true, force: true });
+    fs.renameSync(gecici, kabuk.guncelKlasor);
+    const { dialog } = require('electron');
+    const secim = await dialog.showMessageBox(ana, {
+      type: 'info',
+      title: 'Güncelleme hazır',
+      message: `Yeni sürüm indirildi (${bilgi.masaustu}).`,
+      detail: 'Şimdi yeniden başlatılsın mı? Oda bağlantın yeniden açılınca devam eder.',
+      buttons: ['Yeniden başlat', 'Sonra'],
+      defaultId: 0,
+    });
+    if (secim.response === 0) {
+      app.relaunch({ args: [...process.argv.slice(1).filter((a) => !/^https?:\/\//.test(a)), ana.webContents.getURL()] });
+      app.exit(0);
+    }
+  } catch (err) {
+    console.error('Güncelleme indirilemedi:', err.message);
   }
 }
 
@@ -307,6 +419,8 @@ app.whenReady().then(() => {
     videoGorunurluk();
   });
   ipcMain.on('mpv:yukle', (_e, url) => {
+    sonYuklenen = url || null;
+    yenidenDeneme = 0;
     if (!mpv) bekleyenYukleme = url;
     else mpv.load(url).catch(() => {});
   });
@@ -346,6 +460,17 @@ app.whenReady().then(() => {
     mpv?.set('sub-visibility', false).catch(() => {});
   });
   ipcMain.on('mpv:bilgi', (_e, metin) => mpv?.command('show-text', metin, 1500).catch(() => {}));
+  ipcMain.on('mpv:sohbet', (_e, kim, metin) => sohbetEkle(kim, metin));
+  ipcMain.on('mpv:gomulu-sec', async (_e, id) => {
+    if (!mpv) return;
+    if (!id) {
+      await mpv.set('sid', 'no').catch(() => {});
+    } else {
+      await mpv.set('sid', Number(id)).catch(() => {});
+      await mpv.set('sub-visibility', true).catch(() => {});
+    }
+    gomuluYolla();
+  });
   ipcMain.on('mpv:oran', (_e, mod) => {
     sonOran = mod;
     oranUygula();
@@ -403,6 +528,7 @@ app.whenReady().then(() => {
     app.quit();
   });
   // Dış bağlantılar (yardım linkleri) uygulamanın içinde değil tarayıcıda açılsın.
+  ana.webContents.on('did-finish-load', () => guncellemeDenetle(ana.webContents.getURL()));
   ana.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };

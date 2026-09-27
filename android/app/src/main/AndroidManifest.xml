@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Uygulama içinden güncelleme kurabilmek için. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="false"
@@ -34,10 +36,23 @@
             </intent-filter>
         </activity>
 
-        <!-- Döndürünce sayfa yeniden yüklenmesin: oda bağlantısı ve oynatma sürsün. -->
+        <!-- Döndürünce sayfa yeniden yüklenmesin: oda bağlantısı ve oynatma sürsün.
+             Resim içinde resim: uygulamadan çıkınca video küçük pencerede sürer. -->
         <activity
             android:name=".OdaActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.dosyalar"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/dosya_yollari" />
+        </provider>
     </application>
 </manifest>

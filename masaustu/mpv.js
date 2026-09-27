@@ -74,12 +74,15 @@ export function createMpv({ binary = 'mpv', pipeName = 'birlikte-izle', args = [
     return api;
   }
 
+  // command('seek', 10) ya da adlandırılmış argümanlı komutlar için
+  // command({ name: 'osd-overlay', id: 1, … }).
   function command(...parts) {
     if (!socket) return Promise.reject(new Error('mpv bağlı değil'));
     const id = nextId++;
+    const komut = parts.length === 1 && typeof parts[0] === 'object' ? parts[0] : parts;
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject });
-      socket.write(`${JSON.stringify({ command: parts, request_id: id })}\n`);
+      socket.write(`${JSON.stringify({ command: komut, request_id: id })}\n`);
     });
   }
 

@@ -1,13 +1,13 @@
 {
   "name": "birlikte-izle-masaustu",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Birlikte İzle masaüstü istemcisi: Electron kabuğu + gömülü mpv",
-  "main": "electron/ana.cjs",
+  "main": "electron/baslat.cjs",
   "scripts": {
     "start": "electron .",
-    "paketle": "electron-packager . \"Birlikte Izle\" --platform=win32 --arch=x64 --out=dagitim --overwrite --ignore=\"(^/node_modules$|^/dagitim|^/electron/gomme-kaniti|^/electron/kanit\\.html|^/electron/onyukleme\\.cjs$)\""
+    "paketle": "electron-packager . \"Birlikte Izle\" --platform=win32 --arch=x64 --out=dagitim --overwrite --extra-resource=mpv --ignore=\"(^/node_modules$|^/dagitim|^/mpv$|^/electron/gomme-kaniti|^/electron/kanit\\.html|^/electron/onyukleme\\.cjs$)\""
   },
   "build": {
     "appId": "xyz.birlikteizle.masaustu",

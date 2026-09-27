@@ -1,11 +1,16 @@
 package xyz.birlikteizle.mobil
 
 import android.annotation.SuppressLint
+import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Color
+import android.media.MediaCodecList
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.util.Rational
 import android.os.Handler
 import android.os.Looper
 import android.view.View
@@ -36,6 +41,7 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.concurrent.thread
 
 // Oda ekranı. Masaüstü istemcisinin telefondaki karşılığı:
 //  - Oda sayfası (sohbet, kalite, altyazı, senkron) WebView'de olduğu gibi açılıyor.
@@ -68,6 +74,11 @@ class OdaActivity : AppCompatActivity() {
         val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
         oynatici = ExoPlayer.Builder(this, renderers).build()
         oynatici.addListener(dinleyici)
+        // Gömülü altyazılar kapalı başlasın: odanın altyazısını sayfa çiziyor, gömülüyü
+        // ancak kişi seçerse açıyoruz.
+        oynatici.trackSelectionParameters = oynatici.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
 
         oynaticiGorunum = PlayerView(this).apply {
             useController = false
@@ -97,10 +108,6 @@ class OdaActivity : AppCompatActivity() {
                 }
             }
         }
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            WebViewCompat.addDocumentStartJavaScript(web, kopruBetigi(), setOf("*"))
-        }
-
         val kok = FrameLayout(this)
         kok.addView(oynaticiGorunum, FrameLayout.LayoutParams(1, 1))
         kok.addView(web, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -116,12 +123,40 @@ class OdaActivity : AppCompatActivity() {
             }
         })
 
-        web.loadUrl(odaUrl)
+        // Köprü betiği host'un sunucusundan: düzeltmeler APK kurmadan gelsin. Ulaşılamazsa
+        // uygulamadaki kopya. Sayfa ancak betik hazır olunca yükleniyor (belge başında çalışmalı).
+        val sunucu = Uri.parse(odaUrl).let { "${it.scheme}://${it.authority}" }
+        thread {
+            val uzak = Guncelleme.oku("$sunucu/indir/android/kopru.js")?.takeIf { it.contains("__kopru") }
+            runOnUiThread {
+                kopru = cihazBilgisi() + (uzak ?: assets.open("kopru.js").bufferedReader().use { it.readText() })
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    WebViewCompat.addDocumentStartJavaScript(web, kopru, setOf("*"))
+                }
+                web.loadUrl(odaUrl)
+            }
+        }
+        Guncelleme.apkDenetle(this, sunucu)
         ana.post(durumDongusu)
     }
 
-    private fun kopruBetigi(): String = assets.open("kopru.js").bufferedReader().use { it.readText() }
-    private fun kopruEnjekte() = web.evaluateJavascript(kopruBetigi(), null)
+    private var kopru = ""
+    private fun kopruEnjekte() = web.evaluateJavascript(kopru, null)
+
+    // Telefonun çözebildiği en büyük HEVC/AV1 çözünürlüğü: sayfa "yalnızca bu cihazın
+    // açabildikleri" filtresinde kullanıyor (Kalite sekmesi, varsayılan kapalı).
+    private fun cihazBilgisi(): String {
+        fun enBuyuk(mime: String): Int = runCatching {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                .filter { !it.isEncoder && it.supportedTypes.any { t -> t.equals(mime, true) } }
+                .maxOfOrNull { it.getCapabilitiesForType(mime).videoCapabilities.supportedHeights.upper } ?: 0
+        }.getOrDefault(0)
+        val bilgi = JSONObject()
+            .put("hevc", enBuyuk(MimeTypes.VIDEO_H265))
+            .put("h264", enBuyuk(MimeTypes.VIDEO_H264))
+            .put("av1", enBuyuk(MimeTypes.VIDEO_AV1))
+        return "window.mobilCihaz = $bilgi;\n"
+    }
     private fun js(kod: String) = web.evaluateJavascript(kod, null)
 
     // ---- ExoPlayer -> sayfa ------------------------------------------------------------
@@ -152,17 +187,71 @@ class OdaActivity : AppCompatActivity() {
         js("window.__kopru && window.__kopru.durum($durum)")
     }
 
+    private var sesUyarildi = false
+    private var denemeSayisi = 0
+
     private val dinleyici = object : Player.Listener {
-        override fun onTracksChanged(tracks: Tracks) = sesleriYolla()
+        override fun onTracksChanged(tracks: Tracks) {
+            sesleriYolla()
+            altyazilariYolla()
+            sesDesteginiDenetle(tracks)
+        }
+
+        override fun onPlaybackStateChanged(durum: Int) {
+            if (durum == Player.STATE_READY) denemeSayisi = 0
+        }
 
         override fun onPositionDiscontinuity(eski: Player.PositionInfo, yeni: Player.PositionInfo, neden: Int) {
             if (neden == Player.DISCONTINUITY_REASON_SEEK) js("window.__kopru && window.__kopru.sarildi()")
         }
 
         override fun onPlayerError(hata: PlaybackException) {
+            // Ağ koptuysa (Wi-Fi'dan mobil veriye geçiş, tünel sarsıntısı) kaldığı yerden
+            // yeniden dene; sayfaya ancak üst üste başarısız olursa bildir.
+            val agHatasi = hata.errorCode in PlaybackException.ERROR_CODE_IO_UNSPECIFIED..PlaybackException.ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE
+            if (agHatasi && denemeSayisi < 6) {
+                denemeSayisi++
+                val konum = oynatici.currentPosition
+                ana.postDelayed({
+                    oynatici.prepare()
+                    oynatici.seekTo(konum)
+                }, 1500L * denemeSayisi)
+                return
+            }
             val metin = JSONObject.quote(hata.errorCodeName)
             js("window.__kopru && window.__kopru.hata($metin)")
         }
+    }
+
+    // DTS gibi telefonun çözemediği ses: ExoPlayer hata vermeden sessiz oynatıyor.
+    // Sayfaya bildiriyoruz; sayfa yalnızca sesi dönüştüren uyumlu moda geçiyor (görüntü aynen).
+    private fun sesDesteginiDenetle(tracks: Tracks) {
+        val sesler = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
+        if (sesler.isEmpty() || sesUyarildi) return
+        val hicbiri = sesler.none { g -> (0 until g.length).any { g.isTrackSupported(it) } }
+        if (hicbiri) {
+            sesUyarildi = true
+            js("window.__kopru && window.__kopru.sesDesteklenmiyor()")
+        }
+    }
+
+    // Dosyanın içindeki (gömülü) altyazılar: sayfada seçilebilsin diye listeyi yolluyoruz.
+    private fun altyazilariYolla() {
+        val liste = JSONArray()
+        var sira = 0
+        for (grup in oynatici.currentTracks.groups) {
+            if (grup.type != C.TRACK_TYPE_TEXT) continue
+            for (i in 0 until grup.length) {
+                val bicim = grup.getTrackFormat(i)
+                liste.put(JSONObject()
+                    .put("id", "$sira:$i")
+                    .put("title", bicim.label ?: "")
+                    .put("lang", bicim.language ?: "")
+                    .put("active", grup.isTrackSelected(i)))
+            }
+            sira++
+        }
+        js("window.__kopru && window.__kopru.gomuluAltyazilar($liste)")
     }
 
     private fun sesleriYolla() {
@@ -197,6 +286,32 @@ class OdaActivity : AppCompatActivity() {
             oynatici.setMediaItem(oge.build())
             oynatici.prepare()
             yuklendi = true
+            sesUyarildi = false
+            denemeSayisi = 0
+        }
+
+        // Gömülü altyazı seç ("" = kapat). Gömülüyü ExoPlayer çiziyor, dış altyazıyı sayfa.
+        @JavascriptInterface
+        fun gomuluSec(id: String) = ana.post {
+            val yeni = oynatici.trackSelectionParameters.buildUpon()
+            if (id.isEmpty()) {
+                yeni.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                oynaticiGorunum.subtitleView?.visibility = View.GONE
+            } else {
+                val (grupSira, iz) = id.split(":").map { it.toIntOrNull() ?: 0 }
+                val grup = oynatici.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }.getOrNull(grupSira)
+                    ?: return@post
+                yeni.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                    .setOverrideForType(TrackSelectionOverride(grup.mediaTrackGroup, iz))
+                oynaticiGorunum.subtitleView?.visibility = View.VISIBLE
+            }
+            oynatici.trackSelectionParameters = yeni.build()
+        }
+
+        // Ekran parlaklığı (kaydırma hareketi): yalnızca bu pencere için, 0..1.
+        @JavascriptInterface
+        fun parlaklik(deger: Double) = ana.post {
+            window.attributes = window.attributes.apply { screenBrightness = deger.toFloat().coerceIn(0.02f, 1f) }
         }
 
         @JavascriptInterface
@@ -272,6 +387,35 @@ class OdaActivity : AppCompatActivity() {
         } else {
             kontrol.show(WindowInsetsCompat.Type.systemBars())
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    // ---- resim içinde resim ------------------------------------------------------------
+    // Uygulamadan çıkınca (ana ekran tuşu) video küçük pencerede sürer. PiP'de sayfa gizli,
+    // oynatıcı pencereyi kaplıyor; dönünce sayfa oynatıcıyı yeniden yerine koyuyor.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!yuklendi || !oynatici.playWhenReady || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val boyut = oynatici.videoSize
+        val oran = if (boyut.width > 0 && boyut.height > 0) {
+            // Android çok geniş/çok dar oranları reddediyor: 2.39'u aşmasın.
+            Rational(boyut.width, boyut.height).takeIf { it.toFloat() in 0.42f..2.39f } ?: Rational(239, 100)
+        } else {
+            Rational(16, 9)
+        }
+        runCatching { enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(oran).build()) }
+    }
+
+    override fun onPictureInPictureModeChanged(pip: Boolean, yeniAyar: Configuration) {
+        super.onPictureInPictureModeChanged(pip, yeniAyar)
+        if (pip) {
+            web.visibility = View.INVISIBLE
+            oynaticiGorunum.layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            oynaticiGorunum.x = 0f
+            oynaticiGorunum.y = 0f
+        } else {
+            web.visibility = View.VISIBLE
+            js("window.__kopru && window.__kopru.yenidenOlc()")
         }
     }
 

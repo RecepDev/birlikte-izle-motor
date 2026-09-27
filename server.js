@@ -18,6 +18,7 @@ import { normalizeStreams, normalizeAddonStreams } from './src/streams.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter } from './src/stremio-restart.js';
+import { createIndirRouter } from './src/indir.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
 import { createTunnel, installCloudflared } from './src/tunnel.js';
@@ -92,6 +93,7 @@ publicApp.use((req, res, next) => {
 publicApp.use(createAddonRouter({ panelBase: PANEL_BASE }));
 publicApp.use(createSubtitleRouter({ rooms, service: subtitles, dispatch, log }));
 publicApp.use(relay.router);
+publicApp.use(createIndirRouter({ root: ROOT, log }));
 publicApp.get('/', (req, res) => res.redirect(302, '/room/'));
 publicApp.get(['/room', '/room/', '/room/:id'], (req, res) => {
   res.set('Content-Security-Policy', ROOM_CSP);

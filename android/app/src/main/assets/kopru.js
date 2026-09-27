@@ -115,6 +115,7 @@
     video.after(yerTutucu);
 
     new ResizeObserver(alanBildir).observe(video.closest('.player') || video);
+    if (video.closest('.player')) hareketKur(video.closest('.player'));
     window.addEventListener('scroll', alanBildir, true);
     window.addEventListener('resize', alanBildir);
     alanBildir();
@@ -159,7 +160,122 @@
     tamEkranCik() {
       if (tamEl) document.exitFullscreen();
     },
+    // Telefon bu sesi çözemiyor (ör. DTS): sayfa yalnızca sesi dönüştüren moda geçer.
+    sesDesteklenmiyor() {
+      window.dispatchEvent(new Event('masaustu-ses-yok'));
+    },
+    gomuluAltyazilar(liste) {
+      gomulu = liste || [];
+      window.dispatchEvent(new Event('masaustu-gomulu'));
+    },
+    // Resim içinde resimden dönünce oynatıcıyı yeniden yerine koy.
+    yenidenOlc() {
+      son = '';
+      alanBildir();
+    },
   };
+
+  // ---- gömülü altyazılar (dosyanın içindekiler) -----------------------------------
+  let gomulu = [];
+  window.masaustuGomulu = {
+    liste: () => gomulu,
+    sec: (id) => A.gomuluSec(String(id || '')),
+  };
+
+  // ---- dokunmatik hareketler -------------------------------------------------------
+  // Sol yarıda yukarı/aşağı kaydırma parlaklık, sağ yarıda ses. Çift dokunuş sağda
+  // 10 sn ileri, solda geri - sayfanın kendi sarma çubuğu üzerinden, yani host kilidi
+  // açıksa misafirde çalışmaz (sayfa izin vermez).
+  let parlaklik = 0.5;
+  function hareketKur(oyuncu) {
+    let bas = null;
+    let sonDokunus = 0;
+    oyuncu.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1 || e.target.closest('.controls, button, input')) return;
+      const t = e.touches[0];
+      const r = oyuncu.getBoundingClientRect();
+      bas = { x: t.clientX, y: t.clientY, sol: t.clientX < r.left + r.width / 2, deger: null, yukseklik: r.height };
+    }, { passive: true });
+    oyuncu.addEventListener('touchmove', (e) => {
+      if (!bas) return;
+      const t = e.touches[0];
+      const dy = bas.y - t.clientY;
+      if (bas.deger === null) {
+        // Yatay kaydırmayı (sayfa kaydırma vb.) karıştırmamak için önce dikey olduğundan emin ol.
+        if (Math.abs(dy) < 18 || Math.abs(dy) < Math.abs(t.clientX - bas.x)) return;
+        bas.deger = bas.sol ? parlaklik : (el?.volume ?? 1);
+      }
+      e.preventDefault();
+      const yeni = Math.max(0, Math.min(1, bas.deger + dy / (bas.yukseklik * 0.8)));
+      if (bas.sol) {
+        parlaklik = yeni;
+        A.parlaklik(yeni);
+      } else {
+        const kaydirici = document.getElementById('volume');
+        if (kaydirici) {
+          kaydirici.value = String(yeni);
+          kaydirici.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+      ipucu(bas.sol ? `☀️ %${Math.round(yeni * 100)}` : `🔊 %${Math.round(yeni * 100)}`);
+    }, { passive: false });
+    oyuncu.addEventListener('touchend', (e) => {
+      const kaydirildi = bas?.deger !== null && bas?.deger !== undefined;
+      const sol = bas?.sol;
+      bas = null;
+      if (kaydirildi || e.target.closest('.controls, button, input')) return;
+      const simdi = Date.now();
+      if (simdi - sonDokunus < 300) {
+        sonDokunus = 0;
+        const cubuk = document.getElementById('seek');
+        if (cubuk && !cubuk.disabled) {
+          const hedef = Math.max(0, Math.min(Number(cubuk.max) || 0, durum.position + (sol ? -10 : 10)));
+          cubuk.value = String(hedef);
+          cubuk.dispatchEvent(new Event('input', { bubbles: true }));
+          cubuk.dispatchEvent(new Event('change', { bubbles: true }));
+          ipucu(sol ? '⏪ 10 sn' : '10 sn ⏩');
+        }
+      } else {
+        sonDokunus = simdi;
+      }
+    });
+  }
+
+  // Tam ekranda gelen sohbet mesajları videonun sol altında, 8 sn.
+  window.masaustuSohbet = (kim, metin) => {
+    const oyuncu = el?.closest('.player');
+    if (!oyuncu) return;
+    let kutu = oyuncu.querySelector('.mobil-sohbet');
+    if (!kutu) {
+      kutu = document.createElement('div');
+      kutu.className = 'mobil-sohbet';
+      oyuncu.appendChild(kutu);
+    }
+    const satir = document.createElement('div');
+    const ad = document.createElement('b');
+    ad.textContent = `${kim}: `;
+    satir.append(ad, document.createTextNode(metin));
+    kutu.appendChild(satir);
+    while (kutu.childElementCount > 4) kutu.firstElementChild.remove();
+    setTimeout(() => satir.remove(), 8000);
+  };
+
+  // Hareketlerin kısa göstergesi: oynatıcının ortasında.
+  let ipucuEl = null;
+  let ipucuZaman = null;
+  function ipucu(metin) {
+    const oyuncu = el?.closest('.player');
+    if (!oyuncu) return;
+    if (!ipucuEl) {
+      ipucuEl = document.createElement('div');
+      ipucuEl.className = 'mobil-ipucu';
+      oyuncu.appendChild(ipucuEl);
+    }
+    ipucuEl.textContent = metin;
+    ipucuEl.hidden = false;
+    clearTimeout(ipucuZaman);
+    ipucuZaman = setTimeout(() => { ipucuEl.hidden = true; }, 900);
+  }
 
   // ---- ses parçaları ---------------------------------------------------------------
   let sesler = [];
@@ -290,6 +406,19 @@
       border: 4px solid #2a2e39; border-top-color: #7b5cff; animation: mobil-don .9s linear infinite;
     }
     @keyframes mobil-don { to { transform: rotate(360deg); } }
+    .mobil-ipucu {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
+      background: rgba(0, 0, 0, .65); color: #fff; padding: 8px 14px; border-radius: 10px;
+      font-size: 16px; pointer-events: none;
+    }
+    .mobil-ipucu[hidden] { display: none; }
+    .mobil-sohbet {
+      position: absolute; left: 12px; bottom: 64px; z-index: 5; max-width: 70%;
+      display: flex; flex-direction: column; gap: 4px; pointer-events: none;
+    }
+    .mobil-sohbet div {
+      background: rgba(0, 0, 0, .6); color: #fff; padding: 4px 10px; border-radius: 8px; font-size: 14px;
+    }
   `;
   function stilEkle() {
     const s = document.createElement('style');

@@ -20,6 +20,19 @@ export function createSubs({
   let trackEl = null;
   let appliedId = null;
   let trackFailed = false;
+  // Masaüstü/telefon uygulamasında dosyanın içindeki (gömülü) altyazıyı seçen kişi.
+  // Kişisel seçim: oynatıcı çiziyor, odanın altyazısı bu kişide kapanıyor.
+  let embeddedChosen = null;
+  // Kişisel ses gecikmesi (masaüstü): bluetooth kulaklıkta ses görüntünün gerisinde kalırsa.
+  let audioDelay = Number(storage.get('sesGecikme')) || 0;
+  function nudgeAudioDelay(delta) {
+    audioDelay = delta === null ? 0 : Math.round(Math.min(5, Math.max(-5, audioDelay + delta)) * 10) / 10;
+    storage.set('sesGecikme', String(audioDelay));
+    window.masaustuBilgi?.(`Ses gecikmesi ${audioDelay > 0 ? '+' : ''}${audioDelay.toFixed(1)} sn`);
+    render();
+  }
+  const embeddedTracks = () => window.masaustuGomulu?.liste() || [];
+  window.addEventListener('masaustu-gomulu', () => render());
   let reloadCount = 0;
   const originals = new WeakMap();
   let size = Number(storage.get('cueSize')) || 1;
@@ -155,7 +168,22 @@ export function createSubs({
     window.masaustuAltyazi?.uygula(eff.subId && findSub(eff.subId) ? srcFor(eff.subId) : null, eff.offset);
   }
 
+  function clearEmbedded() {
+    if (embeddedChosen === null) return;
+    window.masaustuGomulu?.sec('');
+    embeddedChosen = null;
+  }
+
+  function chooseEmbedded(id) {
+    personal = { subId: null, offset: 0 };
+    apply();
+    window.masaustuGomulu?.sec(id);
+    embeddedChosen = id;
+    render();
+  }
+
   async function choose(subId) {
+    clearEmbedded();
     const localOnly = localFiles.some((f) => f.subId === subId);
     if (isHost() && !localOnly) {
       personal = null;
@@ -233,7 +261,7 @@ export function createSubs({
     const offsetText = `${eff.offset > 0 ? '+' : ''}${eff.offset.toFixed(1)} sn`;
     const mode = personal
       ? el('div', { class: 'row' }, el('span', { text: '👤 Kişisel seçim (host değişiklikleri sana uygulanmıyor)' }),
-        el('button', { type: 'button', text: "Host'unkine dön", onclick: () => { personal = null; apply(); } }))
+        el('button', { type: 'button', text: "Host'unkine dön", onclick: () => { clearEmbedded(); personal = null; apply(); } }))
       : el('div', { class: 'muted small', text: isHost() ? 'Seçtiğin altyazı herkese uygulanır.' : "Host'un seçimini izliyorsun. Kendin seçersen kişisel moda geçersin." });
 
     const groups = new Map();
@@ -244,7 +272,10 @@ export function createSubs({
     }
     // Languages the file carries inside it (from the release name). The browser
     // can't show those tracks, so they're listed as info, not as choices.
-    const embeddedLangs = new Set(embeddedLangsOf());
+    // Uygulama dosyanın gerçek altyazı listesini veriyorsa onu gösteriyoruz; dosya
+    // adından tahmin edilen "gömülü" bilgi satırlarına gerek kalmıyor.
+    const realEmbedded = embeddedTracks();
+    const embeddedLangs = new Set(realEmbedded.length ? [] : embeddedLangsOf());
     for (const lang of embeddedLangs) if (!groups.has(lang)) groups.set(lang, []);
     const embeddedRow = (lang) => el('li', { class: 'embedded' },
       el('span', { text: `💬 ${lang} · dosyanın içinde` }),
@@ -254,8 +285,32 @@ export function createSubs({
     const fileInput = el('input', { type: 'file', accept: '.srt,.vtt,text/vtt', hidden: true, onchange: (e) => upload(e.target.files[0]) });
     // replaceChildren would print null/false as text, so drop them first.
     const put = (...nodes) => panel.replaceChildren(...nodes.filter((n) => n !== null && n !== undefined && n !== false));
-    const embedded = embeddedInfo();
+    const embedded = realEmbedded.length ? null : embeddedInfo();
+    const embeddedGroup = realEmbedded.length
+      ? [
+        el('h3', {}, '📦 Dosyanın içindeki altyazılar'),
+        el('ul', {}, ...realEmbedded.map((t, i) => el('li', {},
+          el('button', {
+            type: 'button',
+            class: embeddedChosen === t.id ? 'current' : '',
+            onclick: () => chooseEmbedded(t.id),
+          },
+          el('span', { text: t.title || (t.lang ? langLabel(t.lang) : `Altyazı ${i + 1}`) }),
+          el('span', { class: 'muted small', text: [t.lang ? langLabel(t.lang) : '', 'sadece sende'].filter(Boolean).join(' · ') }))))),
+      ]
+      : [];
     const tracks = audioTracks();
+    // Köprü sayfadan sonra kurulabiliyor: her çizimde son değeri iletiyoruz (köprü tekrarı eliyor).
+    window.masaustuSesGecikme?.(audioDelay);
+    const audioDelayRow = window.masaustuSesGecikme
+      ? el('div', { class: 'row' },
+        el('span', { class: 'muted small', text: '🎧 Ses gecikmesi' }),
+        el('button', { type: 'button', text: '−0.1', onclick: () => nudgeAudioDelay(-0.1) }),
+        el('span', { text: `${audioDelay > 0 ? '+' : ''}${audioDelay.toFixed(1)} sn` }),
+        el('button', { type: 'button', text: '+0.1', onclick: () => nudgeAudioDelay(0.1) }),
+        audioDelay ? el('button', { type: 'button', text: 'Sıfırla', onclick: () => nudgeAudioDelay(null) }) : null,
+        el('span', { class: 'info-i', tabindex: '0', title: 'Yalnızca sende. Ses görüntünün gerisindeyse (bluetooth kulaklık) eksiye, önündeyse artıya al.' }, 'i'))
+      : null;
     const audioRow = tracks.length > 1
       ? el('div', { class: 'row' },
         el('span', { class: 'muted small', text: '🔊 Ses dili' }),
@@ -280,6 +335,7 @@ export function createSubs({
         : null;
     put(
       audioRow,
+      audioDelayRow,
       audioHint,
       mode,
       embedded ? el('div', { class: 'row' }, el('span', { text: '💬 Bu dosyada gömülü altyazı var' }),
@@ -311,7 +367,8 @@ export function createSubs({
         fileInput,
         el('button', { type: 'button', text: '📄 .srt / .vtt yükle', onclick: () => fileInput.click() }),
         el('span', { class: 'muted small', text: isHost() ? 'herkese eklenir' : 'sadece sende görünür' })),
-      el('ul', {}, el('li', {}, el('button', { type: 'button', class: eff.subId ? '' : 'current', onclick: () => choose(null), text: 'Kapalı' }))),
+      el('ul', {}, el('li', {}, el('button', { type: 'button', class: eff.subId || embeddedChosen !== null ? '' : 'current', onclick: () => choose(null), text: 'Kapalı' }))),
+      ...embeddedGroup,
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),
         el('button', { type: 'button', text: '↻ Listeyi yenile', title: "Altyazıları addon'lardan yeniden çek", onclick: refreshList })),

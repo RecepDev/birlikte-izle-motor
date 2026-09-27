@@ -99,6 +99,12 @@ function attachSource(url, opts = {}) {
 // container/browser support it (Safari's native HLS, some local mp4/webm).
 // Masaüstü kabuğu ses parçalarını mpv'den bildirir.
 window.addEventListener('masaustu-sesler', () => subs?.rerender());
+// Telefon dosyanın sesini çözemiyor (ör. DTS): yalnızca sesi dönüştüren moda geç.
+// Görüntü kopyalanıyor (telefon HEVC'yi açabiliyor), kalite düşmüyor.
+window.addEventListener('masaustu-ses-yok', () => {
+  toast('Bu telefon dosyanın sesini çözemiyor (ör. DTS). Ses dönüştürülerek açılıyor, görüntü aynı kalıyor.', 7000);
+  startCompat({ allowReencode: false });
+});
 if ('audioTracks' in video) {
   const onAudioChange = () => subs?.rerender();
   video.audioTracks.addEventListener('addtrack', onAudioChange);
@@ -761,10 +767,23 @@ function renderQualityAddonTabs() {
 
 // Resolution / HDR-SDR / size / needed-speed filters, layered on top of the addon tab.
 const qualityFilters = { res: new Set(), hdrMode: 'all', maxGb: null, maxMbps: null };
+// Telefon uygulamasında: yalnızca bu telefonun çözebildiği kaynaklar (kişisel tercih,
+// varsayılan kapalı). window.mobilCihaz telefonun çözücü sınırlarını taşıyor.
+const deviceCaps = window.mobilCihaz || null;
+let deviceFilter = Boolean(deviceCaps) && storage.get('cihazaUygun') === '1';
+function fitsDevice(s) {
+  const height = Number.parseInt(s.quality, 10);
+  if (!deviceCaps || !Number.isFinite(height)) return true;
+  const codec = s.videoRisk === 'AV1' ? 'av1' : s.videoRisk ? 'hevc' : 'h264';
+  const max = deviceCaps[codec] || 0;
+  // Biraz pay: 2160p'yi "2176" diye bildiren çözücüler var.
+  return max > 0 && height <= max + 32;
+}
 function filtersActive() {
-  return Boolean(qualityFilters.res.size || qualityFilters.hdrMode !== 'all' || qualityFilters.maxGb !== null || qualityFilters.maxMbps !== null);
+  return Boolean(qualityFilters.res.size || qualityFilters.hdrMode !== 'all' || qualityFilters.maxGb !== null || qualityFilters.maxMbps !== null || deviceFilter);
 }
 function matchesQualityFilters(s) {
+  if (deviceFilter && !fitsDevice(s)) return false;
   if (qualityFilters.res.size && !qualityFilters.res.has(s.quality || '?')) return false;
   if (qualityFilters.hdrMode === 'hdr' && !s.hdr) return false;
   if (qualityFilters.hdrMode === 'sdr' && s.hdr) return false;
@@ -777,6 +796,15 @@ function matchesQualityFilters(s) {
     if (need === null || need >= qualityFilters.maxMbps) return false;
   }
   return true;
+}
+if (deviceCaps) {
+  $('#filter-device-wrap').hidden = false;
+  $('#filter-device').checked = deviceFilter;
+  $('#filter-device').addEventListener('change', (e) => {
+    deviceFilter = e.target.checked;
+    storage.set('cihazaUygun', deviceFilter ? '1' : '0');
+    renderQualityTab();
+  });
 }
 function renderQualityResFilter(streams) {
   const box = $('#quality-res-filter');
@@ -1068,7 +1096,11 @@ socket.on('users', ({ users }) => {
   loadMyStream();
 });
 
-socket.on('chat', (m) => chat.add(m));
+socket.on('chat', (m) => {
+  chat.add(m);
+  // Masaüstünde tam ekranda sohbet paneli görünmüyor: mesaj videonun köşesinde çıksın.
+  if (document.fullscreenElement && !m.system) window.masaustuSohbet?.(m.from, m.text);
+});
 
 socket.on('hostStream', ({ hostStreamId, streams }) => {
   state.room.hostStreamId = hostStreamId;

@@ -175,6 +175,29 @@ ipcRenderer.on('mpv:sesler', (_e, liste) => {
 // yazıyı mpv kendi ekranında (alt ortada) gösteriyor.
 window.masaustuBilgi = (metin) => ipcRenderer.send('mpv:bilgi', String(metin));
 
+// Dosyanın içindeki (gömülü) altyazılar: mpv listeliyor, kişi seçerse mpv çiziyor.
+let gomulu = [];
+ipcRenderer.on('mpv:gomulu', (_e, liste) => {
+  gomulu = liste || [];
+  window.dispatchEvent(new Event('masaustu-gomulu'));
+});
+window.masaustuGomulu = {
+  liste: () => gomulu,
+  sec: (id) => ipcRenderer.send('mpv:gomulu-sec', String(id || '')),
+};
+
+// Kişisel ses gecikmesi (bluetooth kulaklıkta ses geride kalırsa), saniye.
+let sonGecikme = null;
+window.masaustuSesGecikme = (saniye) => {
+  const deger = Number(saniye) || 0;
+  if (deger === sonGecikme) return;
+  sonGecikme = deger;
+  ipcRenderer.send('mpv:ozellik', 'audio-delay', deger);
+};
+
+// Tam ekranda gelen sohbet mesajı: videonun sol altında kısa süre görünür (mpv çiziyor).
+window.masaustuSohbet = (kim, metin) => ipcRenderer.send('mpv:sohbet', String(kim || ''), String(metin || ''));
+
 // Görüntü oranı düğmesi: sayfanın modlarını mpv özelliklerine çeviriyoruz.
 let sonOran = null;
 window.masaustuOran = (mod) => {
