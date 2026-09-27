@@ -1461,6 +1461,26 @@ function renderIntroAsk() {
   $('#intro-ask').hidden = !(isHost() && state.room?.type === 'series' && !introAsked);
 }
 video.addEventListener('timeupdate', renderSkipIntro);
+
+// Dizide son %5'e gelince (jenerik) aynı yerde "Sonraki bölüm" düğmesi; ✕ ile o bölüm için
+// kapanıyor. Bölümü yalnızca host değiştirebildiği için host'a çıkıyor.
+let nextEpDismissed = null;
+function renderNextEp() {
+  const d = video.duration;
+  const id = state.room?.contentId;
+  const show = isHost() && state.room?.type === 'series' && Number.isFinite(d) && d > 120
+    && video.currentTime >= d * 0.95 && nextEpDismissed !== id;
+  $('#next-ep').hidden = !show;
+}
+video.addEventListener('timeupdate', renderNextEp);
+$('#next-ep-go').addEventListener('click', () => {
+  $('#next-ep').hidden = true;
+  stepEpisode(1);
+});
+$('#next-ep-close').addEventListener('click', () => {
+  nextEpDismissed = state.room?.contentId ?? null;
+  $('#next-ep').hidden = true;
+});
 setInterval(refreshIntro, 1000);
 $('#skip-intro').addEventListener('click', () => {
   if (!intro) return;

@@ -461,3 +461,12 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .intro-row { display: flex; gap: 6px; align-items: center; }
 .intro-row input { width: 90px; flex: none; }
 .intro-row button { padding: 5px 10px; font-size: 13px; }
+.next-ep { position: absolute; right: 24px; bottom: 110px; z-index: 25; display: flex; gap: 0; }
+.next-ep[hidden] { display: none; }
+.next-ep button {
+  padding: 10px 16px; font-size: 15px; font-weight: 600; color: #fff;
+  background: rgba(20, 22, 29, .92); border: 1px solid rgba(255, 255, 255, .35);
+}
+.next-ep .skip-intro-like { border-radius: 8px 0 0 8px; }
+.next-ep .next-ep-close { border-radius: 0 8px 8px 0; border-left: none; padding: 10px 12px; font-weight: 400; }
+.next-ep button:hover { background: var(--accent); border-color: var(--accent); }
