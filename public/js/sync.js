@@ -13,6 +13,9 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
   let drift = null;
   // Events we caused ourselves; anything else is a user action (PiP, media keys, iOS player).
   const programmatic = { play: 0, pause: 0, seeked: 0 };
+  // Kendi yaptığımız sarma bitti mi: telefonda "seeked" yeni yer indirilince (saniyeler sonra)
+  // geliyor; süreye bakılırsa kişinin sarması sanılıp yeniden sarılıyordu (sonsuz sarma).
+  let seekPending = false;
 
   const serverNow = () => Date.now() + offset;
   const target = () => (playback ? expectedPosition(playback, serverNow()) : 0);
@@ -20,6 +23,7 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
 
   function setTime(t) {
     programmatic.seeked = Date.now();
+    seekPending = true;
     video.currentTime = Math.min(t, Math.max(0, (video.duration || t) - 0.5));
   }
 
@@ -91,6 +95,10 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
   const intendsToPlay = () => Boolean(playback && (!playback.paused || autoPaused));
 
   function onMediaEvent(kind, action) {
+    if (kind === 'seeked' && seekPending) {
+      seekPending = false;
+      return;
+    }
     if (Date.now() - programmatic[kind] < PROGRAMMATIC_WINDOW_MS) return;
     if (!playback || video.ended) return;
     if (!canControl()) {

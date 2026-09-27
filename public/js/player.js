@@ -38,6 +38,7 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
 
   function clearTimers() {
     clearTimeout(bufferTimer);
+    bufferTimer = null;
     clearTimeout(loadTimer);
     clearTimeout(retryTimer);
   }
@@ -105,6 +106,7 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
 
   function markReady() {
     clearTimeout(bufferTimer);
+    bufferTimer = null;
     clearTimeout(loadTimer);
     if (status.state !== 'error' && status.state !== 'idle' && status.state !== 'noStremio') set('ready');
   }
@@ -114,9 +116,13 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
   video.addEventListener('seeked', () => {
     if (video.readyState >= 3) markReady();
   });
+  // Telefon/masaüstü köprüsü takıldığı sürece "waiting"i sık sık (0,2 sn) yolluyor: sayaç her
+  // seferinde baştan başlarsa hiç dolmuyor, kişi "yükleniyor" olmuyor ve oda onu beklemiyordu.
+  // Sayaç yalnızca ilk "waiting"te kuruluyor.
   video.addEventListener('waiting', () => {
-    clearTimeout(bufferTimer);
+    if (bufferTimer) return;
     bufferTimer = setTimeout(() => {
+      bufferTimer = null;
       if (video.readyState < 3 && status.state === 'ready') set('buffering');
     }, BUFFER_DEBOUNCE_MS);
   });
