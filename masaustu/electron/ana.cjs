@@ -552,6 +552,12 @@ app.whenReady().then(() => {
     guncellemeDenetle(adres);
     sonSunucuyuKaydet(adres);
   });
+  // stremio:// gibi uygulama bağlantıları ("Stremio'ya bağlan") işletim sistemine gitsin.
+  ana.webContents.on('will-navigate', (e, url) => {
+    if (/^https?:|^file:/.test(url)) return;
+    e.preventDefault();
+    shell.openExternal(url).catch(() => {});
+  });
   ana.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };

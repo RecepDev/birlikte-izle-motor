@@ -242,6 +242,7 @@ const player = createPlayer({
     sendStatus();
     renderNotice();
     renderControls();
+    renderRelayBadge();
   },
 });
 
@@ -565,6 +566,29 @@ const subs = createSubs({
   onSwitchCompat: () => startCompat(),
   reencodeBlocked: () => qualityBlocked && Boolean(myStream()?.multiAudio),
   onForceCompat: () => startCompat({ allowReencode: true }),
+});
+
+// Video host üzerinden (relay) geliyorsa başlığın yanında rozet; kendi Stremio'su olabilecek
+// (dokunmatik olmayan) cihazlarda bir de "Stremio'ya bağlan" düğmesi.
+function renderRelayBadge() {
+  const relay = player.status().source === 'relay';
+  $('#relay-badge').hidden = !relay;
+  $('#connect-stremio').hidden = !relay || isHost() || isTouch;
+}
+
+// Stremio'yu aç, açılınca oynatıcıyı yeniden kur: kaynak seçimi kendi Stremio'yu relay'e tercih ediyor.
+let stremioWatch = null;
+$('#connect-stremio').addEventListener('click', () => {
+  launchStremio();
+  clearInterval(stremioWatch);
+  const started = Date.now();
+  stremioWatch = setInterval(async () => {
+    if (Date.now() - started > 60_000) return clearInterval(stremioWatch);
+    if (!(await isStremioUp())) return;
+    clearInterval(stremioWatch);
+    toast("Stremio'ya bağlanıldı, video artık kendi Stremio'ndan geliyor.", 5000);
+    player.reload();
+  }, 2000);
 });
 
 function renderHeader() {

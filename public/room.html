@@ -52,7 +52,11 @@
       <div class="room-title">
         <img id="poster" alt="" hidden>
         <div>
-          <div id="title" class="title-text"></div>
+          <div class="title-line">
+            <div id="title" class="title-text"></div>
+            <span id="relay-badge" class="relay-badge" hidden title="Video host'un bilgisayarı üzerinden geliyor (relay): host'un internet hızına bağlı.">📶 Relay</span>
+            <button id="connect-stremio" type="button" class="connect-stremio" hidden title="Bilgisayarında Stremio varsa videoyu doğrudan oradan al: host'un internetini kullanmaz, genelde daha hızlı.">🔌 Stremio'ya bağlan</button>
+          </div>
           <div id="subtitle" class="muted small"></div>
         </div>
       </div>
