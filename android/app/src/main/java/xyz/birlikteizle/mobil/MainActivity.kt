@@ -30,6 +30,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         linktenAc(intent)?.let { return odayaGit(it) }
         ekraniKur()
+        // Tercih edilen görüntü kalitesi ilk açılışta bir kez soruluyor.
+        if (kayit.getString("kalite", null) == null) kaliteSor()
         // Açılışta da güncellemeye bak (odaya girince de ayrıca bakılıyor).
         thread { Guncelleme.apkDenetle(this, sunucuBul()) }
     }
@@ -252,6 +254,18 @@ class MainActivity : AppCompatActivity() {
         kart.addView(guncelle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
             topMargin = dp(10)
         })
+        kaliteDugmesi = Button(this).apply {
+            text = kaliteYazisi()
+            setTextColor(yazi)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(0xFF232633.toInt())
+            }
+            setOnClickListener { kaliteSor() }
+        }
+        kart.addView(kaliteDugmesi, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
+            topMargin = dp(10)
+        })
         // Hangi sürümün kurulu olduğu görünsün (güncelleme geldi mi diye bakmak için).
         kart.addView(TextView(this).apply {
             text = "Sürüm ${packageManager.getPackageInfo(packageName, 0).versionName}"
@@ -267,5 +281,25 @@ class MainActivity : AppCompatActivity() {
             addView(kart, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
         setContentView(kok)
+    }
+
+    // ---- tercih edilen görüntü kalitesi -------------------------------------------------
+    // Odada kalite listesinde bu kalite en üstte olur, önce onun kaynakları aranır.
+    private var kaliteDugmesi: Button? = null
+    private val kaliteler = arrayOf("2160p", "1080p", "720p")
+    private val kaliteAdlari = arrayOf("4K (2160p)", "1080p", "720p")
+    private fun kaliteYazisi(): String {
+        val k = kayit.getString("kalite", null)
+        val ad = kaliteler.indexOf(k).takeIf { it >= 0 }?.let { kaliteAdlari[it] } ?: "seçilmedi"
+        return "Görüntü kalitesi: $ad"
+    }
+    private fun kaliteSor() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Hangi görüntü kalitesini tercih edersin?")
+            .setItems(kaliteAdlari) { _, i ->
+                kayit.edit().putString("kalite", kaliteler[i]).apply()
+                kaliteDugmesi?.text = kaliteYazisi()
+            }
+            .show()
     }
 }

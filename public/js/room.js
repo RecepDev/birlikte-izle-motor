@@ -879,7 +879,9 @@ if (deviceCaps) {
 // Kalite sırası: en yüksek çözünürlük en üstte (4K/2160p), aynı kalitede çok kaynaklı önce.
 const QUALITY_RANK = ['2160p', '1440p', '1080p', '720p', '576p', '480p', '360p'];
 // Kişinin tercih ettiği kalite (ilk girişte soruluyor, Ayarlar'dan değişiyor) hep en üstte.
-let preferredQuality = ['2160p', '1080p', '720p'].includes(storage.get('tercihKalite')) ? storage.get('tercihKalite') : null;
+// Uygulamada açılış ekranında seçilen kalite (masaüstü: window.kabuk, telefon: mobilCihaz) önce gelir.
+const appQuality = () => window.kabuk?.kalite?.() || window.mobilCihaz?.kalite || null;
+let preferredQuality = [appQuality(), storage.get('tercihKalite')].find((q) => ['2160p', '1080p', '720p'].includes(q)) || null;
 const qualityRank = (q) => {
   if (preferredQuality && q === preferredQuality) return -1;
   const i = QUALITY_RANK.indexOf(q);
@@ -1935,6 +1937,9 @@ const QUALITY_CHOICES = [['2160p', '4K (2160p)'], ['1080p', '1080p'], ['720p', '
 function setPreferredQuality(q) {
   preferredQuality = q;
   storage.set('tercihKalite', q);
+  // Uygulamanın kaydına da yaz: açılış ekranı ve sonraki odalar aynı tercihi görsün.
+  window.kabuk?.kaliteYaz?.(q);
+  window.mobilKaliteYaz?.(q);
   $('#set-pref-quality').value = q;
   if (isHost()) request('setPreferredQuality', { quality: q }).catch(() => {});
   preferredCheckedFor = null;

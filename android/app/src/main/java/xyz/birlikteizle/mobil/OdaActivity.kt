@@ -106,6 +106,16 @@ class OdaActivity : AppCompatActivity() {
                     if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) kopruEnjekte()
                 }
 
+                // Oda sayfasına ulaşılamadıysa (sunucu kapalı, tünel adresi eskimiş, internet yok)
+                // boş/hata sayfasında kalmasın: açılış ekranına dönülsün.
+                override fun onReceivedError(view: WebView, istek: WebResourceRequest, hata: android.webkit.WebResourceError) {
+                    if (istek.isForMainFrame) acilisaDon("Sunucuya ulaşılamadı (${hata.description}). Sunucu kapalı olabilir.")
+                }
+
+                override fun onReceivedHttpError(view: WebView, istek: WebResourceRequest, cevap: android.webkit.WebResourceResponse) {
+                    if (istek.isForMainFrame && cevap.statusCode >= 500) acilisaDon("Sunucuya ulaşılamadı (${cevap.statusCode}). Sunucu kapalı ya da adresi değişmiş olabilir.")
+                }
+
                 // Oda dışındaki bağlantılar (yardım vb.) tarayıcıda açılsın.
                 override fun shouldOverrideUrlLoading(view: WebView, istek: WebResourceRequest): Boolean {
                     val hedef = istek.url
@@ -175,6 +185,7 @@ class OdaActivity : AppCompatActivity() {
             .put("truehd", "audio/true-hd" in cozuculer)
         val bilgi = JSONObject()
             .put("ses", ses)
+            .put("kalite", getSharedPreferences("ayar", MODE_PRIVATE).getString("kalite", null) ?: JSONObject.NULL)
             .put("hevc", enBuyuk(MimeTypes.VIDEO_H265))
             .put("h264", enBuyuk(MimeTypes.VIDEO_H264))
             .put("av1", enBuyuk(MimeTypes.VIDEO_AV1))
@@ -405,6 +416,12 @@ class OdaActivity : AppCompatActivity() {
         @JavascriptInterface
         fun tamEkran(acik: Boolean) = ana.post { tamEkranUygula(acik) }
 
+        // Odada kalite tercihi değişince açılış ekranı da aynısını göstersin.
+        @JavascriptInterface
+        fun kaliteYaz(kalite: String) {
+            if (kalite in setOf("2160p", "1080p", "720p")) getSharedPreferences("ayar", MODE_PRIVATE).edit().putString("kalite", kalite).apply()
+        }
+
         // ⋯ menüsü: "VLC'de aç" (VLC yoksa video açan başka uygulama) ve "indir".
         @JavascriptInterface
         fun harici(url: String, tur: String, ad: String) = ana.post {
@@ -469,6 +486,15 @@ class OdaActivity : AppCompatActivity() {
             web.visibility = View.VISIBLE
             js("window.__kopru && window.__kopru.yenidenOlc()")
         }
+    }
+
+    private var donuldu = false
+    private fun acilisaDon(mesaj: String) {
+        if (donuldu || isFinishing) return
+        donuldu = true
+        android.widget.Toast.makeText(this, mesaj, android.widget.Toast.LENGTH_LONG).show()
+        startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+        finish()
     }
 
     override fun onDestroy() {

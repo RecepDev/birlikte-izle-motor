@@ -325,6 +325,8 @@
 
   // Host odayı kapattı: açılış ekranına dön.
   window.masaustuOdaKapandi = () => A.odaKapandi?.();
+  // Odada seçilen kalite tercihi uygulamanın kaydına da yazılsın (APK 0.14 ve sonrası).
+  if (A.kaliteYaz) window.mobilKaliteYaz = (q) => A.kaliteYaz(String(q));
   // ⋯ menüsü: VLC'de aç / indir (APK 0.10 ve sonrası). Eski APK'da sayfanın kendi yolu kalır.
   if (A.harici) {
     window.masaustuHarici = {

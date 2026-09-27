@@ -691,6 +691,11 @@ async function sunucular() {
 ipcMain.handle('kabuk:sunucular', () => sunucular());
 ipcMain.on('kabuk:son-sunucu', (e) => { e.returnValue = ayarOku().sonSunucu || null; });
 ipcMain.on('kabuk:surum', (e) => { e.returnValue = kabuk.surum; });
+// Tercih edilen görüntü kalitesi: açılış ekranında bir kez soruluyor, oda sayfası da okuyor.
+ipcMain.on('kabuk:kalite', (e) => { e.returnValue = ayarOku().kalite || null; });
+ipcMain.on('kabuk:kalite-yaz', (_e, q) => {
+  if (['2160p', '1080p', '720p'].includes(q)) ayarYaz({ kalite: q });
+});
 // "Güncellemeleri denetle" düğmesi: yerel sunucu (host'ta) ya da bulunan sunucu.
 ipcMain.handle('kabuk:guncelle', async () => {
   const liste = await sunucular();

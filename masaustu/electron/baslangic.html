@@ -10,8 +10,14 @@
           border-radius:16px; padding:24px; display:grid; gap:14px; }
   h1 { margin:0; font-size:22px; }
   p { margin:0; color:#9096a6; font-size:14px; }
-  input { background:#0e0f13; border:1px solid #2a2e39; border-radius:8px;
+  input { background:#0e0f13; border:1px solid #2a2e39; border-radius:8px; box-sizing:border-box;
           padding:10px 12px; color:inherit; font:inherit; width:100%; }
+  .kalite { display:flex; gap:8px; align-items:center; justify-content:center; font-size:13px; color:#9096a6; }
+  .kalite select { background:#0e0f13; color:inherit; border:1px solid #2a2e39; border-radius:6px; padding:4px 8px; font:inherit; }
+  dialog { background:#171920; color:#e8e9ee; border:1px solid #2a2e39; border-radius:16px; padding:24px; width:min(420px,90vw); }
+  dialog::backdrop { background:rgba(0,0,0,.6); }
+  dialog h2 { margin:0 0 8px; font-size:18px; }
+  .secenekler { display:grid; gap:8px; margin-top:14px; }
   button { background:#7b5cff; border:none; border-radius:8px; padding:12px;
            color:#fff; font:inherit; font-weight:600; cursor:pointer; }
   button:hover { background:#9c86ff; }
@@ -38,10 +44,36 @@
     <button id="panel" type="button" class="ikincil" hidden>Film ara ve oda aç</button>
     <p id="panel-ipucu" class="ipucu" hidden>Sunucu bu bilgisayarda çalışıyor: Stremio'ya girmeden ara, seç, oda aç.</p>
     <button id="guncelle" type="button" class="ikincil">Güncellemeleri denetle</button>
+    <label class="kalite">Görüntü kalitesi
+      <select id="kalite"><option value="2160p">4K (2160p)</option><option value="1080p">1080p</option><option value="720p">720p</option></select>
+    </label>
     <p id="surum" class="ipucu" style="text-align:center"></p>
   </form>
+  <dialog id="kalite-sor">
+    <h2>Hangi görüntü kalitesini tercih edersin?</h2>
+    <p>Kalite listesinde bu kalite en üstte olur ve önce onun kaynakları aranır. Sonra buradan değiştirebilirsin.</p>
+    <div class="secenekler">
+      <button type="button" data-q="2160p">4K (2160p)</button>
+      <button type="button" data-q="1080p" class="ikincil">1080p</button>
+      <button type="button" data-q="720p" class="ikincil">720p</button>
+    </div>
+  </dialog>
 <script>
   document.getElementById('surum').textContent = `Sürüm ${window.kabuk.surum?.() || '?'}`;
+  // Tercih edilen kalite: ilk açılışta sorulur, burada ve oda sayfasında kullanılır.
+  const kaliteSec = document.getElementById('kalite');
+  const kayitliKalite = window.kabuk.kalite?.();
+  if (kayitliKalite) kaliteSec.value = kayitliKalite;
+  kaliteSec.addEventListener('change', () => window.kabuk.kaliteYaz?.(kaliteSec.value));
+  const sor = document.getElementById('kalite-sor');
+  for (const b of sor.querySelectorAll('button[data-q]')) {
+    b.addEventListener('click', () => {
+      window.kabuk.kaliteYaz?.(b.dataset.q);
+      kaliteSec.value = b.dataset.q;
+      sor.close();
+    });
+  }
+  if (!kayitliKalite && window.kabuk.kalite) sor.showModal();
   document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = document.getElementById('link').value.trim();
