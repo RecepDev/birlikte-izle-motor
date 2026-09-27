@@ -241,6 +241,51 @@
     });
   }
 
+  // ---- ses düğmesi: dokununca yukarı doğru dikey kaydırıcı açılır ------------------
+  // Dar ekranda sayfa ses kaydırıcısını gizliyor, 🔊 yalnızca sessize alıyordu.
+  // Sayfanın kendi #volume kaydırıcısını açılır kutuya taşıyoruz (dinleyicileri onda).
+  let sesKutusu = null;
+  function sesKutusuKur() {
+    const kaydirici = document.getElementById('volume');
+    const oyuncu = el?.closest('.player');
+    if (!kaydirici || !oyuncu) return null;
+    const kutu = document.createElement('div');
+    kutu.className = 'mobil-ses-kutu';
+    kutu.hidden = true;
+    const sessiz = document.createElement('button');
+    sessiz.type = 'button';
+    sessiz.className = 'mobil-ses-sessiz';
+    const yaz = () => { sessiz.textContent = muted || volume === 0 ? '🔇' : '🔈'; };
+    sessiz.addEventListener('click', (e) => {
+      e.stopPropagation();
+      el.muted = !muted;
+      el.dispatchEvent(new Event('volumechange'));
+      yaz();
+    });
+    kaydirici.addEventListener('input', yaz);
+    kutu.append(kaydirici, sessiz);
+    oyuncu.appendChild(kutu);
+    yaz();
+    // Kutunun dışına dokununca kapansın.
+    document.addEventListener('pointerdown', (e) => {
+      if (!kutu.hidden && !e.target.closest('.mobil-ses-kutu, #btn-mute')) kutu.hidden = true;
+    }, true);
+    return kutu;
+  }
+  document.addEventListener('click', (e) => {
+    const dugme = e.target.closest('#btn-mute');
+    if (!dugme) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    sesKutusu ||= sesKutusuKur();
+    if (!sesKutusu) return;
+    const oyuncu = el.closest('.player').getBoundingClientRect();
+    const r = dugme.getBoundingClientRect();
+    sesKutusu.style.left = `${r.left - oyuncu.left + r.width / 2}px`;
+    sesKutusu.style.bottom = `${oyuncu.bottom - r.top + 6}px`;
+    sesKutusu.hidden = !sesKutusu.hidden;
+  }, true);
+
   // Tam ekranda gelen sohbet mesajları videonun sol altında, 8 sn.
   window.masaustuSohbet = (kim, metin) => {
     const oyuncu = el?.closest('.player');
@@ -412,6 +457,17 @@
       font-size: 16px; pointer-events: none;
     }
     .mobil-ipucu[hidden] { display: none; }
+    .mobil-ses-kutu {
+      position: absolute; z-index: 20; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      background: rgba(20, 22, 29, .95); border: 1px solid #2a2e39; border-radius: 14px; padding: 12px 8px;
+    }
+    .mobil-ses-kutu[hidden] { display: none !important; }
+    .mobil-ses-kutu .volume {
+      display: block !important; width: 32px !important; height: 140px;
+      writing-mode: vertical-lr; direction: rtl; accent-color: #7b5cff;
+    }
+    .mobil-ses-sessiz { background: none; border: 0; font-size: 20px; padding: 2px; }
     .mobil-sohbet {
       position: absolute; left: 12px; bottom: 64px; z-index: 5; max-width: 70%;
       display: flex; flex-direction: column; gap: 4px; pointer-events: none;

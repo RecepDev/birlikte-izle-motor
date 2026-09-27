@@ -31,7 +31,17 @@ export function createSubs({
     window.masaustuBilgi?.(`Ses gecikmesi ${audioDelay > 0 ? '+' : ''}${audioDelay.toFixed(1)} sn`);
     render();
   }
-  const embeddedTracks = () => window.masaustuGomulu?.liste() || [];
+  // Sıra her platformda aynı: önce Türkçe, sonra İngilizce, sonra diğerleri (kendi sırasıyla).
+  const embeddedRank = (t) => {
+    const key = `${t.lang || ''} ${t.title || ''}`.toLowerCase();
+    if (/(tur|tr|turkish|türkçe|turkce)/.test(key)) return 0;
+    if (/(eng|en|english|ingilizce|İngilizce)/.test(key)) return 1;
+    return 2;
+  };
+  const embeddedTracks = () => (window.masaustuGomulu?.liste() || [])
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => embeddedRank(a.t) - embeddedRank(b.t) || a.i - b.i)
+    .map(({ t }) => t);
   window.addEventListener('masaustu-gomulu', () => render());
   let reloadCount = 0;
   const originals = new WeakMap();
