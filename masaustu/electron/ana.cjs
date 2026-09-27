@@ -306,15 +306,35 @@ function altyaziStilUygula() {
     'sub-back-color': `#${iki(alfa)}000000`,
     // Altyazı pencereye değil videonun kendisine göre yerleşsin: siyah boşluklar
     // pencere boyutuyla değiştiği için tam ekran/pencere arasında yeri kayıyordu.
-    // %100'ün üstü videonun altındaki siyah boşluğa iniyor; ancak o zaman pencere kenarları kullanılıyor.
-    'sub-use-margins': (Number(s.line) || 100) > 100,
-    'sub-ass-force-margins': (Number(s.line) || 100) > 100,
+    // Altyazı pencere içinde konumlanıyor (siyah boşluklara da inebilsin); konum
+    // videoya göre hesaplanıp pencereye çevriliyor (bkz. altyaziKonumUygula).
+    'sub-use-margins': true,
+    'sub-ass-force-margins': true,
   };
   for (const [ad, deger] of Object.entries(ayar)) mpv.set(ad, deger).catch((e) => console.error('altyazi-stil', ad, e.message));
   // Konum %2.5 adımlarla gidiyor; eski mpv sub-pos'u yalnızca tam sayı kabul ediyor.
-  // mpv en fazla 150 kabul ediyor; sayfa 200'e kadar gidebiliyor.
-  const konum = Math.min(150, Number(s.line) || 100);
-  mpv.set('sub-pos', konum).catch(() => mpv.set('sub-pos', Math.round(konum)).catch((e) => console.error('altyazi-stil sub-pos', e.message)));
+  altyaziKonumUygula();
+}
+
+// Sayfadaki konum videoya göre (%0 videonun üstü, %100 alt kenarı, üstü alttaki siyah
+// boşluk). mpv'nin sub-pos'u ise pencereye göre: videonun penceredeki yerinden çeviriyoruz.
+// Böylece adımlar her pencere boyunda aynı hissettiriyor, tam ekrana geçince yer kaymıyor
+// ve altyazı pencerenin altından taşıp kaybolmuyor (en fazla alt kenarda duruyor).
+let sonSubPos = null;
+async function altyaziKonumUygula() {
+  if (!mpv || !sonStil) return;
+  const satir = Number(sonStil.line);
+  const konum = Number.isFinite(satir) ? satir : 100;
+  const d = await mpv.get('osd-dimensions').catch(() => null);
+  let pos = konum;
+  if (d?.h > 0) {
+    const videoBoy = d.h - (d.mt || 0) - (d.mb || 0);
+    pos = (((d.mt || 0) + (konum / 100) * videoBoy) / d.h) * 100;
+  }
+  pos = Math.round(Math.max(0, Math.min(100, pos)) * 10) / 10;
+  if (pos === sonSubPos) return;
+  sonSubPos = pos;
+  mpv?.set('sub-pos', pos).catch((e) => console.error('altyazi-stil sub-pos', e.message));
 }
 
 async function altyaziEkle() {
@@ -458,6 +478,10 @@ async function mpvBaslat() {
   }
   mpv.on('exit', () => { mpv = null; });
   mpv.on('file-loaded', altyaziEkle);
+  // Pencere/oran değişince videonun yeri değişiyor: altyazı konumu yeniden hesaplanır.
+  sonSubPos = null;
+  mpv.observe(71, 'osd-dimensions').catch(() => {});
+  mpv.on('property-change', (m) => { if (m.name === 'osd-dimensions') altyaziKonumUygula(); });
   // Sayfa bu sırada hâlâ kurulmuyor olabilir (katılma ekranı), o yüzden bir de gecikmeli yolluyoruz.
   mpv.on('file-loaded', () => {
     yenidenDeneme = 0;
