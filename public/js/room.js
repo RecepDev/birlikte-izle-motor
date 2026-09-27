@@ -1283,6 +1283,7 @@ const seekTip = el('div', { class: 'seek-tip', hidden: true }, previewVideo, pre
 let imgWant = null;
 let imgTimer = null;
 function previewImage(src, t) {
+  if (imgWant === t) return;
   imgWant = t;
   clearTimeout(imgTimer);
   imgTimer = setTimeout(async () => {
@@ -1329,7 +1330,12 @@ function showSeekTip(x, width) {
   seekTip.style.left = `${Math.max(half, Math.min(width - half, x))}px`;
   seekTip.hidden = false;
   const src = previewSource();
-  if (src && window.masaustuOnizleme) return previewImage(src, t);
+  // Kareler ızgaraya oturuyor (en az 5 sn, uzun videoda süre/300): yakın noktalar aynı
+  // kareyi paylaşıyor, önbellekten anında geliyor.
+  if (src && window.masaustuOnizleme) {
+    const step = Math.max(5, d / 300);
+    return previewImage(src, Math.round(t / step) * step);
+  }
   if (!src || src === previewFailed) {
     previewVideo.hidden = true;
     return;

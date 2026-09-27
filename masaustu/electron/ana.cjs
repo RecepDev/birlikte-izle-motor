@@ -89,12 +89,90 @@ function oranUygula() {
 let oranDegerleri = { 'video-aspect-override': '-1', panscan: 0, keepaspect: true };
 
 // Çubuk önizlemesi: tarayıcının <video>'su HEVC/MKV açamadığı için kareyi ayrı, görünmez
-// bir mpv çıkarıyor (--vo=image, tek kare, en yakın anahtar kareye atlayarak). Aynı anda
-// tek süreç; beklerken gelen isteklerden yalnızca sonuncusu işleniyor.
+// bir mpv çıkarıyor. Bu mpv açık kalıyor: dosya bir kez açılıyor, sonraki her kare yalnızca
+// en yakın anahtar kareye atlayıp küçültülmüş ekran görüntüsü almak (her seferinde yeni
+// süreç açıp dosyayı baştan okumaktan kat kat hızlı). Açılamazsa tek seferlik sürece düşüyor.
+// Aynı anda tek istek; beklerken gelenlerden yalnızca sonuncusu işleniyor.
 const onizlemeOnbellek = new Map();
 let onizlemeSuruyor = false;
 let onizlemeSiradaki = null;
-function onizlemeCikar(url, saniye) {
+let kucuk = null; // { mpv, pencere, url }
+let kucukHazirlaniyor = null;
+
+async function kucukMpv() {
+  if (kucuk?.mpv) return kucuk;
+  if (kucukHazirlaniyor) return kucukHazirlaniyor;
+  kucukHazirlaniyor = (async () => {
+    const { createMpv } = await import('../mpv.js');
+    // mpv'nin çizeceği, hiç gösterilmeyen küçük pencere.
+    const pencere = new BrowserWindow({ show: false, width: 320, height: 180, frame: false, skipTaskbar: true, focusable: false });
+    const m = createMpv({
+      binary: MPV,
+      pipeName: `birlikte-izle-onizleme-${process.pid}`,
+      args: [
+        `--wid=${hwndOf(pencere)}`, '--no-config', '--pause=yes', '--no-audio', '--sid=no', '--osd-level=0',
+        '--hr-seek=no', '--cache=no', '--demuxer-readahead-secs=0', '--ytdl=no', '--hwdec=no',
+        '--vd-lavc-skiploopfilter=all', '--vd-lavc-fast', '--vd-lavc-threads=2', '--vf=scale=320:-2',
+        '--screenshot-format=jpg', '--screenshot-jpeg-quality=70',
+      ],
+    });
+    await m.start();
+    m.on('exit', () => {
+      if (kucuk?.mpv === m) kucuk = null;
+      if (!pencere.isDestroyed()) pencere.destroy();
+    });
+    kucuk = { mpv: m, pencere, url: null };
+    return kucuk;
+  })();
+  try {
+    return await kucukHazirlaniyor;
+  } finally {
+    kucukHazirlaniyor = null;
+  }
+}
+
+// Kare hazır olunca mpv 'playback-restart' yolluyor (yüklemede ve her atlamada).
+function kareBekle(m, ms) {
+  return new Promise((resolve) => {
+    const bitti = (ok) => {
+      clearTimeout(zaman);
+      m.off('playback-restart', tamam);
+      m.off('end-file', hata);
+      resolve(ok);
+    };
+    const tamam = () => bitti(true);
+    const hata = () => bitti(false);
+    const zaman = setTimeout(() => bitti(false), ms);
+    m.on('playback-restart', tamam);
+    m.on('end-file', hata);
+  });
+}
+
+async function onizlemeCikar(url, saniye) {
+  const k = await kucukMpv();
+  const hedef = String(Math.max(0, Math.floor(saniye)));
+  let ok;
+  if (k.url !== url) {
+    k.url = url;
+    const bekle = kareBekle(k.mpv, 15_000);
+    await k.mpv.command('loadfile', url, 'replace', -1, `start=${hedef}`);
+    ok = await bekle;
+    if (!ok) k.url = null;
+  } else {
+    const bekle = kareBekle(k.mpv, 8_000);
+    await k.mpv.command('seek', hedef, 'absolute+keyframes');
+    ok = await bekle;
+  }
+  if (!ok) return null;
+  const dosya = path.join(os.tmpdir(), `bi-onizleme-${process.pid}.jpg`);
+  await k.mpv.command('screenshot-to-file', dosya, 'video');
+  const veri = fs.readFileSync(dosya);
+  fs.rm(dosya, { force: true }, () => {});
+  return `data:image/jpeg;base64,${veri.toString('base64')}`;
+}
+
+// Kalıcı mpv açılamazsa: her kare için tek seferlik süreç (yavaş ama çalışır).
+function onizlemeTekSefer(url, saniye) {
   return new Promise((resolve) => {
     const klasor = fs.mkdtempSync(path.join(os.tmpdir(), 'bi-onizleme-'));
     const cocuk = require('node:child_process').spawn(MPV, [
@@ -117,9 +195,10 @@ function onizlemeCikar(url, saniye) {
     cocuk.on('error', bitir);
   });
 }
+let kaliciBozuk = false;
 async function onizleme(url, saniye) {
   if (!/^https?:\/\//.test(url)) return null;
-  const anahtar = `${url}|${Math.round(saniye / 10)}`;
+  const anahtar = `${url}|${Math.round(saniye)}`;
   if (onizlemeOnbellek.has(anahtar)) return onizlemeOnbellek.get(anahtar);
   if (onizlemeSuruyor) {
     // Öncekini bekleyen istek varsa boşa çıkıyor: yalnızca en son istenen kare önemli.
@@ -127,7 +206,17 @@ async function onizleme(url, saniye) {
     return new Promise((resolve) => { onizlemeSiradaki = { url, saniye, resolve }; });
   }
   onizlemeSuruyor = true;
-  const sonuc = await onizlemeCikar(url, saniye);
+  let sonuc = null;
+  if (!kaliciBozuk) {
+    sonuc = await onizlemeCikar(url, saniye).catch((e) => {
+      // Gizli pencerede çizim ya da IPC çalışmıyorsa bir daha denemiyoruz.
+      console.error('onizleme:', e.message);
+      kaliciBozuk = true;
+      kucuk?.mpv.stop().catch(() => {});
+      return null;
+    });
+  }
+  if (kaliciBozuk) sonuc = await onizlemeTekSefer(url, saniye);
   if (sonuc) {
     onizlemeOnbellek.set(anahtar, sonuc);
     if (onizlemeOnbellek.size > 300) onizlemeOnbellek.delete(onizlemeOnbellek.keys().next().value);
@@ -748,6 +837,7 @@ app.whenReady().then(() => {
     clearInterval(durumZamanlayici);
     for (const dosya of altyaziDosyalari.splice(0)) fs.rmSync(dosya, { force: true });
     mpv?.stop().catch(() => {});
+    kucuk?.mpv.stop().catch(() => {});
     app.quit();
   });
   // Dış bağlantılar (yardım linkleri) uygulamanın içinde değil tarayıcıda açılsın.
@@ -779,6 +869,7 @@ ipcMain.on('kabuk:baslangic', () => {
   if (ana.isKiosk()) ana.setKiosk(false);
   sonYuklenen = null;
   mpv?.command('stop').catch(() => {});
+  kucuk?.mpv.stop().catch(() => {});
   yukleniyor = false;
   videoPenceresi?.hide();
   ana.loadFile(path.join(__dirname, 'baslangic.html'));
