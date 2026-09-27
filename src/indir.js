@@ -11,6 +11,8 @@ import express from 'express';
 
 // Güncellemeyle giden masaüstü dosyaları (masaustu/ klasörüne göre).
 export const MASAUSTU_DOSYALARI = [
+  // "type": "module" için şart: yoksa Node mpv.js'yi modül olarak açamıyor, mpv başlamıyor.
+  'package.json',
   'mpv.js',
   'karar.js',
   'electron/ana.cjs',
