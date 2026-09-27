@@ -23,6 +23,17 @@ let streams = [];
 let loadDone = false;
 let addonsReplied = 0;
 let retrying = false;
+let refreshing = false;
+// Kalite filtresi (seçim hatırlanıyor). "Diğer": 480p ve altı / bilinmeyen.
+const QUALITIES = ['2160p', '1080p', '720p'];
+let qualityFilter = localStorage.getItem('odaAcKalite') || '';
+const qualityOf = (s) => (QUALITIES.includes(s.quality) ? s.quality : 'diger');
+
+// Bir addon (yeniden) cevap verince o addon'un eski sonuçlarının yerini alıyor.
+function addonReplied(line) {
+  streams = streams.filter((s) => s.addonName !== line.addonName);
+  if (!line.error) streams.push(...line.streams);
+}
 
 function renderErrors(errors) {
   const box = $('#errors');
@@ -32,7 +43,7 @@ function renderErrors(errors) {
   }
   box.replaceChildren(
     `Cevap vermeyen addon'lar: ${errors.map((e) => `${e.addonName} (${e.message})`).join(', ')} `,
-    el('button', { type: 'button', text: retrying ? 'Tekrar deneniyor…' : '↻ Tekrar dene', disabled: retrying, onclick: () => retryFailed(errors) }),
+    el('button', { type: 'button', text: retrying ? '↻ Deneniyor… (tekrar basılabilir)' : '↻ Tekrar dene', onclick: () => retryFailed(errors) }),
   );
   box.hidden = false;
 }
@@ -41,20 +52,44 @@ function renderErrors(errors) {
 // a full reload used to throw away a working addon's results too just
 // because a different one didn't answer.
 async function retryFailed(errors) {
-  if (retrying) return;
   retrying = true;
   renderErrors(errors);
   const names = errors.map((e) => e.addonName);
   await apiStream(`/api/streams?${new URLSearchParams({ type, id, retry: names.join(',') })}`, (line) => {
     if (line.type === 'addon') {
       addonsReplied += 1;
-      if (!line.error) streams.push(...line.streams);
+      addonReplied(line);
       render();
     } else if (line.type === 'done') {
       retrying = false;
       renderErrors(line.errors);
     }
   });
+}
+
+// Her zaman basılabilir: addon'lar yavaş kaldıysa ya da eksik geldiyse hepsini yeniden sorar.
+// Mevcut liste silinmiyor; cevap gelen addon'un sonuçları yenileriyle değişiyor.
+async function refreshAll() {
+  refreshing = true;
+  renderRefresh();
+  try {
+    await apiStream(`/api/streams?${new URLSearchParams({ type, id, retry: '*' })}`, (line) => {
+      if (line.type === 'addon') {
+        addonReplied(line);
+        render();
+      } else if (line.type === 'done') {
+        loadDone = true;
+        renderErrors(line.errors);
+        render();
+      }
+    });
+  } finally {
+    refreshing = false;
+    renderRefresh();
+  }
+}
+function renderRefresh() {
+  $('#refresh-addons').textContent = refreshing ? '↻ Aranıyor… (tekrar basılabilir)' : "↻ Addon'ları tekrar ara";
 }
 
 async function createRoom(stream, button) {
@@ -82,7 +117,9 @@ async function createRoom(stream, button) {
 
 function render() {
   const q = $('#filter').value.trim().toLowerCase();
-  const visible = streams.filter((s) => !q || `${s.name} ${s.title} ${s.quality}`.toLowerCase().includes(q));
+  renderQualityChips();
+  const visible = streams.filter((s) => (!q || `${s.name} ${s.title} ${s.quality}`.toLowerCase().includes(q))
+    && (!qualityFilter || qualityOf(s) === qualityFilter));
   const box = $('#streams');
   if (!streams.length) {
     box.replaceChildren(el('p', {
@@ -91,6 +128,10 @@ function render() {
         ? "Hiç stream bulunamadı. Panelde Torrentio gibi bir stream addon'u ekli ve açık mı?"
         : `Addon'lardan stream'ler alınıyor… (${addonsReplied} addon cevap verdi)`,
     }));
+    return;
+  }
+  if (!visible.length) {
+    box.replaceChildren(el('p', { class: 'muted', text: 'Bu filtreye uyan stream yok.' }));
     return;
   }
   const groups = new Map();
@@ -125,7 +166,27 @@ function render() {
   box.replaceChildren(...[searching, ul].filter(Boolean));
 }
 
+function renderQualityChips() {
+  const counts = new Map();
+  for (const s of streams) counts.set(qualityOf(s), (counts.get(qualityOf(s)) || 0) + 1);
+  const chip = (value, label) => el('button', {
+    type: 'button', class: `chip${qualityFilter === value ? ' active' : ''}`,
+    text: value ? `${label} (${counts.get(value) || 0})` : `Tümü (${streams.length})`,
+    onclick: () => {
+      qualityFilter = value;
+      localStorage.setItem('odaAcKalite', value);
+      render();
+    },
+  });
+  $('#quality-chips').replaceChildren(
+    chip('', ''),
+    ...QUALITIES.map((qv) => chip(qv, qv === '2160p' ? '4K' : qv)),
+    chip('diger', 'Diğer'),
+  );
+}
+
 $('#filter').addEventListener('input', render);
+$('#refresh-addons').addEventListener('click', refreshAll);
 
 const masaustuKutu = $('#masaustu');
 // Zaten masaüstü kabuğundaysak seçenek anlamsız: oda aynı pencerede açılıyor.
@@ -147,7 +208,7 @@ try {
       }
     } else if (line.type === 'addon') {
       addonsReplied += 1;
-      if (!line.error) streams.push(...line.streams);
+      addonReplied(line);
       render();
     } else if (line.type === 'done') {
       loadDone = true;

@@ -176,9 +176,17 @@ export function createPanelApp({
     const { type, id, retry } = req.query;
     if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
     const key = `${type}|${id}`;
-    const retryNames = typeof retry === 'string' && retry ? retry.split(',').filter(Boolean) : null;
-    const prior = retryNames ? streamCache.get(key) : null;
-    if (!retryNames) streamCache.delete(key); // opening the page fresh always refreshes everything
+    // retry=* : tüm addon'ları yeniden sor (sayfadaki "Addon'ları tekrar ara"), mevcut listeyi koruyarak.
+    const retryAll = retry === '*';
+    const retryNames = !retryAll && typeof retry === 'string' && retry ? retry.split(',').filter(Boolean) : null;
+    // Tek önbellek kaydı, her addon cevabında yerinde güncelleniyor: ilk yükleme sürerken
+    // yapılan tekrar arama da aynı listeye ekliyor, oda açılırken sayfadaki liste bulunuyor.
+    let entry = retryAll || retryNames ? streamCache.get(key) : null;
+    if (!entry) {
+      entry = { at: Date.now(), meta: null, streams: [], errors: [], seq: 0 };
+      streamCache.set(key, entry);
+    }
+    entry.seq ??= entry.streams.length;
 
     res.set('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.set('Cache-Control', 'no-store');
@@ -186,27 +194,28 @@ export function createPanelApp({
 
     const allAddons = config.get().addons;
     const enabled = retryNames ? allAddons.filter((a) => retryNames.includes(a.name)) : allAddons;
-    const allStreams = prior ? [...prior.streams] : [];
     // Önbellekten gelse bile meta satırı yazılmalı: yoksa sayfa başlığı ham id olarak kalıyor.
-    const metaPromise = (prior ? Promise.resolve(prior.meta) : addons.meta(type, id)).then((meta) => {
+    const metaPromise = (entry.meta ? Promise.resolve(entry.meta) : addons.meta(type, id)).then((meta) => {
+      entry.meta = meta;
       write({ type: 'meta', meta });
       return meta;
     });
     const streamsPromise = addons.streams(enabled, type, id, (addonName, items, error) => {
       if (error) return write({ type: 'addon', addonName, streams: [], error });
-      const normalized = normalizeAddonStreams(addonName, items, allStreams.length);
-      allStreams.push(...normalized);
+      // Aynı addon tekrar cevap verdiyse eski sonuçlarının yerini alıyor (çift olmasın).
+      // Kimlikler sayaçtan: silinenlerin numarası yeniden kullanılmıyor.
+      const normalized = normalizeAddonStreams(addonName, items, entry.seq);
+      entry.seq += normalized.length;
+      entry.streams = [...entry.streams.filter((s) => s.addonName !== addonName), ...normalized];
+      entry.errors = entry.errors.filter((e) => e.addonName !== addonName);
       write({ type: 'addon', addonName, streams: normalized, error: null });
     });
-    const [meta, { errors }] = await Promise.all([metaPromise, streamsPromise]);
+    const [, { errors }] = await Promise.all([metaPromise, streamsPromise]);
     for (const e of errors) log.warn('Addon cevap vermedi', { addon: e.addonName, content: id, error: e.message });
-    // Errors from addons not part of this request (untouched on a retry) carry over unchanged.
-    const priorErrors = retryNames ? (prior?.errors || []).filter((e) => !retryNames.includes(e.addonName)) : [];
-    const allErrors = [...priorErrors, ...errors];
-    // Cached even with errors: room creation must use the exact list the host saw
-    // (stream ids are positions). Reloading /new (without ?retry) always refetches.
-    streamCache.set(key, { at: Date.now(), meta, streams: allStreams, errors: allErrors });
-    write({ type: 'done', errors: allErrors.map((e) => ({ addonName: e.addonName, message: e.message })) });
+    // Bu istekte cevap vermeyenler hata listesine; başka addon'ların eski hataları aynen kalıyor.
+    entry.errors = [...entry.errors.filter((e) => !errors.some((x) => x.addonName === e.addonName)), ...errors];
+    entry.at = Date.now();
+    write({ type: 'done', errors: entry.errors.map((e) => ({ addonName: e.addonName, message: e.message })) });
     res.end();
   }));
 
