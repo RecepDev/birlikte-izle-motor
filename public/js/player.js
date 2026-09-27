@@ -29,6 +29,8 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
   let retryTimer = null;
   let lastError = null;
   let attached = false;
+  // Önü azalınca (takılmadan önce) "yükleniyor" say: oda durup bekliyor (bkz. room.js).
+  let held = false;
 
   function set(state, source = status.source) {
     if (status.state === state && status.source === source) return;
@@ -70,6 +72,7 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
 
   async function load(next, opts = {}) {
     const gen = ++generation;
+    held = false;
     stream = next;
     clearTimers();
     if (!next) {
@@ -108,6 +111,7 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
     clearTimeout(bufferTimer);
     bufferTimer = null;
     clearTimeout(loadTimer);
+    if (held && status.state !== 'loading') return;
     if (status.state !== 'error' && status.state !== 'idle' && status.state !== 'noStremio') set('ready');
   }
 
@@ -141,6 +145,13 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
 
   return {
     load,
+    hold(on) {
+      if (held === on) return;
+      held = on;
+      if (on && status.state === 'ready') set('buffering');
+      else if (!on && status.state === 'buffering' && video.readyState >= 3) markReady();
+    },
+    held: () => held,
     reload: (opts) => load(stream, opts),
     status: () => ({ ...status }),
     stream: () => stream,

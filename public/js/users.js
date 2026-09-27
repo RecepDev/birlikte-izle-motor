@@ -24,7 +24,7 @@ export function durationMismatch(user, hostUser) {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) > DURATION_TOLERANCE_S;
 }
 
-export function renderUsers(listEl, room, meId, { onKick, streamLabel, statsFor = () => null, relayFor = () => null }) {
+export function renderUsers(listEl, room, meId, { onKick, onDiag = null, streamLabel, statsFor = () => null, relayFor = () => null }) {
   const host = room.users.find((u) => u.id === room.hostUserId);
   const iAmHost = room.hostUserId === meId;
   const visible = room.users
@@ -67,6 +67,9 @@ export function renderUsers(listEl, room, meId, { onKick, streamLabel, statsFor 
           ),
           el('div', { class: 'meta', text: parts.filter(Boolean).join(' · ') }),
         ),
+        iAmHost && onDiag
+          ? el('button', { type: 'button', class: 'tani-btn', text: 'Kayıt', title: 'Bu kişinin oynatıcı kaydı (takılma, sarma, sapma, hız)', onclick: () => onDiag(u) })
+          : null,
         iAmHost && u.id !== meId
           ? el('button', { type: 'button', text: 'At', title: 'Odadan çıkar', onclick: () => onKick(u) })
           : null,

@@ -5,7 +5,7 @@ import { expectedPosition, estimateClockOffset, driftAction, SEEK_THRESHOLD } fr
 const AUTO_SEEK_COOLDOWN_MS = 4000;
 const PROGRAMMATIC_WINDOW_MS = 1000;
 
-export function createSync({ video, request, canControl, onBlocked, onError }) {
+export function createSync({ video, request, canControl, onBlocked, onError, log = () => {} }) {
   let offset = 0;
   let playback = null;
   let autoPaused = false;
@@ -21,7 +21,8 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
   const target = () => (playback ? expectedPosition(playback, serverNow()) : 0);
   const hasMedia = () => video.readyState >= 1 && Number.isFinite(video.duration);
 
-  function setTime(t) {
+  function setTime(t, neden) {
+    log('sar', { neden, from: video.currentTime, to: t, rs: video.readyState });
     programmatic.seeked = Date.now();
     seekPending += 1;
     video.currentTime = Math.min(t, Math.max(0, (video.duration || t) - 0.5));
@@ -47,11 +48,11 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
     if (playback.paused) {
       doPause();
       video.playbackRate = 1;
-      if (Math.abs(video.currentTime - t) > 0.3) setTime(t);
+      if (Math.abs(video.currentTime - t) > 0.3) setTime(t, 'oda-durdu');
     } else {
       if (Math.abs(video.currentTime - t) > SEEK_THRESHOLD) {
         lastAutoSeek = Date.now();
-        setTime(t);
+        setTime(t, 'oda-oynuyor');
       }
       doPlay();
     }
@@ -71,7 +72,7 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
       if (!video.seeking && video.readyState >= 1 && Math.abs(diff) > 0.5
         && Date.now() - lastAutoSeek > AUTO_SEEK_COOLDOWN_MS) {
         lastAutoSeek = Date.now();
-        setTime(target());
+        setTime(target(), 'durmusken-yerinde-degil');
       }
       return;
     }
@@ -84,8 +85,9 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
     if (action.type === 'seek') {
       if (Date.now() - lastAutoSeek < AUTO_SEEK_COOLDOWN_MS) return;
       lastAutoSeek = Date.now();
-      setTime(target());
+      setTime(target(), 'sapma');
     } else if (action.type === 'rate') {
+      if (video.playbackRate !== action.rate) log('hiz', { rate: action.rate, diff });
       video.playbackRate = action.rate;
     }
   }

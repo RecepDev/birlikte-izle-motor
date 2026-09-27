@@ -3,6 +3,7 @@
 import { io } from '/socket.io/socket.io.esm.min.js';
 import { $, el, toast, formatTime, formatSize, storage, randomToken, copyText, errorText } from './ui.js';
 import { createSync } from './sync.js';
+import { createTani, taniMetni } from './tani.js';
 import { createPlayer, isStremioUp } from './player.js';
 import { createChat } from './chat.js';
 import { renderUsers, durationMismatch } from './users.js';
@@ -58,6 +59,12 @@ function request(event, payload = {}) {
 }
 
 // ---- derived state -----------------------------------------------------------
+
+const tani = createTani({ request });
+tani.kaydet('cihaz', {
+  tur: window.kabuk ? 'masaustu' : window.AndroidKopru ? 'telefon' : 'tarayici',
+  ua: navigator.userAgent.slice(0, 160),
+});
 
 const me = () => state.room?.users.find((u) => u.id === state.me) || null;
 const isHost = () => Boolean(state.room) && state.room.hostUserId === state.me;
@@ -282,6 +289,7 @@ const player = createPlayer({
   resolveFallback,
   attachSource,
   onStatus: (st) => {
+    tani.kaydet('durum', { s: st.state, src: st.source, hata: st.state === 'error' ? player.lastError() : null, pos: video.currentTime });
     if (st.state === 'error' && ['unsupported', 'decode'].includes(player.lastError())) startCompat();
     else if (st.state === 'error' && autoRetry(player.lastError())) return;
     sendStatus();
@@ -592,6 +600,7 @@ let ackRev = 0;
 setInterval(() => {
   if (ackRev === roomRev || !state.room || player.status().state !== 'ready' || !sync.settled()) return;
   ackRev = roomRev;
+  tani.kaydet('geldi', { rev: ackRev, pos: video.currentTime });
   sendStatus();
 }, 250);
 
@@ -606,7 +615,59 @@ const sync = createSync({
     renderNotice();
   },
   onError: (code) => toast(errorText(code)),
+  log: (k, v) => tani.kaydet(k, v),
 });
+
+// Takılmadan önce durdur: oynarken önündeki hazır kısım 4 sn'nin altına inerse bu cihaz
+// "yükleniyor" sayılıyor, oda temiz bir şekilde duruyor (takılıp kesik kesik oynamak yerine);
+// önü 20 sn dolunca devam. Önü büyümüyorsa (oynatıcı duraklatılmışken indirmiyor) 15 sn sonra bırakılır.
+const ON_AZ = 4;
+const ON_YETER = 20;
+let holdSince = 0;
+let holdBest = 0;
+let holdGrewAt = 0;
+setInterval(() => {
+  const st = player.status();
+  const d = liveDownload();
+  const dur = player.duration();
+  const left = dur ? dur - (video.currentTime || 0) : Infinity;
+  const ahead = Number.isFinite(d.ahead) ? d.ahead : null;
+  if (!player.held()) {
+    const playing = state.room && !state.room.playback.paused && !video.paused;
+    if (playing && st.state === 'ready' && ahead !== null && ahead < ON_AZ && !d.complete && left > ahead + 5
+      && video.readyState >= 3 && !video.seeking && Date.now() - lastSeekAt > 5000) {
+      holdSince = Date.now();
+      holdBest = ahead;
+      holdGrewAt = Date.now();
+      tani.kaydet('on-azaldi', { ahead, mbps: d.downMbps });
+      player.hold(true);
+    }
+    return;
+  }
+  if (ahead !== null && ahead > holdBest + 0.5) {
+    holdBest = ahead;
+    holdGrewAt = Date.now();
+  }
+  const bitti = ahead === null || ahead >= ON_YETER || d.complete || left <= (ahead || 0) + 5;
+  const buyumuyor = Date.now() - holdGrewAt > 15_000;
+  if (bitti || buyumuyor || !['ready', 'buffering'].includes(st.state)) {
+    tani.kaydet('on-doldu', { ahead, sure: Math.round((Date.now() - holdSince) / 1000), buyumuyor });
+    player.hold(false);
+  }
+}, 1000);
+let lastSeekAt = 0;
+video.addEventListener('seeking', () => { lastSeekAt = Date.now(); });
+
+// Tanı kaydı için 5 sn'de bir oynatıcının hali.
+setInterval(() => {
+  if (!state.room || player.status().state === 'idle') return;
+  const d = liveDownload();
+  tani.kaydet('n', {
+    s: player.status().state, pos: video.currentTime, drift: sync.drift(), ahead: d.ahead, mbps: d.downMbps,
+    rs: video.readyState, seeking: video.seeking, paused: video.paused, rate: video.playbackRate,
+  });
+}, 5000);
+document.addEventListener('visibilitychange', () => tani.kaydet('gorunur', { hidden: document.hidden }));
 
 // ---- rendering ----------------------------------------------------------------------
 
@@ -681,6 +742,14 @@ function renderUsersTab() {
     streamLabel: (u) => streamLabel(streamById(u.ownStreamId || state.room.hostStreamId)),
     statsFor: (u) => hostPcStats(u),
     relayFor: (u) => state.relayStats?.[u.id] ?? null,
+    onDiag: async (u) => {
+      const res = await request('taniOku', { userId: u.id });
+      if (res?.error) return toast(errorText(res.error));
+      $('#tani-baslik').textContent = `${u.name} · tanı kaydı`;
+      $('#tani-metin').textContent = taniMetni(res.entries || []) || 'Henüz kayıt yok.';
+      $('#tani-dialog').showModal();
+      $('#tani-metin').scrollTop = $('#tani-metin').scrollHeight;
+    },
     onKick: async (u) => {
       if (!confirm(`${u.name} odadan çıkarılsın mı? Tekrar giremez.`)) return;
       const res = await request('kick', { userId: u.id });
@@ -689,6 +758,11 @@ function renderUsersTab() {
   });
   $('#user-count').textContent = String(count);
 }
+
+$('#tani-kopyala').addEventListener('click', async () => {
+  await copyText($('#tani-metin').textContent);
+  toast('Kayıt kopyalandı');
+});
 
 let mismatchWarned = false;
 
@@ -1052,7 +1126,19 @@ function renderBanner() {
     if (!bannerTimer) bannerTimer = setTimeout(() => { bannerTimer = null; if (state.room?.waitingUserIds?.length) { $('#banner').hidden = false; renderBanner(); } }, 1500);
     return;
   }
-  $('#banner-text').textContent = `⏳ ${ids.map(userName).join(', ')} bekleniyor…`;
+  // Kimin ne kadar hazır olduğu: "Nnje hazırlanıyor · 12 sn hazır · 21 Mbps".
+  const kisi = (id) => {
+    const u = state.room.users.find((x) => x.id === id);
+    const st = u?.status || {};
+    const parts = [u?.name || '?'];
+    if (st.state === 'loading') parts.push('açılıyor');
+    else if (st.state === 'buffering') parts.push('hazırlanıyor');
+    else parts.push('yeni yere geçiyor');
+    if (Number.isFinite(st.ahead) && st.state !== 'loading') parts.push(`${Math.round(st.ahead)} sn hazır`);
+    if (Number.isFinite(st.downMbps) && st.downMbps > 0) parts.push(`${formatMbps(st.downMbps)} Mbps`);
+    return parts.join(' · ');
+  };
+  $('#banner-text').textContent = `⏳ Bekleniyor: ${ids.map(kisi).join(' | ')}`;
   $('#banner-skip').hidden = !isHost();
 }
 
@@ -1239,6 +1325,7 @@ function end(message) {
 }
 
 socket.on('connect', async () => {
+  tani.kaydet('baglanti', { durum: 'baglandi' });
   const res = await request('join', { roomId, userToken, name: state.name });
   if (!res?.error) return applySnapshot(res.snapshot, res.publicUrl);
   const message = JOIN_ERRORS[res.error] || errorText(res.error);
@@ -1250,6 +1337,7 @@ socket.on('connect', async () => {
 
 socket.on('playback', (d) => {
   if (Number.isInteger(d.rev)) roomRev = d.rev;
+  tani.kaydet('oda', { paused: d.playback.paused, pos: d.playback.position, auto: d.autoPaused, by: d.by, rev: d.rev });
   const prev = state.room.playback;
   const prevAuto = state.room.autoPaused;
   state.room.playback = d.playback;
@@ -1266,6 +1354,7 @@ socket.on('playback', (d) => {
 });
 
 socket.on('waiting', ({ userIds }) => {
+  tani.kaydet('bekleniyor', { kim: userIds.map(userName) });
   state.room.waitingUserIds = userIds;
   renderBanner();
 });
@@ -1376,6 +1465,7 @@ socket.on('roomClosed', () => {
   setTimeout(() => window.masaustuOdaKapandi?.(), 2500);
 });
 socket.on('disconnect', (reason) => {
+  tani.kaydet('baglanti', { durum: 'koptu', reason });
   if (state.ended) return;
   if (reason === 'io server disconnect') return end('Bağlantın sunucu tarafından kapatıldı.');
   toast('Bağlantı koptu, yeniden bağlanılıyor…', 5000);
@@ -1882,7 +1972,7 @@ async function checkWeakSource() {
     setTimeout(() => { if (weakCheckedFor === s.streamId) weakCheckedFor = null; }, 3 * 60_000);
     return;
   }
-  weakSuggestion = best.s.streamId;
+  weakSuggestion = { streamId: best.s.streamId, own: false };
   // Video hiç başlayamadıysa sormadan geç (kaybedilecek bir şey yok).
   if (player.status().state === 'loading' && (video.currentTime || 0) < 2) {
     const res = await request('setHostStream', { streamId: best.s.streamId });
@@ -1900,10 +1990,70 @@ setInterval(checkWeakSource, 5000);
 $('#weak-src-go').addEventListener('click', async () => {
   $('#weak-src').hidden = true;
   if (!weakSuggestion) return;
-  const res = await request('setHostStream', { streamId: weakSuggestion });
+  const { streamId, own } = weakSuggestion;
+  tani.kaydet('kaynak-oneri-kabul', { streamId, own });
+  const res = await request(own ? 'setOwnStream' : 'setHostStream', { streamId });
   if (res?.error) toast(errorText(res.error));
-  else playAfterSwitch();
+  else if (!own) playAfterSwitch();
 });
+
+// ---- Misafir için kaynak önerisi (host'unki yukarıda). Kendi kaynağını değiştirir, oda aynı
+// yerde izlemeye devam eder:
+// - Ölü kaynak: 60 sn'dir açılıyor/hazırlanıyor ve hiç veri gelmiyor: aynı kalitede başka kaynak.
+// - İnternet yetmiyor: son 3 dakikada 2+ kez takıldı ve gelen hız videonun ihtiyacının altında:
+//   internetine yetecek daha düşük kalite.
+const QUALITY_ORDER = ['2160p', '1080p', '720p', '480p'];
+const guestSamples = []; // { t, mbps, waiting }
+const guestStalls = []; // takılma anları
+let guestSuggestedFor = null;
+let lastGuestState = null;
+setInterval(() => {
+  const s = myStream();
+  const st = player.status();
+  if (!state.room || isHost() || s?.kind !== 'torrent' || st.source === 'http') return;
+  const now = Date.now();
+  const d = liveDownload();
+  const waiting = ['loading', 'buffering'].includes(st.state);
+  if (st.state === 'buffering' && lastGuestState !== 'buffering') guestStalls.push(now);
+  lastGuestState = st.state;
+  guestSamples.push({ t: now, mbps: Number(d.downMbps) || 0, waiting });
+  while (guestSamples.length && now - guestSamples[0].t > 180_000) guestSamples.shift();
+  while (guestStalls.length && now - guestStalls[0] > 180_000) guestStalls.shift();
+  if (guestSuggestedFor === s.streamId || !$('#weak-src').hidden) return;
+
+  const last = (ms) => guestSamples.filter((x) => now - x.t <= ms);
+  const son60 = last(60_000);
+  const olu = son60.length >= 10 && guestSamples[0].t <= now - 60_000
+    && son60.every((x) => x.waiting && x.mbps < 0.2);
+  const others = state.room.streams.filter((x) => x.kind === 'torrent' && x.infoHash !== s.infoHash);
+  const seedScore = (x) => (Number(x.seeders) || 0) * (x.pack ? 0.35 : 1);
+  let pick = null;
+  let text = '';
+  if (olu) {
+    pick = others.filter((x) => x.quality === s.quality).sort((a, b) => seedScore(b) - seedScore(a))[0]
+      || others.sort((a, b) => seedScore(b) - seedScore(a))[0];
+    if (pick) text = 'Bu kaynaktan 1 dakikadır veri gelmiyor. Başka kaynak: ';
+  } else if (guestStalls.length >= 2) {
+    const dur = contentDuration();
+    const need = requiredMbps(s.sizeBytes, dur);
+    const hizlar = last(120_000).filter((x) => x.mbps > 0).map((x) => x.mbps).sort((a, b) => a - b);
+    const gelen = hizlar.length ? hizlar[Math.floor(hizlar.length / 2)] : null;
+    if (need && gelen !== null && gelen < need * 0.9) {
+      const rank = (q) => { const i = QUALITY_ORDER.indexOf(q); return i < 0 ? 9 : i; };
+      pick = others
+        .filter((x) => rank(x.quality) > rank(s.quality) && (requiredMbps(x.sizeBytes, dur) || Infinity) < gelen * 0.8)
+        .sort((a, b) => rank(a.quality) - rank(b.quality) || seedScore(b) - seedScore(a))[0];
+      if (pick) text = `İnternetin bu kaliteye yetmiyor (gelen ~${formatMbps(gelen)} Mbps, gereken ~${formatMbps(need)}). Sana uygun: `;
+    }
+  }
+  if (!pick) return;
+  guestSuggestedFor = s.streamId;
+  weakSuggestion = { streamId: pick.streamId, own: true };
+  tani.kaydet('kaynak-oneri', { olu, from: s.quality, to: pick.quality, seed: pick.seeders });
+  $('#weak-src-text').textContent = `${text}${pick.quality || '?'}${pick.hdr ? ` ${pick.hdr}` : ''}`
+    + `${pick.sizeBytes ? ` · ${formatSize(pick.sizeBytes)}` : ''} · ${pick.seeders ?? '?'} seed. Oda aynı yerden devam eder.`;
+  $('#weak-src').hidden = false;
+}, 5000);
 $('#weak-src-close').addEventListener('click', () => { $('#weak-src').hidden = true; });
 
 // ---- Sonraki bölümü önceden hazırla: dizide son 5 dakikada (bölüm başına bir kez) sunucu

@@ -520,3 +520,11 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .back-choices { flex-direction: column; align-items: stretch; }
 #back-dialog { width: min(400px, calc(100% - 32px)); }
 button.danger { background: #3a1d24; border-color: #a33b4d; color: #ffb3bf; }
+
+/* Tanı kaydı penceresi (host, İzleyiciler > Kayıt) */
+#tani-dialog { width: min(760px, calc(100% - 32px)); }
+.tani-metin {
+  max-height: 60vh; overflow: auto; margin: 0; padding: 10px; border-radius: 8px;
+  background: rgba(0, 0, 0, .35); font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all;
+}
+.tani-btn { margin-right: 6px; }

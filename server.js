@@ -27,6 +27,7 @@ import { createGiris } from './src/giris.js';
 import { createTercih } from './src/tercih.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun, bizimMi, yeniMi } from './src/bizim-torrentler.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
+import { createTani } from './src/tani.js';
 import { setExtraSources } from './src/streams.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
@@ -65,6 +66,7 @@ const rooms = createRoomManager();
 const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
 const kesif = createKesif({ file: path.join(DATA, 'kesif.json'), log });
 const giris = createGiris({ file: path.join(DATA, 'giris.json'), log });
+const tani = createTani({ dir: path.join(DATA, 'tani'), log });
 const tercih = createTercih({ file: path.join(DATA, 'tercih.json'), log });
 const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), log });
 // Ek tracker'lar yeni açılan torrent'lere ekleniyor; Stremio'nun peer arama sınırı yükseltiliyor.
@@ -153,9 +155,20 @@ socketCtl = attachSocket(io, {
   getPublicUrl: () => tunnel?.status().url ?? null,
   hooks: {
     onHostStream: refreshSubtitles,
+    onRoomClosed: (room) => tani.odaKapandi(room.id),
     roomEvents: {
       setHostSubtitle: (room, uid, p) =>
         room.setHostSubtitle(uid, { subId: p.subId ?? null, offset: Number(p.offset ?? 0) }),
+      // Tanı kaydı (bkz. src/tani.js): cihaz yolluyor, host kişinin kaydını açabiliyor.
+      tani: (room, uid, p) => {
+        const user = room.users.get(uid);
+        if (user) tani.ekle(room, user, p.entries);
+        return { msgs: [] };
+      },
+      taniOku: (room, uid, p) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        return { reply: { ok: true, entries: tani.oku(room.id, String(p.userId || '')) }, msgs: [] };
+      },
       refreshSubtitles: (room) => {
         if (Date.now() - (room.subsRefreshedAt || 0) < 10_000) return { error: 'rate' };
         room.subsRefreshedAt = Date.now();

@@ -55,6 +55,7 @@ class OdaActivity : AppCompatActivity() {
     companion object {
         const val URL = "url"
         private const val DURUM_MS = 200L
+        private const val DURGUN_MS = 1000L
     }
 
     private lateinit var web: WebView
@@ -213,7 +214,9 @@ class OdaActivity : AppCompatActivity() {
     private val durumDongusu = object : Runnable {
         override fun run() {
             durumYolla()
-            ana.postDelayed(this, DURUM_MS)
+            // Durmuş ve hazırken sık güncellemeye gerek yok (pil): saniyede bir.
+            val durgun = !oynatici.playWhenReady && oynatici.playbackState == Player.STATE_READY
+            ana.postDelayed(this, if (durgun) DURGUN_MS else DURUM_MS)
         }
     }
 
@@ -371,10 +374,18 @@ class OdaActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
-        fun sar(saniye: Double) = ana.post { oynatici.seekTo((saniye * 1000).toLong()) }
+        fun sar(saniye: Double) = ana.post {
+            oynatici.seekTo((saniye * 1000).toLong())
+            durumYolla()
+        }
 
         @JavascriptInterface
-        fun oynat(deger: Boolean) = ana.post { oynatici.playWhenReady = deger }
+        fun oynat(deger: Boolean) = ana.post {
+            oynatici.playWhenReady = deger
+            // Sayfa "oynatıldı" olayını hemen görsün (yavaş güncellemede 1 sn gecikip kişinin
+            // kendi hareketi sanılmasın).
+            durumYolla()
+        }
 
         @JavascriptInterface
         fun hiz(deger: Double) = ana.post { oynatici.playbackParameters = PlaybackParameters(deger.toFloat()) }
