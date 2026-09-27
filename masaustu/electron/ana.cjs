@@ -190,10 +190,17 @@ let kucukZamanlayici = null;
 function kucukKapatZamanla() {
   clearTimeout(kucukZamanlayici);
   kucukZamanlayici = setTimeout(() => {
-    if (!kucuk?.mpv || onizlemeSuruyor) return;
-    kucuk.url = null;
-    kucuk.mpv.command('stop').catch(() => {});
+    if (!kucuk?.mpv) return;
+    // O an bir kare çıkarılıyorsa bitince tekrar dene (eskiden hiç kapanmıyordu: önizleme
+    // bağlantısı açık kalıp Stremio hızı videoyla paylaşıyordu).
+    if (onizlemeSuruyor) return kucukKapatZamanla();
+    onizlemeKapat();
   }, 4000);
+}
+function onizlemeKapat() {
+  if (!kucuk?.mpv || !kucuk.url) return;
+  kucuk.url = null;
+  kucuk.mpv.command('stop').catch(() => {});
 }
 
 // Kalıcı mpv açılamazsa: her kare için tek seferlik süreç (yavaş ama çalışır).
@@ -835,6 +842,8 @@ app.whenReady().then(() => {
   });
   ipcMain.on('mpv:durdur', () => mpv?.command('stop').catch(() => {}));
   ipcMain.on('mpv:sar', async (_e, saniye) => {
+    // Sarınca önizleme bağlantısı kapansın: hız yeni yerin verisine gitsin.
+    if (!onizlemeSuruyor) onizlemeKapat();
     await mpv?.seek(saniye).catch(() => {});
     ana?.webContents.send('mpv:sarildi');
   });
