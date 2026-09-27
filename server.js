@@ -363,6 +363,37 @@ function watchStall(room, stats) {
 }
 statsTimer.unref();
 
+// Stremio her video isteğinde dosyayı bir kez daha "seçiyor" ve bunları hiç bırakmıyor:
+// uzun izlemede (sarmalar, önizlemeler, yeniden bağlanmalar) yüzlerce kopya birikiyor ve
+// Stremio parça seçerken her birini tek tek dolaşıyor, indirme yavaşlıyor. Birikme çoksa
+// Stremio temiz açılıyor ve izleyenler kaldıkları yerden devam ediyor (en fazla 20 dk'da bir).
+const BIRIKME_SINIRI = 60;
+const BIRIKME_ARALIK_MS = 20 * 60_000;
+let sonBirikmeTemizligi = 0;
+const birikmeTimer = setInterval(async () => {
+  if (Date.now() - sonBirikmeTemizligi < BIRIKME_ARALIK_MS) return;
+  const room = rooms.list().find((r) => r.users && [...r.users.values()].some((u) => u.connected));
+  if (!room) return;
+  const stream = room.streams.find((s) => s.streamId === room.hostStreamId);
+  if (stream?.kind !== 'torrent') return;
+  let secim = 0;
+  try {
+    const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(5000) })).json();
+    secim = stats?.[stream.infoHash]?.selections?.length || 0;
+  } catch { return; }
+  if (secim < BIRIKME_SINIRI) return;
+  sonBirikmeTemizligi = Date.now();
+  log.warn("Stremio'da istek birikmesi, temizleniyor", { secim, infoHash: stream.infoHash });
+  dispatch(room, [room.systemChat("Stremio'da biriken bağlantılar temizleniyor (birkaç saniye)…")]);
+  const res = await stremioRestarter.restart('birikme');
+  if (res.ok) await torrentHiz.torrentAc(stream);
+  dispatch(room, [
+    room.systemChat(res.ok ? 'Stremio temizlendi, video kaldığı yerden devam ediyor.' : 'Stremio yeniden başlatılamadı.'),
+    ...(res.ok ? [{ to: 'room', event: 'stremioRestarted', data: {}, urgent: true }] : []),
+  ]);
+}, 60_000);
+birikmeTimer.unref();
+
 // "Stop other downloads" room setting: while such a room has people in it, only the torrents
 // being watched (in any room) or tested right now may stay open in the host's Stremio.
 let cleanupBusy = false;
