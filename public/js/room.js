@@ -535,6 +535,7 @@ function sendStatus() {
     drift: sync.drift(),
     duration: player.duration(),
     quality: myStream()?.quality ?? null,
+    error: st.state === 'error' ? player.lastError() : null,
     ...liveDownload(),
   });
 }

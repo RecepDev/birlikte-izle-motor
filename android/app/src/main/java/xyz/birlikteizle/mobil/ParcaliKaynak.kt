@@ -35,8 +35,21 @@ class ParcaliKaynak(private val ic: HttpDataSource) : DataSource {
         spec = dataSpec
         konum = dataSpec.position
         toplam = C.LENGTH_UNSET.toLong()
-        parcaAc()
-        return if (toplam > 0) toplam - dataSpec.position else C.LENGTH_UNSET.toLong()
+        try {
+            parcaAc()
+        } catch (e: Exception) {
+            // Parçalı açılamadıysa eski yola dön: video yine de oynasın.
+            runCatching { ic.close() }
+            dogrudan = true
+            return ic.open(dataSpec)
+        }
+        // Toplam boy okunamadıysa parçalı sürdürmek riskli: kapat, düz aç.
+        if (toplam <= 0) {
+            ic.close()
+            dogrudan = true
+            return ic.open(dataSpec)
+        }
+        return toplam - dataSpec.position
     }
 
     private fun parcaAc() {

@@ -10,6 +10,12 @@ const STATE = {
 };
 const SOURCE = { local: 'kendi Stremio\'su', relay: '📶 host üzerinden', http: 'doğrudan link', none: '' };
 
+// Video neden açılmadı (kişinin cihazından gelen sebep).
+const ERROR_REASON = {
+  unsupported: 'cihaz bu biçimi açamıyor', decode: 'çözülemedi', network: 'videoya ulaşılamadı',
+  timeout: '60 sn başlamadı, kaynak zayıf', hls: 'uyumlu mod da açamadı', compat: 'uyumlu mod yok',
+};
+
 export const DURATION_TOLERANCE_S = 2;
 
 export function durationMismatch(user, hostUser) {
@@ -28,7 +34,8 @@ export function renderUsers(listEl, room, meId, { onKick, streamLabel, statsFor 
   listEl.replaceChildren(
     ...visible.map((u) => {
       const [icon, text] = u.connected ? STATE[u.status.state] || STATE.idle : ['🔌', 'bağlantı koptu'];
-      const parts = [text, SOURCE[u.status.source], streamLabel(u)];
+      const parts = [u.status.state === 'error' && ERROR_REASON[u.status.error] ? `${text} (${ERROR_REASON[u.status.error]})` : text,
+        SOURCE[u.status.source], streamLabel(u)];
       // Real torrent numbers when the torrent runs on the host PC, else the browser's estimate.
       const ts = u.connected ? statsFor(u) : null;
       const down = ts ? ts.downMbps : u.status.downMbps;

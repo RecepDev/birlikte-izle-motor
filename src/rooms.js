@@ -282,6 +282,8 @@ export class Room {
       quality: typeof st.quality === 'string' ? st.quality.slice(0, 10) : null,
       downMbps: num(st.downMbps) !== null && st.downMbps >= 0 ? Math.min(st.downMbps, 100_000) : null,
       ahead: num(st.ahead) !== null && st.ahead >= 0 ? Math.min(st.ahead, 100_000) : null,
+      // Hata sebebi (unsupported/decode/network/timeout…): host panelde neden açılmadığını görsün.
+      ...(st.state === 'error' && typeof st.error === 'string' ? { error: st.error.slice(0, 20) } : {}),
     };
     if (st.state === 'ready') this.skippedUserIds.delete(userId);
     const changed = prev !== st.state;
