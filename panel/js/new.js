@@ -28,6 +28,9 @@ let refreshing = false;
 const QUALITIES = ['2160p', '1080p', '720p'];
 let qualityFilter = localStorage.getItem('odaAcKalite') || '';
 const qualityOf = (s) => (QUALITIES.includes(s.quality) ? s.quality : 'diger');
+// Liste ve denetim sırası: önce 4K, aynı kalitede çok kaynaklı önce.
+const siraQ = (s) => { const i = QUALITIES.indexOf(s.quality); return i < 0 ? 9 : i; };
+const siraliStream = (a, b) => siraQ(a) - siraQ(b) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0);
 
 // Bir addon (yeniden) cevap verince o addon'un eski sonuçlarının yerini alıyor.
 function addonReplied(line) {
@@ -144,7 +147,7 @@ function canliEtiket(s) {
 }
 async function gorunenleriDenetle() {
   const q = $('#filter').value.trim().toLowerCase();
-  const ids = streams.filter((s) => s.kind === 'torrent' && !durum[s.infoHash]
+  const ids = [...streams].sort(siraliStream).filter((s) => s.kind === 'torrent' && !durum[s.infoHash]
     && (!q || `${s.name} ${s.title} ${s.quality}`.toLowerCase().includes(q))
     && (!qualityFilter || qualityOf(s) === qualityFilter)).slice(0, 12).map((s) => s.streamId);
   if (!ids.length) return;
@@ -156,7 +159,7 @@ function render() {
   const q = $('#filter').value.trim().toLowerCase();
   renderQualityChips();
   const visible = streams.filter((s) => (!q || `${s.name} ${s.title} ${s.quality}`.toLowerCase().includes(q))
-    && (!qualityFilter || qualityOf(s) === qualityFilter));
+    && (!qualityFilter || qualityOf(s) === qualityFilter)).sort(siraliStream);
   const box = $('#streams');
   if (!streams.length) {
     box.replaceChildren(el('p', {

@@ -876,9 +876,14 @@ if (deviceCaps) {
     renderQualityTab();
   });
 }
+// Kalite sırası: en yüksek çözünürlük en üstte (4K/2160p), aynı kalitede çok kaynaklı önce.
+const QUALITY_RANK = ['2160p', '1440p', '1080p', '720p', '576p', '480p', '360p'];
+const qualityRank = (q) => { const i = QUALITY_RANK.indexOf(q); return i < 0 ? QUALITY_RANK.length : i; };
+const byQualityThenSeeders = (a, b) => qualityRank(a.quality) - qualityRank(b.quality) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0);
+
 function renderQualityResFilter(streams) {
   const box = $('#quality-res-filter');
-  const qualities = [...new Set(streams.map((s) => s.quality).filter(Boolean))];
+  const qualities = [...new Set(streams.map((s) => s.quality).filter(Boolean))].sort((a, b) => qualityRank(a) - qualityRank(b));
   for (const q of [...qualityFilters.res]) if (!qualities.includes(q)) qualityFilters.res.delete(q);
   if (!qualities.length) {
     box.hidden = true;
@@ -914,7 +919,8 @@ function renderQualityTab() {
     + (qualityFilters.maxGb !== null ? 1 : 0) + (qualityFilters.maxMbps !== null ? 1 : 0);
   $('#quality-filter-count').hidden = !activeCount;
   $('#quality-filter-count').textContent = String(activeCount);
-  const streams = addonStreams.filter(matchesQualityFilters);
+  // "Tümünü test et" de bu sırayla gidiyor: önce 4K'ların en çok kaynaklıları.
+  const streams = addonStreams.filter(matchesQualityFilters).sort(byQualityThenSeeders);
   const torrents = streams.filter((s) => s.kind === 'torrent');
   const checkAllBtn = $('#quality-check-all');
   checkAllBtn.hidden = !isHost() || !torrents.length;

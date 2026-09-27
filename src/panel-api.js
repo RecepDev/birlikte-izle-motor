@@ -214,8 +214,10 @@ export function createPanelApp({
       // başlıyor: hangisi seçilirse seçilsin oda açılınca beklemeden oynasın. En iyi aday +
       // en çok kaynaklı 3 tek bölüm; seçilmeyenleri oda açılınca temizlik kapatıyor.
       entry.isitildi ||= new Set();
-      const adaylar = [bestStream(entry.streams), ...entry.streams.filter((s) => s.kind === 'torrent' && !s.pack)
-        .sort((a, b) => (Number(b.seeders) || 0) - (Number(a.seeders) || 0)).slice(0, 3)];
+      // Önce 4K (2160p) içinden en çok kaynaklılar, 4K yoksa diğerleri.
+      const k4 = (s) => (s.quality === '2160p' ? 1 : 0);
+      const adaylar = [...entry.streams.filter((s) => s.kind === 'torrent' && !s.pack)
+        .sort((a, b) => k4(b) - k4(a) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0)).slice(0, 3), bestStream(entry.streams)];
       for (const s of adaylar) {
         if (s?.kind !== 'torrent' || entry.isitildi.has(s.infoHash) || entry.isitildi.size >= 4) continue;
         entry.isitildi.add(s.infoHash);
