@@ -11,9 +11,8 @@ export const USER_STATES = ['idle', 'loading', 'ready', 'buffering', 'error', 'n
 export const USER_SOURCES = ['local', 'relay', 'http', 'none'];
 const WAITABLE = new Set(['loading', 'buffering']);
 // Sarma kapısı: sarma/oynatmadan sonra oda, herkes yeni yere gelip hazır olduğunu bildirene
-// kadar (en fazla bu kadar) bekliyor. Yoksa hızlı olan hemen oynuyor, yavaş olan (telefon)
-// yeni yeri indirirken geride kalıyordu.
-const SEEK_GATE_MS = 15_000;
+// kadar bekliyor (süre sınırı yok; host "beklemeden devam" ile geçebilir). Yoksa hızlı olan
+// hemen oynuyor, yavaş olan (telefon) yeni yeri indirirken geride kalıyordu.
 const CHAT_KEEP = 200;
 const CHAT_MAX = 500;
 const CHAT_RATE = { count: 5, windowMs: 5000 };
@@ -49,7 +48,7 @@ export class Room {
     this.waitingUserIds = [];
     this.skippedUserIds = new Set();
     this.rev = 0; // her sarma/oynatmada artar; istemciler yeni yere gelince bunu bildirir
-    this.gateUntil = 0;
+    this.gate = false;
     this.chatLog = [];
     this.chatSeq = 0;
     this.subtitles = [];
@@ -137,9 +136,9 @@ export class Room {
     const msgs = [];
     const intendsToPlay = !this.playback.paused || this.autoPaused;
     let blockers = [];
-    const gateOpen = this.now() < this.gateUntil;
     // Hazır görünen ama son sarmaya henüz gelmemiş kişi (yalnızca rev bildiren istemciler).
-    const behind = (u) => gateOpen && u.status.state === 'ready' && Number.isFinite(u.status.rev) && u.status.rev < this.rev;
+    const behind = (u) => this.gate && u.status.state === 'ready' && Number.isFinite(u.status.rev) && u.status.rev < this.rev;
+    if (this.gate && !this.connectedUsers().some(behind)) this.gate = false;
     if (this.settings.waitMode === 'wait' && intendsToPlay) {
       blockers = this.connectedUsers()
         .filter((u) => (WAITABLE.has(u.status.state) || behind(u)) && !this.skippedUserIds.has(u.id))
@@ -236,12 +235,6 @@ export class Room {
   }
 
   tick() {
-    // Sarma kapısının süresi doldu: gelmeyen olsa da devam.
-    if (this.gateUntil && this.now() >= this.gateUntil) {
-      this.gateUntil = 0;
-      const msgs = this.reevaluate();
-      if (msgs.length) return msgs;
-    }
     const host = this.users.get(this.hostUserId);
     if (!host || host.connected) return [];
     if (this.now() - host.disconnectedAt < this.graceMs) return [];
@@ -264,7 +257,7 @@ export class Room {
     const now = this.now();
     if (action !== 'pause') {
       this.rev += 1;
-      this.gateUntil = now + SEEK_GATE_MS;
+      this.gate = true;
     }
 
     if (action === 'play') {
@@ -310,7 +303,7 @@ export class Room {
       ...(st.state === 'error' && typeof st.error === 'string' ? { error: st.error.slice(0, 20) } : {}),
     };
     if (st.state === 'ready') this.skippedUserIds.delete(userId);
-    const changed = prev !== st.state || (this.gateUntil && prevRev !== user.status.rev);
+    const changed = prev !== st.state || (this.gate && prevRev !== user.status.rev);
     return { msgs: [this.usersMsg(changed), ...(changed ? this.reevaluate() : [])] };
   }
 
@@ -319,6 +312,7 @@ export class Room {
     if (denied) return denied;
     if (!this.waitingUserIds.length) return { msgs: [] };
     for (const id of this.waitingUserIds) this.skippedUserIds.add(id);
+    this.gate = false; // sarmaya gelmeyenler de beklenmesin
     return { msgs: [this.systemChat('Host beklemeyi atladı'), ...this.reevaluate()] };
   }
 

@@ -434,7 +434,9 @@ test('seek gate: room waits until every rev-reporting user reached the new posit
 
   room.control(host.id, { action: 'seek', position: 900 });
   assert.equal(room.playback.paused, true);
-  advance(16_000);
+  advance(60_000);
   room.tick();
-  assert.equal(room.playback.paused, false, 'gate expires');
+  assert.equal(room.playback.paused, true, 'no time limit');
+  room.skipWaiting(host.id);
+  assert.equal(room.playback.paused, false, 'host can skip');
 });

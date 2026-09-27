@@ -581,7 +581,7 @@ function sendStatus() {
 setInterval(sendStatus, 2000);
 
 // Sarma kapısı: oda her sarma/oynatmada rev'i artırıyor; bu cihaz yeni yere gelip oynatılabilir
-// olunca rev'i hemen bildiriyor, oda herkes gelene kadar bekliyor (bkz. rooms.js SEEK_GATE_MS).
+// olunca rev'i hemen bildiriyor, oda herkes gelene kadar bekliyor (bkz. rooms.js reevaluate).
 // Saat farkı yalnızca girişte ölçülüyordu: telefon uykudan dönünce / saat düzeltilince kayıyordu.
 setInterval(() => {
   if (state.room && socket.connected && !document.hidden) sync.calibrate().catch(() => {});
