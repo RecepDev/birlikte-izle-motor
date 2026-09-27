@@ -195,6 +195,9 @@ window.masaustuSesGecikme = (saniye) => {
   ipcRenderer.send('mpv:ozellik', 'audio-delay', deger);
 };
 
+// Host odayı kapattı: açılış ekranına dön (oynatma durur).
+window.masaustuOdaKapandi = () => ipcRenderer.send('kabuk:baslangic');
+
 // Tam ekranda gelen sohbet mesajı: videonun sol altında kısa süre görünür (mpv çiziyor).
 window.masaustuSohbet = (kim, metin) => ipcRenderer.send('mpv:sohbet', String(kim || ''), String(metin || ''));
 

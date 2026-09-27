@@ -1197,7 +1197,11 @@ socket.on('relayRevoked', () => {
 
 socket.on('kicked', () => end('Odadan çıkarıldın.'));
 socket.on('replaced', () => end('Bu oda başka bir sekmede açıldı.'));
-socket.on('roomClosed', () => end('Oda kapandı.'));
+socket.on('roomClosed', () => {
+  end('Oda kapandı.');
+  // Masaüstü/telefon uygulamasında kısa bir süre sonra açılış ekranına dön.
+  setTimeout(() => window.masaustuOdaKapandi?.(), 2500);
+});
 socket.on('disconnect', (reason) => {
   if (state.ended) return;
   if (reason === 'io server disconnect') return end('Bağlantın sunucu tarafından kapatıldı.');

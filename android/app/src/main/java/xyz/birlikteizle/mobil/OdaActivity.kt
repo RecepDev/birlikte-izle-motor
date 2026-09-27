@@ -376,6 +376,13 @@ class OdaActivity : AppCompatActivity() {
             }
         }
 
+        // Host odayı kapattı: oynatmayı bırakıp açılış ekranına dön.
+        @JavascriptInterface
+        fun odaKapandi() = ana.post {
+            oynatici.stop()
+            finish()
+        }
+
         // Tam ekran: yatay çevir, sistem çubuklarını gizle. Sayfa da oynatıcıyı ekrana yayıyor.
         @JavascriptInterface
         fun tamEkran(acik: Boolean) = ana.post { tamEkranUygula(acik) }

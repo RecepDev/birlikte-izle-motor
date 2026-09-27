@@ -56,9 +56,23 @@ class MainActivity : AppCompatActivity() {
 
     // Odadan geri dönünce liste tazelensin.
     private var odalarKutusu: LinearLayout? = null
+    // Açılış ekranı açıkken liste 5 sn'de bir tazelenir: kapanan oda kaybolur, yeni oda gelir.
+    private val tazele = android.os.Handler(android.os.Looper.getMainLooper())
+    private val tazeleIs = object : Runnable {
+        override fun run() {
+            odalarKutusu?.let { odalariGetir(it) }
+            tazele.postDelayed(this, 5000)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
-        odalarKutusu?.let { odalariGetir(it) }
+        tazele.post(tazeleIs)
+    }
+
+    override fun onPause() {
+        tazele.removeCallbacks(tazeleIs)
+        super.onPause()
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
@@ -67,8 +81,15 @@ class MainActivity : AppCompatActivity() {
     // yeniden başlattıysa) liste gelmez, yeni linki yapıştırmak gerekir.
     // Host'un sunucusu: önce ntfy.sh'deki güncel adres (tünel adresi değişmiş olabilir),
     // yoksa son girilen odanınki. Ağ kullandığı için arka planda çağrılmalı.
+    // ntfy'ye 5 sn'de bir sormamak için bulunan adres bir dakika saklanıyor.
+    @Volatile private var bulunan: Pair<String, Long>? = null
+
     private fun sunucuBul(): String? {
-        Guncelleme.ntfyAdresi(kayit.getString("konu", null))?.let { return it }
+        bulunan?.takeIf { System.currentTimeMillis() - it.second < 60_000 }?.let { return it.first }
+        Guncelleme.ntfyAdresi(kayit.getString("konu", null))?.let {
+            bulunan = it to System.currentTimeMillis()
+            return it
+        }
         val son = kayit.getString("sonLink", null)?.let { Uri.parse(it) } ?: return null
         return if (son.scheme?.startsWith("http") == true) "${son.scheme}://${son.authority}" else null
     }

@@ -405,9 +405,12 @@ async function ntfyAdresi(konu) {
 }
 
 // Açılış ekranı için bilinen sunucular: sende çalışan, ntfy'deki güncel, son girilen.
+// ntfy'ye 5 sn'de bir sormamak için bulunan adres bir dakika saklanıyor.
+let ntfyOnbellek = { adres: null, zaman: 0 };
 async function sunucular() {
   const ayar = ayarOku();
-  const guncel = await ntfyAdresi(ayar.konu);
+  if (Date.now() - ntfyOnbellek.zaman > 60_000) ntfyOnbellek = { adres: await ntfyAdresi(ayar.konu), zaman: Date.now() };
+  const guncel = ntfyOnbellek.adres;
   if (guncel && guncel !== ayar.sonSunucu) ayarYaz({ sonSunucu: guncel });
   return [...new Set(['http://127.0.0.1:7000', guncel, ayar.sonSunucu].filter(Boolean))];
 }
@@ -638,4 +641,14 @@ app.whenReady().then(() => {
 });
 
 ipcMain.on('kabuk:odaya-git', (_e, url) => ana?.loadURL(url));
+// Oda kapandı: oynatmayı durdur, açılış ekranına dön (açık odalar listesi tazelenir).
+ipcMain.on('kabuk:baslangic', () => {
+  if (!ana) return;
+  if (ana.isKiosk()) ana.setKiosk(false);
+  sonYuklenen = null;
+  mpv?.command('stop').catch(() => {});
+  yukleniyor = false;
+  videoPenceresi?.hide();
+  ana.loadFile(path.join(__dirname, 'baslangic.html'));
+});
 app.on('window-all-closed', () => app.quit());

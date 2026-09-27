@@ -74,7 +74,11 @@
     // Aynı oda iki yoldan (yerel ve tünel) gelebilir: bir kez göster.
     const tekil = [...new Map(bulunan.map((o) => [o.id, o])).values()];
     const kutu = document.getElementById('odalar');
-    if (!tekil.length) return;
+    // Kapanan odalar listeden düşsün.
+    if (!tekil.length) {
+      kutu.hidden = true;
+      return;
+    }
     const baslik = document.createElement('h2');
     baslik.textContent = 'Açık odalar';
     kutu.replaceChildren(baslik, ...tekil.map((oda) => {
@@ -96,6 +100,8 @@
     kutu.hidden = false;
   }
   odalariGetir();
+  // Açılış ekranı açıkken liste tazelensin: kapanan oda kaybolsun, yeni oda gelsin.
+  setInterval(odalariGetir, 5000);
 
   document.getElementById('guncelle').addEventListener('click', async (e) => {
     const b = e.target;

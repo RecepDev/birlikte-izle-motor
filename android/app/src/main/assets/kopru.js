@@ -322,6 +322,9 @@
     ipucuZaman = setTimeout(() => { ipucuEl.hidden = true; }, 900);
   }
 
+  // Host odayı kapattı: açılış ekranına dön.
+  window.masaustuOdaKapandi = () => A.odaKapandi?.();
+
   // ---- ses parçaları ---------------------------------------------------------------
   let sesler = [];
   window.masaustuSes = {
