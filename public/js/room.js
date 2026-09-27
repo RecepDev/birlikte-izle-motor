@@ -1285,6 +1285,28 @@ function toggleFullscreen() {
   if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); // iOS
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
+
+// Tam ekranda Altyazı/Dil sekmesi: yan panel görünmediği için sekmeyi oynatıcının içine,
+// sağ sütuna taşıyoruz. Video kalan alana sığıyor; tam ekrandan çıkınca yerine dönüyor.
+const subsBody = document.querySelector('.tab-body[data-tab="subs"]');
+const subsHome = { parent: subsBody.parentElement, next: subsBody.nextElementSibling };
+function setSubsPanel(open) {
+  playerEl.classList.toggle('subs-panel-open', open);
+  if (open) {
+    playerEl.append(subsBody);
+    subsBody.hidden = false;
+    subs?.rerender();
+  } else if (subsBody.parentElement === playerEl) {
+    subsHome.parent.insertBefore(subsBody, subsHome.next);
+    subsBody.hidden = !document.querySelector('.tabs button[data-tab="subs"]')?.classList.contains('active');
+  }
+}
+$('#btn-subs-panel').addEventListener('click', () => setSubsPanel(!playerEl.classList.contains('subs-panel-open')));
+document.addEventListener('fullscreenchange', () => {
+  const full = Boolean(document.fullscreenElement);
+  $('#btn-subs-panel').hidden = !full;
+  if (!full) setSubsPanel(false);
+});
 video.addEventListener('dblclick', toggleFullscreen);
 
 // ---- content search (host only): switch the room to a different title ----
