@@ -114,8 +114,13 @@ async function kucukMpv() {
       pipeName: `birlikte-izle-onizleme-${process.pid}`,
       args: [
         `--wid=${hwndOf(pencere)}`, '--no-config', '--pause=yes', '--no-audio', '--sid=no', '--osd-level=0',
-        '--hr-seek=no', '--cache=no', '--demuxer-readahead-secs=0', '--ytdl=no', '--hwdec=no',
-        '--vd-lavc-skiploopfilter=all', '--vd-lavc-fast', '--vd-lavc-threads=2', '--vf=scale=320:-2',
+        '--hr-seek=no', '--cache=no', '--demuxer-readahead-secs=0', '--ytdl=no',
+        // 4K HEVC anahtar karesini ekran kartı çözüyor (işlemciyle 4-5 kat yavaş); küçültme
+        // için kare belleğe kopyalanıyor. Yalnızca anahtar kareler çözülüyor.
+        '--hwdec=auto-copy-safe', '--vd-lavc-skipframe=nonkey',
+        // Dosyayı açarken uzun çözümleme yok: ilk kare daha çabuk.
+        '--demuxer-lavf-analyzeduration=0.5', '--demuxer-lavf-probescore=24',
+        '--vd-lavc-skiploopfilter=all', '--vd-lavc-fast', '--vd-lavc-threads=2', '--vf=scale=288:-2',
         '--screenshot-format=jpg', '--screenshot-jpeg-quality=70',
       ],
     });
@@ -831,6 +836,10 @@ app.whenReady().then(() => {
     }
   });
   ipcMain.handle('kabuk:onizleme', (_e, url, saniye) => onizleme(String(url), Number(saniye) || 0));
+  // Video açılınca önizleme oynatıcısı dosyayı önceden açıyor: ilk kare beklemeden gelsin.
+  ipcMain.on('kabuk:onizleme-hazirla', (_e, url) => {
+    if (/^https?:\/\//.test(String(url))) onizleme(String(url), 0).catch(() => {});
+  });
   ipcMain.on('kabuk:indir', (_e, url) => {
     if (/^https?:\/\//.test(url)) ana?.webContents.downloadURL(url);
   });

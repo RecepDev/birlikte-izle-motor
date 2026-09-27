@@ -1282,19 +1282,43 @@ const previewImg = el('img', { class: 'seek-onizleme', alt: '', hidden: true });
 const seekTip = el('div', { class: 'seek-tip', hidden: true }, previewVideo, previewImg, seekTipTime);
 let imgWant = null;
 let imgTimer = null;
-function previewImage(src, t) {
+// Sayfada da küçük önbellek: aynı kare için masaüstü köprüsüne hiç gidilmiyor.
+const imgCache = new Map();
+function previewImage(src, t, step) {
   if (imgWant === t) return;
   imgWant = t;
   clearTimeout(imgTimer);
+  const hit = imgCache.get(`${src}|${t}`);
+  if (hit) {
+    previewImg.src = hit;
+    previewImg.hidden = false;
+    return;
+  }
   imgTimer = setTimeout(async () => {
     const data = await window.masaustuOnizleme(src, t).catch(() => null);
+    if (data) {
+      imgCache.set(`${src}|${t}`, data);
+      if (imgCache.size > 400) imgCache.delete(imgCache.keys().next().value);
+    }
     if (imgWant !== t || seekTip.hidden) return;
     if (data) {
       previewImg.src = data;
       previewImg.hidden = false;
     }
-  }, 150);
+    // İmleç duruyorsa iki yanındaki kareleri de hazırla (fare genelde yakına gidiyor).
+    // Yeni bir istek gelirse masaüstü tarafı bunları atlıyor.
+    for (const n of [t + step, t - step]) {
+      if (n >= 0 && !imgCache.has(`${src}|${n}`)) {
+        window.masaustuOnizleme(src, n).then((d) => { if (d) imgCache.set(`${src}|${n}`, d); }).catch(() => {});
+      }
+    }
+  }, 80);
 }
+// Video açılınca önizleme dosyası önceden açılsın (ilk kare hızlı gelsin).
+video.addEventListener('loadedmetadata', () => {
+  const src = previewSource();
+  if (src && window.masaustuOnizlemeHazirla) window.masaustuOnizlemeHazirla(src);
+});
 seek.parentElement.append(seekTip);
 let previewFor = null;
 let previewFailed = null;
@@ -1334,7 +1358,7 @@ function showSeekTip(x, width) {
   // kareyi paylaşıyor, önbellekten anında geliyor.
   if (src && window.masaustuOnizleme) {
     const step = Math.max(5, d / 300);
-    return previewImage(src, Math.round(t / step) * step);
+    return previewImage(src, Math.round(t / step) * step, step);
   }
   if (!src || src === previewFailed) {
     previewVideo.hidden = true;

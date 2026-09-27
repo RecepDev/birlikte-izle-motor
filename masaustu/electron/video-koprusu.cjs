@@ -204,6 +204,7 @@ window.masaustuHarici = {
 };
 // Çubuk önizlemesi: o saniyenin küçük resmi (data: adresi) ya da null.
 window.masaustuOnizleme = (url, saniye) => ipcRenderer.invoke('kabuk:onizleme', String(url), Number(saniye) || 0);
+window.masaustuOnizlemeHazirla = (url) => ipcRenderer.send('kabuk:onizleme-hazirla', String(url));
 
 // Host odayı kapattı: açılış ekranına dön (oynatma durur).
 window.masaustuOdaKapandi = () => ipcRenderer.send('kabuk:baslangic');
