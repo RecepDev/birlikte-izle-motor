@@ -77,10 +77,10 @@ class OdaActivity : AppCompatActivity() {
         val http = androidx.media3.datasource.DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
             .setDefaultRequestProperties(mapOf("enginefs-prio" to "10"))
         val kaynak = androidx.media3.datasource.DataSource.Factory { ParcaliKaynak(http.createDataSource()) }
-        // Başlarken/sarınca 6 sn, takıldıktan sonra 8 sn hazırlanmadan oynatma: torrent'te
+        // Başlarken, sarınca ve takılınca 15 sn hazırlanmadan oynatma: torrent'te
         // hemen başlayıp saniyede bir takılmak yerine kısa bir bekleme.
         val yukleme = androidx.media3.exoplayer.DefaultLoadControl.Builder()
-            .setBufferDurationsMs(30_000, 120_000, 6_000, 8_000)
+            .setBufferDurationsMs(30_000, 120_000, 15_000, 15_000)
             .build()
         oynatici = ExoPlayer.Builder(this, renderers)
             .setLoadControl(yukleme)
