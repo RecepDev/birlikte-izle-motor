@@ -1,6 +1,7 @@
 package xyz.birlikteizle.mobil
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -9,11 +10,15 @@ import android.view.Gravity
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import java.net.URL
+import kotlin.concurrent.thread
 
 // Giriş ekranı: yalnızca misafir girişi. Oda linkini yapıştır ya da arkadaşının
 // gönderdiği linke dokun (uygulama o linkle doğrudan açılır).
@@ -52,7 +57,83 @@ class MainActivity : AppCompatActivity() {
         startActivity(Intent(this, OdaActivity::class.java).putExtra(OdaActivity.URL, url))
     }
 
+    // Odadan geri dönünce liste tazelensin.
+    private var odalarKutusu: LinearLayout? = null
+    override fun onResume() {
+        super.onResume()
+        odalarKutusu?.let { odalariGetir(it) }
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    // Son girilen odanın sunucusundaki açık odalar. Tünel adresi değiştiyse (host sunucuyu
+    // yeniden başlattıysa) liste gelmez, yeni linki yapıştırmak gerekir.
+    private fun odalariGetir(kutu: LinearLayout) {
+        val son = kayit.getString("sonLink", null)?.let { Uri.parse(it) } ?: return
+        if (son.scheme?.startsWith("http") != true) return
+        val sunucu = "${son.scheme}://${son.authority}"
+        thread {
+            val metin = Guncelleme.oku("$sunucu/odalar.json", 4000) ?: return@thread
+            val liste = runCatching { JSONArray(metin) }.getOrNull() ?: return@thread
+            if (liste.length() == 0) return@thread
+            runOnUiThread { odalariCiz(kutu, sunucu, liste) }
+        }
+    }
+
+    private fun odalariCiz(kutu: LinearLayout, sunucu: String, liste: JSONArray) {
+        val yazi = ContextCompat.getColor(this, R.color.yazi)
+        val soluk = ContextCompat.getColor(this, R.color.soluk)
+        kutu.removeAllViews()
+        kutu.addView(TextView(this).apply {
+            text = "Açık odalar"
+            textSize = 15f
+            setTextColor(yazi)
+            setPadding(0, 0, 0, dp(8))
+        })
+        for (i in 0 until liste.length()) {
+            val oda = liste.getJSONObject(i)
+            val satir = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(10).toFloat()
+                    setColor(ContextCompat.getColor(context, R.color.zemin))
+                }
+                setOnClickListener { odayaGit("$sunucu/room/${oda.getString("id")}") }
+            }
+            val afis = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(0xFF232633.toInt())
+            }
+            satir.addView(afis, LinearLayout.LayoutParams(dp(36), dp(54)))
+            oda.optString("poster").takeIf { it.startsWith("http") }?.let { adres ->
+                thread {
+                    val resim = runCatching { URL(adres).openStream().use { BitmapFactory.decodeStream(it) } }.getOrNull()
+                    if (resim != null) runOnUiThread { afis.setImageBitmap(resim) }
+                }
+            }
+            val metinler = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(12), 0, 0, 0)
+            }
+            metinler.addView(TextView(this).apply {
+                text = oda.optString("name")
+                textSize = 15f
+                setTextColor(yazi)
+            })
+            metinler.addView(TextView(this).apply {
+                text = "${oda.optInt("users")} kişi · ${if (oda.optBoolean("playing")) "▶ oynuyor" else "⏸ duraklatıldı"}"
+                textSize = 12f
+                setTextColor(soluk)
+            })
+            satir.addView(metinler)
+            kutu.addView(satir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = dp(8)
+            })
+        }
+        kutu.visibility = android.view.View.VISIBLE
+    }
 
     private fun ekraniKur() {
         val yazi = ContextCompat.getColor(this, R.color.yazi)
@@ -76,6 +157,12 @@ class MainActivity : AppCompatActivity() {
             setTextColor(soluk)
             setPadding(0, dp(8), 0, dp(16))
         })
+        val odalar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = android.view.View.GONE
+        }
+        kart.addView(odalar)
+        odalarKutusu = odalar
         val link = EditText(this).apply {
             hint = "https://… /room/ABC123"
             setText(kayit.getString("sonLink", ""))

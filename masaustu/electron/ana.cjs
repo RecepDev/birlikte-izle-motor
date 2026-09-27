@@ -339,6 +339,24 @@ async function guncellemeDenetle(sayfaUrl) {
   }
 }
 
+// Son girilen odanın sunucusu: açılış ekranı oradaki açık odaları listeliyor.
+const ayarDosyasi = path.join(app.getPath('userData'), 'ayar.json');
+function ayarOku() {
+  try {
+    return JSON.parse(fs.readFileSync(ayarDosyasi, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+function sonSunucuyuKaydet(adres) {
+  try {
+    const u = new URL(adres);
+    if (!u.pathname.startsWith('/room/')) return;
+    fs.writeFileSync(ayarDosyasi, JSON.stringify({ ...ayarOku(), sonSunucu: u.origin }));
+  } catch { /* file:// ya da geçersiz adres */ }
+}
+ipcMain.on('kabuk:son-sunucu', (e) => { e.returnValue = ayarOku().sonSunucu || null; });
+
 // birlikteizle://<oda adresi> bağlantısı uygulamayı açsın. Tarayıcıdaki "Masaüstü
 // uygulamasında aç" düğmesi bu şemayı kullanıyor.
 const SEMA = 'birlikteizle';
@@ -528,7 +546,11 @@ app.whenReady().then(() => {
     app.quit();
   });
   // Dış bağlantılar (yardım linkleri) uygulamanın içinde değil tarayıcıda açılsın.
-  ana.webContents.on('did-finish-load', () => guncellemeDenetle(ana.webContents.getURL()));
+  ana.webContents.on('did-finish-load', () => {
+    const adres = ana.webContents.getURL();
+    guncellemeDenetle(adres);
+    sonSunucuyuKaydet(adres);
+  });
   ana.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };

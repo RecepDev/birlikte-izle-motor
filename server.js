@@ -94,6 +94,19 @@ publicApp.use(createAddonRouter({ panelBase: PANEL_BASE }));
 publicApp.use(createSubtitleRouter({ rooms, service: subtitles, dispatch, log }));
 publicApp.use(relay.router);
 publicApp.use(createIndirRouter({ root: ROOT, log }));
+// Uygulamaların açılış ekranı: şu an açık odalar (misafir de görebiliyor, girebiliyor).
+// Tünel adresi yalnızca linki paylaştığın kişilerde olduğu için liste de onlarda.
+publicApp.get('/odalar.json', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'no-store');
+  res.json(rooms.list().map((room) => ({
+    id: room.id,
+    name: room.meta?.name || room.contentId,
+    poster: room.meta?.poster || null,
+    users: room.connectedUsers().length,
+    playing: !room.playback?.paused,
+  })));
+});
 publicApp.get('/', (req, res) => res.redirect(302, '/room/'));
 publicApp.get(['/room', '/room/', '/room/:id'], (req, res) => {
   res.set('Content-Security-Policy', ROOM_CSP);

@@ -18,11 +18,20 @@
   .ikincil { background:#232633; }
   .ikincil:hover { background:#2f3344; }
   .ipucu { font-size:13px; }
+  .odalar { display:grid; gap:8px; }
+  .odalar h2 { margin:0; font-size:15px; color:#e8e9ee; }
+  .oda { display:flex; align-items:center; gap:12px; text-align:left; background:#0e0f13;
+         border:1px solid #2a2e39; padding:8px; font-weight:500; }
+  .oda:hover { background:#1f2330; }
+  .oda img, .oda .afis-yok { width:36px; height:54px; border-radius:4px; object-fit:cover; background:#232633; flex:none; }
+  .oda .ad { font-weight:600; }
+  .oda .alt { font-size:12px; color:#9096a6; }
 </style>
 </head>
 <body>
   <form class="kart" id="form">
     <h1>Birlikte İzle</h1>
+    <div id="odalar" class="odalar" hidden></div>
     <p>Oda linkini yapıştır. Video, tarayıcı yerine mpv ile oynatılır: gerçek HDR, tüm ses dilleri, donanım çözme.</p>
     <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
     <button type="submit">Odaya gir</button>
@@ -46,6 +55,43 @@
       document.getElementById('panel-ipucu').hidden = false;
     })
     .catch(() => {});
+
+  // Açık odalar: sende çalışan sunucu ve son girdiğin odanın sunucusu. Tünel adresi
+  // değiştiyse (host sunucuyu yeniden başlattıysa) yeni linki yapıştırmak gerekiyor.
+  async function odalariGetir() {
+    const sunucular = [...new Set(['http://127.0.0.1:7000', window.kabuk.sonSunucu()].filter(Boolean))];
+    const bulunan = [];
+    await Promise.all(sunucular.map(async (sunucu) => {
+      try {
+        const yanit = await fetch(`${sunucu}/odalar.json`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+        for (const oda of await yanit.json()) bulunan.push({ ...oda, sunucu });
+      } catch { /* sunucu kapalı */ }
+    }));
+    // Aynı oda iki yoldan (yerel ve tünel) gelebilir: bir kez göster.
+    const tekil = [...new Map(bulunan.map((o) => [o.id, o])).values()];
+    const kutu = document.getElementById('odalar');
+    if (!tekil.length) return;
+    const baslik = document.createElement('h2');
+    baslik.textContent = 'Açık odalar';
+    kutu.replaceChildren(baslik, ...tekil.map((oda) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'oda';
+      const afis = oda.poster ? Object.assign(document.createElement('img'), { src: oda.poster, alt: '' }) : Object.assign(document.createElement('div'), { className: 'afis-yok' });
+      const yazi = document.createElement('div');
+      const ad = Object.assign(document.createElement('div'), { className: 'ad', textContent: oda.name });
+      const alt = Object.assign(document.createElement('div'), {
+        className: 'alt',
+        textContent: `${oda.users} kişi · ${oda.playing ? '▶ oynuyor' : '⏸ duraklatıldı'}`,
+      });
+      yazi.append(ad, alt);
+      b.append(afis, yazi);
+      b.addEventListener('click', () => window.kabuk.odayaGit(`${oda.sunucu}/room/${oda.id}`));
+      return b;
+    }));
+    kutu.hidden = false;
+  }
+  odalariGetir();
 </script>
 </body>
 </html>

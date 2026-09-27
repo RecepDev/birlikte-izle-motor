@@ -3,7 +3,10 @@
 const { ipcRenderer } = require('electron');
 
 // contextIsolation kapalı: doğrudan sayfanın penceresine yazıyoruz.
-window.kabuk = { odayaGit: (url) => ipcRenderer.send('kabuk:odaya-git', url) };
+window.kabuk = {
+  odayaGit: (url) => ipcRenderer.send('kabuk:odaya-git', url),
+  sonSunucu: () => ipcRenderer.sendSync('kabuk:son-sunucu'),
+};
 
 // Masaüstüne özel düzen: kontroller/bildirimler videonun dışına alınır (mpv üstlerini örter).
 // Dosya olarak bağlamak yerine içeriği gömüyoruz: http sayfasından file:// yüklemesi engelleniyor.
