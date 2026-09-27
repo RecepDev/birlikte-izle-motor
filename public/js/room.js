@@ -2024,6 +2024,9 @@ let preferredCheckedFor = null;
 let preferredSent = false;
 function checkPreferredStreams() {
   if (!isHost() || !preferredQuality || !state.room?.streams?.length) return;
+  // Denemeler Stremio'da başka torrent'ler açıyor ve hız paylaşıyor: seçilen video açılıp önünde
+  // yeterince hazır veri olmadan başlatma (yoksa video, denemeler bitene kadar açılmıyordu).
+  if (player.status().state !== 'ready' || (liveDownload().ahead || 0) < 20) return;
   // Oda aç ekranı da bilsin (host olunca bir kez).
   if (!preferredSent) {
     preferredSent = true;
