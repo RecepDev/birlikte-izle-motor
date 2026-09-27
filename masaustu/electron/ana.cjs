@@ -407,8 +407,16 @@ async function ntfyAdresi(konu) {
 // Açılış ekranı için bilinen sunucular: sende çalışan, ntfy'deki güncel, son girilen.
 // ntfy'ye 5 sn'de bir sormamak için bulunan adres bir dakika saklanıyor.
 let ntfyOnbellek = { adres: null, zaman: 0 };
+// Konu adı pakete gömülü (host'un sunucusundan): uygulama hiç odaya girmemiş olsa da bulur.
+function gomuluKonu() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'kesif.json'), 'utf8')).konu || null;
+  } catch {
+    return null;
+  }
+}
 async function sunucular() {
-  const ayar = ayarOku();
+  const ayar = { konu: gomuluKonu(), ...ayarOku() };
   if (Date.now() - ntfyOnbellek.zaman > 60_000) ntfyOnbellek = { adres: await ntfyAdresi(ayar.konu), zaman: Date.now() };
   const guncel = ntfyOnbellek.adres;
   if (guncel && guncel !== ayar.sonSunucu) ayarYaz({ sonSunucu: guncel });

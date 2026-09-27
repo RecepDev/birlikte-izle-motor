@@ -13,6 +13,8 @@ import express from 'express';
 export const MASAUSTU_DOSYALARI = [
   // "type": "module" için şart: yoksa Node mpv.js'yi modül olarak açamıyor, mpv başlamıyor.
   'package.json',
+  // Sunucu bulma konusu (bkz. kesif.js): data/kesif.json'dan veriliyor.
+  'kesif.json',
   'mpv.js',
   'karar.js',
   'electron/ana.cjs',
@@ -54,6 +56,7 @@ export function createIndirRouter({ root, log }) {
     const ad = req.params[0];
     if (!MASAUSTU_DOSYALARI.includes(ad)) return res.status(404).end();
     res.set('Cache-Control', 'no-store');
+    if (ad === 'kesif.json') return res.sendFile(path.join(root, 'data', 'kesif.json'));
     res.sendFile(path.join(masaustuKok, ad));
   });
 

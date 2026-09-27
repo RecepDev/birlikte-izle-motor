@@ -86,7 +86,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun sunucuBul(): String? {
         bulunan?.takeIf { System.currentTimeMillis() - it.second < 60_000 }?.let { return it.first }
-        Guncelleme.ntfyAdresi(kayit.getString("konu", null))?.let {
+        // Konu adı uygulamaya gömülü (host'un sunucusundan, paketlenirken): link hiç gerekmesin.
+        val konu = kayit.getString("konu", null)
+            ?: runCatching { assets.open("kesif.txt").bufferedReader().use { it.readText().trim() } }.getOrNull()
+        Guncelleme.ntfyAdresi(konu)?.let {
             bulunan = it to System.currentTimeMillis()
             return it
         }
