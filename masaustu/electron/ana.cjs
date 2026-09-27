@@ -204,8 +204,12 @@ function onizlemeTekSefer(url, saniye) {
   });
 }
 let kaliciBozuk = false;
+let sonOnbellekSn = 0;
 async function onizleme(url, saniye) {
   if (!/^https?:\/\//.test(url)) return null;
+  // Asıl videonun önünde 30 sn'den az hazır veri varken önizleme torrent'ten parça
+  // istemesin: Stremio o parçalara da hız ayırıyor, oynatma takılıyordu.
+  if (mpv && sonYuklenen && sonOnbellekSn < 30) return null;
   const anahtar = `${url}|${Math.round(saniye)}`;
   if (onizlemeOnbellek.has(anahtar)) return onizlemeOnbellek.get(anahtar);
   if (onizlemeSuruyor) {
@@ -439,12 +443,16 @@ function delikAc(boyut, delikler) {
 async function durumDongusu() {
   if (!mpv) return;
   try {
-    const [position, duration, paused, seeking, speed, width, height, cacheEnd, idle, stalled] = await Promise.all([
+    const [position, duration, paused, seeking, speed, width, height, cacheEnd, idle, stalled,
+      cacheSec, drops, decDrops, frames] = await Promise.all([
       mpv.get('time-pos'), mpv.get('duration'), mpv.get('pause'), mpv.get('seeking'),
       mpv.get('speed'), mpv.get('dwidth'), mpv.get('dheight'),
       mpv.get('demuxer-cache-time'), mpv.get('core-idle'), mpv.get('paused-for-cache'),
+      mpv.get('demuxer-cache-duration'), mpv.get('frame-drop-count'), mpv.get('decoder-frame-drop-count'),
+      mpv.get('estimated-frame-number'),
     ].map((p) => p.catch(() => null)));
     if (Number.isFinite(position) && position > 0) sonKonum = position;
+    sonOnbellekSn = Number(cacheSec) || 0;
     ana?.webContents.send('mpv:durum', {
       position: Number(position) || 0,
       duration: Number.isFinite(duration) ? duration : null,
@@ -455,6 +463,10 @@ async function durumDongusu() {
       height: Number(height) || 0,
       cacheEnd: Number(cacheEnd) || 0,
       idle: Boolean(idle),
+      // Takılmanın sebebi ağ mı çözme mi: önündeki önbellek (sn) ve atlanan kareler.
+      cacheSec: Number(cacheSec) || 0,
+      droppedFrames: (Number(drops) || 0) + (Number(decDrops) || 0),
+      totalFrames: Number(frames) || 0,
       cacheStalled: Boolean(stalled),
       loaded: Number.isFinite(duration),
     });
@@ -476,7 +488,9 @@ async function mpvBaslat() {
       // Windows HDR açıksa HDR görüntüyü ekrana olduğu gibi ver (kapalıysa etkisi yok).
       '--target-colorspace-hint=yes',
       // Torrent akışı dalgalı: önden daha çok tamponla, kısa kesintiler görünmesin.
-      '--cache=yes', '--demuxer-max-bytes=512MiB', '--demuxer-readahead-secs=120',
+      '--cache=yes', '--demuxer-max-bytes=1GiB', '--demuxer-readahead-secs=180',
+      // Önbellek biterse saniyelik kesik kesik oynamak yerine 6 sn doldurup öyle devam et.
+      '--cache-pause-wait=6',
       // Ayar bilgileri (oran, ses…) görüntünün alt ortasında.
       '--osd-align-x=center', '--osd-align-y=bottom', '--osd-margin-y=48', '--osd-font-size=34',
     ],

@@ -473,6 +473,8 @@ function renderPictureInfo() {
   const need = requiredMbps(s.sizeBytes, player.duration());
   if (need) extra.push(`gereken ~${formatMbps(need)} Mbps`);
   if (s.hdr) extra.push(`🌗 ${s.hdr}`);
+  // Masaüstünde önündeki hazır veri: azalıyorsa takılma ağdan, çoksa çözmeden.
+  if (window.masaustuOnbellek) extra.push(`⏩ ${Math.round(window.masaustuOnbellek())} sn hazır`);
   const extraLine = extra.length ? el('div', { text: extra.join(' · ') }) : null;
   if (!h) {
     box.replaceChildren(...[extraLine].filter(Boolean));

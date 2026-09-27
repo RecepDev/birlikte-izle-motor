@@ -73,6 +73,8 @@ function bagla(video) {
   tanim('videoHeight', () => durum.height);
   tanim('buffered', () => zamanAraligi(durum.cacheEnd));
   tanim('ended', () => false);
+  // Sayfa kare kaybını buradan okuyor (bilgi kutusunda "% kare kaybı").
+  video.getVideoPlaybackQuality = () => ({ totalVideoFrames: durum.totalFrames || 0, droppedVideoFrames: durum.droppedFrames || 0 });
   tanim('playbackRate', () => durum.rate, (v) => ipcRenderer.send('mpv:ozellik', 'speed', Number(v) || 1));
   tanim('volume', () => volume, (v) => {
     volume = Math.max(0, Math.min(1, Number(v) || 0));
@@ -175,6 +177,8 @@ ipcRenderer.on('mpv:sesler', (_e, liste) => {
 });
 // Ayar değişince kısa bilgi: HTML bildirim mpv'nin altında kalıyor, o yüzden
 // yazıyı mpv kendi ekranında (alt ortada) gösteriyor.
+// Önündeki hazır veri (sn): bilgi kutusunda gösteriliyor.
+window.masaustuOnbellek = () => durum.cacheSec || 0;
 window.masaustuBilgi = (metin) => ipcRenderer.send('mpv:bilgi', String(metin));
 
 // Dosyanın içindeki (gömülü) altyazılar: mpv listeliyor, kişi seçerse mpv çiziyor.
