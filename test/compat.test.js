@@ -114,7 +114,7 @@ test('problems are ordered errors first, then warnings, then info', () => {
 
 test('auto scan takes the well-seeded torrents, best first and capped', async () => {
   const { autoScanTargets, AUTO_SCAN_MAX } = await import('../public/js/compat.js');
-  const strong = Array.from({ length: 9 }, (_, i) => stream({ seeders: 100 + i }));
+  const strong = Array.from({ length: 14 }, (_, i) => stream({ seeders: 100 + i }));
   const weak = [stream({ seeders: 10 }), stream({ seeders: 49 })];
   const unknown = stream({ seeders: null });
   const picked = autoScanTargets([...weak, unknown, ...strong]);
