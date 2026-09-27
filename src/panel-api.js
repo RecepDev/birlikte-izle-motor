@@ -229,6 +229,8 @@ export function createPanelApp({
 
   // Odayı bu bilgisayardaki masaüstü uygulamasında aç. Host bağlantısı (#host=…) ile:
   // uygulama odaya host olarak giriyor.
+  app.post('/api/masaustu-ac', (req, res) => res.json(masaustuAc(null)));
+
   app.post('/api/rooms/:id/masaustu', (req, res) => {
     const room = rooms.get(req.params.id);
     if (!room) return res.status(404).json({ error: 'Oda yok' });

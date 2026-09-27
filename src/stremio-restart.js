@@ -5,6 +5,8 @@
 // Stremio penceresi açık kalıyor, sunucu birkaç saniyede geri geliyor.
 
 import { execFile, spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -20,6 +22,31 @@ async function runtimeProcesses() {
 
 // "…\stremio-runtime.exe" C:\…\server.js -> server.js yolu
 const serverScript = (commandLine) => commandLine?.match(/stremio-runtime\.exe"?\s+"?([^"]+server\.js)"?/i)?.[1] || null;
+
+// Stremio uygulamasının kurulu olabileceği yerler (Stremio 5 ve 4).
+function stremioYolu() {
+  const yerel = process.env.LOCALAPPDATA || '';
+  const adaylar = [
+    path.join(yerel, 'Programs', 'Stremio', 'stremio-shell-ng.exe'),
+    path.join(yerel, 'Programs', 'LNV', 'Stremio-4', 'stremio.exe'),
+    'C:/Program Files/Stremio/stremio.exe',
+  ];
+  return adaylar.find((a) => fs.existsSync(a)) || null;
+}
+
+// Sunucu açılırken Stremio kapalıysa açar (yayın sunucusu onunla geliyor).
+export async function stremioAcikDegilseAc({ stremioLocal, log, platform = process.platform }) {
+  if (platform !== 'win32') return;
+  if (await stremioLocal.isUp().catch(() => false)) return;
+  const exe = stremioYolu();
+  if (!exe) {
+    log.warn('Stremio kapalı ve kurulu yeri bulunamadı');
+    return;
+  }
+  log.info('Stremio kapalıydı, açılıyor', { exe });
+  const child = spawn(exe, [], { detached: true, stdio: 'ignore' });
+  child.unref();
+}
 
 export function createStremioRestarter({ stremioLocal, log, platform = process.platform }) {
   let busy = null;

@@ -46,7 +46,8 @@ export function masaustuAc(url) {
   // açılıp hemen kapanıyor; miras almasını engelliyoruz.
   const ortam = { ...process.env };
   delete ortam.ELECTRON_RUN_AS_NODE;
-  const cocuk = spawn(exe, [url], { detached: true, stdio: 'ignore', windowsHide: false, env: ortam });
+  // Adres yoksa uygulama açılış ekranıyla (açık odalar, film ara) başlıyor.
+  const cocuk = spawn(exe, url ? [url] : [], { detached: true, stdio: 'ignore', windowsHide: false, env: ortam });
   cocuk.unref();
   return { ok: true, exe };
 }

@@ -76,6 +76,15 @@ function downloadText(room, u) {
   ].filter(Boolean).join(' · ');
 }
 
+// Bu bilgisayardaki masaüstü uygulamasını açılış ekranıyla başlatır (sunucu açıyor).
+async function uygulamayiAc(e) {
+  const b = e.target;
+  b.disabled = true;
+  const res = await api('/api/masaustu-ac', { method: 'POST' }).catch((err) => ({ error: err.message }));
+  b.disabled = false;
+  if (res.error) alert(res.error === 'yok' ? 'Birlikte İzle uygulaması bulunamadı. Bir kez masaüstündeki kısayoldan aç, sonra tekrar dene.' : res.error);
+}
+
 function renderRoom(room) {
   const relayByUser = new Map((room.relay?.users || []).map((u) => [u.userId, u]));
   const link = roomLink(room);
@@ -147,9 +156,16 @@ async function refreshRooms() {
   if (!rooms) return;
   const box = $('#rooms');
   if (!rooms.length) {
-    box.replaceChildren(el('p', { class: 'muted' }, 'Henüz oda yok. Stremio\'da bir film aç ve ', el('b', { text: '👥 Birlikte İzle' }), '\'yi seç.'));
+    // Liste 2 sn'de bir yenileniyor: düğme her seferinde yeniden kurulmasın.
+    if (box.dataset.bos === '1') return;
+    box.dataset.bos = '1';
+    box.replaceChildren(
+      el('p', { class: 'muted' }, 'Henüz oda yok. Stremio\'da bir film aç ve ', el('b', { text: '👥 Birlikte İzle' }), '\'yi seç ya da uygulamadan film ara.'),
+      el('button', { type: 'button', text: '🖥️ Birlikte İzle uygulamasını aç', onclick: uygulamayiAc }),
+    );
     return;
   }
+  box.dataset.bos = '0';
   box.replaceChildren(...rooms.map(renderRoom));
 }
 

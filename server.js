@@ -17,7 +17,7 @@ import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
 import { normalizeStreams, normalizeAddonStreams } from './src/streams.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
-import { createStremioRestarter } from './src/stremio-restart.js';
+import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
 import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
 import { createRoomManager } from './src/rooms.js';
@@ -43,6 +43,8 @@ const config = createConfigStore(path.join(DATA, 'config.json'), log);
 const addons = createAddonsClient();
 const stremioLocal = createStremioLocal();
 const stremioRestarter = createStremioRestarter({ stremioLocal, log });
+// Sunucu açılınca Stremio kapalıysa kendiliğinden aç: oda açmak için onun yayın sunucusu lazım.
+stremioAcikDegilseAc({ stremioLocal, log });
 // Otomatik yeniden başlatmalar arası en az süre: takılma sürerse döngüye girmesin.
 const AUTO_RESTART_COOLDOWN_MS = 5 * 60_000;
 // Birisi bekliyorken host'un torrent'i bu kadar süre hiç veri indirmezse Stremio takılmış sayılır.
