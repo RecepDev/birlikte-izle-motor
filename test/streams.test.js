@@ -85,6 +85,7 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
     seeders: null,
     embeddedSubs: null,
     multiAudio: false,
+    pack: false,
     sizeBytes: 2 * 1024 ** 3,
     infoHash: IH.toLowerCase(),
     fileIdx: 1,

@@ -45,6 +45,21 @@ export function createGecmis({ file, log }) {
       yaz();
     },
     liste: () => kayitlar,
+    // Kaldığın yer: film/bölüm başına son konum (sn) ve süre. Bitmek üzereyse siliniyor.
+    konumYaz(type, contentId, pos, dur) {
+      const id = String(contentId).split(':')[0];
+      const k = kayitlar.find((x) => x.id === id && x.type === type);
+      if (!k) return;
+      k.konum ||= {};
+      const bitti = Number.isFinite(dur) && dur > 0 && pos > dur - 180;
+      if (bitti) delete k.konum[contentId];
+      else k.konum[contentId] = { pos: Math.round(pos), dur: Number.isFinite(dur) ? Math.round(dur) : null, at: Date.now() };
+      yaz();
+    },
+    konumAl(type, contentId) {
+      const id = String(contentId).split(':')[0];
+      return kayitlar.find((x) => x.id === id && x.type === type)?.konum?.[contentId] || null;
+    },
     izlenenler: (id) => kayitlar.find((x) => x.id === id && x.type === 'series')?.watched || [],
   };
 }

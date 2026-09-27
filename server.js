@@ -15,7 +15,8 @@ import { createLogger } from './src/log.js';
 import { createConfigStore } from './src/config.js';
 import { createAddonsClient } from './src/addons-client.js';
 import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
-import { normalizeStreams, normalizeAddonStreams } from './src/streams.js';
+import { normalizeStreams, normalizeAddonStreams, bestStream } from './src/streams.js';
+import { localTorrentUrl } from './public/js/shared/stream-url.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
@@ -158,6 +159,44 @@ socketCtl = attachSocket(io, {
         refreshSubtitles(room);
         return { msgs: [] };
       },
+      // Sonraki bölümü önceden hazırla (host, bölümün son dakikalarında): stream listesi alınıp
+      // en iyi kaynak seçiliyor ve torrent Stremio'da açılıp ilk parçası indiriliyor. Geçişte
+      // bekleme olmuyor. Kapalı aralıkla okunuyor: Stremio tüm dosyayı arkadan indirmeye başlamasın.
+      prefetchNext: async (room, uid) => {
+        if (uid !== room.hostUserId || room.type !== 'series') return { reply: { ok: false }, msgs: [] };
+        const [id, sezon, bolum] = String(room.contentId).split(':');
+        const eps = (await addons.seriesEpisodes(id).catch(() => []))
+          .filter((e) => e.season !== 0).sort((a, b) => a.season - b.season || a.episode - b.episode);
+        const i = eps.findIndex((e) => e.season === Number(sezon) && e.episode === Number(bolum));
+        const next = i >= 0 ? eps[i + 1] : null;
+        if (!next) return { reply: { ok: false }, msgs: [] };
+        const nextId = `${id}:${next.season}:${next.episode}`;
+        if (room.prefetch?.contentId === nextId) return { reply: { ok: true }, msgs: [] };
+        const [meta, { results }] = await Promise.all([addons.meta('series', nextId), addons.streams(config.get().addons, 'series', nextId)]);
+        const streams = normalizeStreams(results);
+        const onceki = room.streams.find((s) => s.streamId === room.hostStreamId);
+        const pick = bestStream(streams, onceki?.quality);
+        if (!pick) return { reply: { ok: false }, msgs: [] };
+        room.prefetch = { contentId: nextId, meta, streams, pickId: pick.streamId, infoHash: pick.infoHash, at: Date.now() };
+        if (pick.kind === 'torrent') isit(pick);
+        log.info('Sonraki bölüm hazırlanıyor', { roomId: room.id, next: nextId });
+        return { reply: { ok: true }, msgs: [] };
+      },
+      // İnternet penceresi: açık kalmış bir torrent'i kapat (host).
+      closeTorrent: async (room, uid, p) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        const infoHash = String(p?.infoHash || '').toLowerCase();
+        if (!/^[0-9a-f]{40}$/.test(infoHash)) return { error: 'badStream' };
+        await stremioLocal.removeTorrent({ infoHash });
+        return { reply: { ok: true }, msgs: [] };
+      },
+      // Tepki emojisi: herkese yayılır, videonun üstünde uçar.
+      react: (room, uid, p) => {
+        const emoji = String(p?.emoji || '');
+        if (!['😂', '🔥', '❤️', '😮', '👏', '😢'].includes(emoji)) return { error: 'badInput' };
+        const name = room.users.get(uid)?.name || '';
+        return { msgs: [{ to: 'room', event: 'reaction', data: { emoji, name } }] };
+      },
       // "İnternet" penceresi: bağlantı nerelere gidiyor. Host bilgisayarındaki Stremio'nun tüm
       // torrent'leri (indirme/yükleme) yalnızca host'a; relay kullanımı host'a hepsi, misafire kendisi.
       bandwidth: async (room, uid) => {
@@ -173,10 +212,12 @@ socketCtl = attachSocket(io, {
             const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(4000) })).json();
             torrents = Object.values(stats || {}).map((t) => ({
               name: String(t.name || t.infoHash),
+              infoHash: t.infoHash,
               downMbps: Math.round(((t.downloadSpeed || 0) * 8) / 1e5) / 10,
               upMbps: Math.round(((t.uploadSpeed || 0) * 8) / 1e5) / 10,
               peers: t.peers || 0,
-              role: izlenen.get(t.infoHash) || (activeChecks.has(t.infoHash) ? 'hız denetimi' : 'açık kalmış'),
+              role: izlenen.get(t.infoHash) || (activeChecks.has(t.infoHash) ? 'hız denetimi'
+                : rooms.list().some((r) => r.prefetch?.infoHash === t.infoHash) ? 'sonraki bölüm' : 'açık kalmış'),
             }));
           } catch { torrents = null; }
         }
@@ -314,15 +355,25 @@ socketCtl = attachSocket(io, {
         if (denied) return denied;
         const { type, id } = p || {};
         if (!isContentType(type) || !isContentId(id)) return { error: 'badContent' };
-        const [meta, { results }] = await Promise.all([
-          addons.meta(type, id),
-          addons.streams(config.get().addons, type, id),
-        ]);
-        const streams = normalizeStreams(results);
+        const onceki = room.streams.find((s) => s.streamId === room.hostStreamId);
+        // Sonraki bölüm önceden hazırlandıysa (bkz. prefetchNext) onun listesi ve ısınmış torrent'i.
+        const hazir = room.prefetch?.contentId === id && Date.now() - room.prefetch.at < 30 * 60_000 ? room.prefetch : null;
+        let meta;
+        let streams;
+        if (hazir) ({ meta, streams } = hazir);
+        else {
+          let results;
+          [meta, { results }] = await Promise.all([addons.meta(type, id), addons.streams(config.get().addons, type, id)]);
+          streams = normalizeStreams(results);
+        }
         if (!streams.length) return { error: 'noStreams' };
-        const res = room.setContent(uid, { type, contentId: id, meta, streams, hostStreamId: streams[0].streamId });
+        // En iyi kaynak: önceki kaliteyle aynı, tek bölüm (paket değil), çok kaynaklı.
+        const secilen = hazir ? streams.find((s) => s.streamId === hazir.pickId) : bestStream(streams, onceki?.quality);
+        room.prefetch = null;
+        const res = room.setContent(uid, { type, contentId: id, meta, streams, hostStreamId: (secilen || streams[0]).streamId });
         if (!res.error) {
           gecmis.ekle({ type, contentId: id, meta });
+          res.msgs.push(...kaldigiYer(room));
           res.after = () => refreshSubtitles(room);
         }
         return res;
@@ -421,6 +472,38 @@ const birikmeTimer = setInterval(async () => {
 }, 60_000);
 birikmeTimer.unref();
 
+// Kaldığın yer: oynayan odaların konumu 15 sn'de bir geçmişe yazılıyor; aynı film/bölüm
+// yeniden açılınca oradan başlıyor (başta ya da sonda değilse).
+function kaldigiYer(room) {
+  const k = gecmis.konumAl(room.type, room.contentId);
+  if (!k || k.pos < 60 || (k.dur && k.pos > k.dur - 180)) return [];
+  room.playback = { paused: true, position: k.pos, updatedAt: room.now() };
+  const s = Math.round(k.pos);
+  const saat = Math.floor(s / 3600);
+  const dk = Math.floor((s % 3600) / 60);
+  const zaman = `${saat ? `${saat}:${String(dk).padStart(2, '0')}` : dk}:${String(s % 60).padStart(2, '0')}`;
+  return [room.playbackMsg(null), room.systemChat(`Kaldığın yerden devam: ${zaman} (baştan izlemek için çubuğu başa çek)`)];
+}
+const konumTimer = setInterval(() => {
+  for (const room of rooms.list()) {
+    if (!room.connectedUsers().length || room.playback.paused) continue;
+    const host = room.users.get(room.hostUserId);
+    const dur = Number(host?.status?.duration);
+    const pos = room.currentPosition();
+    if (pos > 30) gecmis.konumYaz(room.type, room.contentId, pos, Number.isFinite(dur) ? dur : null);
+  }
+}, 15_000);
+konumTimer.unref();
+
+// Sonraki bölümü ısıt: torrent Stremio'da açılıp ilk 8 MB okunuyor (kapalı aralık).
+function isit(stream) {
+  try {
+    const req = http.get(localTorrentUrl(stream, 'http://127.0.0.1:11470'), { headers: { range: 'bytes=0-8388607' } }, (r) => r.resume());
+    req.on('error', () => {});
+    req.setTimeout(120_000, () => req.destroy());
+  } catch { /* olmazsa geçişte normal açılır */ }
+}
+
 // "Stop other downloads" room setting: while such a room has people in it, only the torrents
 // being watched (in any room) or tested right now may stay open in the host's Stremio.
 let cleanupBusy = false;
@@ -431,6 +514,7 @@ const cleanupTimer = setInterval(async () => {
   cleanupBusy = true;
   try {
     const keep = new Set(activeChecks.keys());
+    for (const r of all) if (r.prefetch?.infoHash) keep.add(r.prefetch.infoHash);
     for (const room of all) {
       for (const id of room.statsStreamIds()) {
         const hash = room.streams.find((s) => s.streamId === id)?.infoHash;
@@ -464,6 +548,7 @@ const panelServer = http.createServer(
     installCloudflared: () => installCloudflared({ log }),
     onRoomCreated: (room) => {
       gecmis.ekle({ type: room.type, contentId: room.contentId, meta: room.meta });
+      kaldigiYer(room);
       refreshSubtitles(room);
     },
     gecmis,

@@ -76,6 +76,27 @@ export function parseMultiAudio(text) {
   return false;
 }
 
+// Sezon paketi mi (tek bölüm değil)? Pakette izleyenler dağınık, kaynak çabuk azalıyor.
+// "S03E05" gibi tek bölüm işareti varsa paket değil.
+export function parsePack(text) {
+  const t = String(text);
+  if (/S\d{1,2}\s?E\d{1,3}(?!\d)(?!\s?-\s?E?\d)/i.test(t) || /\b\d{1,2}x\d{2}\b/.test(t)) return false;
+  return /season|sezon|сезон|complete|pack|\bS\d{1,2}\b|S\d{1,2}E\d{1,3}\s?-\s?E?\d|серии:\s*\d+\s*-\s*\d+/i.test(t);
+}
+
+// En iyi kaynak: aynı kalite (verildiyse), tek bölüm, çok kaynak (seeder). Doğrudan linkler
+// torrentlerden önce (kaynak sorunu yok).
+export function bestStream(streams, preferQuality = null) {
+  const puan = (s) => {
+    if (s.kind === 'http') return 1e9;
+    let p = Number(s.seeders) || 0;
+    if (s.pack) p *= 0.35;
+    if (preferQuality && s.quality === preferQuality) p *= 3;
+    return p;
+  };
+  return [...streams].sort((a, b) => puan(b) - puan(a))[0] || null;
+}
+
 export function parseSizeBytes(raw) {
   const hinted = raw?.behaviorHints?.videoSize;
   if (Number.isFinite(hinted) && hinted > 0) return hinted;
@@ -114,6 +135,7 @@ function normalizeOne(raw, addonName) {
   base.seeders = seeders ? Number(seeders[1]) : null;
   base.embeddedSubs = parseEmbeddedSubs(`${base.name} ${base.title}`);
   base.multiAudio = parseMultiAudio(`${base.name} ${base.title}`);
+  base.pack = parsePack(`${base.name} ${base.title}`);
   base.sizeBytes = parseSizeBytes(raw);
   const notWebReady = raw.behaviorHints?.notWebReady === true;
   const subtitles = cleanSubtitles(raw.subtitles);
