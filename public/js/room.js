@@ -232,6 +232,21 @@ async function compatSource(stream) {
 // Misafirin kendi Stremio'su yoksa relay'e kendiliğinden geçmiyoruz: önce "Stremio açık
 // değil" uyarısı çıkıyor (Stremio'ya bağlan / Host üzerinden izle). Relay host'un
 // internetini kullandığı için kişinin onayıyla. "Hep host üzerinden" seçilirse bir daha sormuyor.
+// Misafir kendi Stremio'sundan 25 sn'dir yükleniyor/donuyorsa (bkz. renderNotice) relay önerilir.
+let localWaitSince = null;
+let localWaitDismissed = null;
+function slowLocal() {
+  return Boolean(localWaitSince && Date.now() - localWaitSince > 25_000 && localWaitDismissed !== myStreamId()
+    && !isHost() && state.room?.settings.relayEnabled && myStream()?.kind === 'torrent');
+}
+setInterval(() => {
+  const st = player.status();
+  const waiting = st.source === 'local' && ['loading', 'buffering'].includes(st.state);
+  const was = slowLocal();
+  localWaitSince = waiting ? (localWaitSince || Date.now()) : null;
+  if (was !== slowLocal()) renderNotice();
+}, 2000);
+
 function relayApproved() {
   return state.relayApproved || storage.get('hepRelay') === '1';
 }
@@ -293,7 +308,8 @@ function loadMyStream(force = false) {
   reencodeAllowed = false;
   // Known undecodable picture in quality mode: ask before downloading anything.
   qualityBlocked = !masaustu && Boolean(s) && keepQuality && videoNeedsReencode(s);
-  player.load(qualityBlocked ? null : s, compat ? { forceFallback: true, compat: true } : {});
+  // "Host üzerinden izle" seçildiyse kendi Stremio'su açık olsa bile host'tan (relay) gelsin.
+  player.load(qualityBlocked ? null : s, compat ? { forceFallback: true, compat: true } : state.forceRelay ? { forceFallback: true } : {});
   renderCompatButton();
   renderCompatTier();
   renderNotice();
@@ -1048,6 +1064,19 @@ function renderNotice() {
         selectCompatTier(q);
       }));
     }
+  } else if (slowLocal()) {
+    // Kendi Stremio'su bu kaynağı indiremiyor (kaynak zayıf ya da internet yavaş): host'un
+    // bilgisayarından (onun hızıyla) izlemeyi öner.
+    text = "Kendi Stremio'n bu kaynağı yeterince hızlı indiremiyor, video bekliyor.\n"
+      + "Host üzerinden izlersen video host'un bilgisayarından, onun hızıyla gelir.";
+    actions.push(button('📶 Host üzerinden izle', () => {
+      state.relayError = null;
+      state.relayApproved = true;
+      state.forceRelay = true;
+      localWaitSince = null;
+      loadMyStream(true);
+    }, true));
+    actions.push(button('Beklemeye devam', () => { localWaitDismissed = myStreamId(); renderNotice(); }));
   } else if (st.state === 'noStremio') {
     const relayNote = state.room?.settings.relayEnabled && !isHost()
       ? (isTouch ? '\nYoksa "Host üzerinden izle".' : '\n\nStremio\'n yoksa "Host üzerinden izle" ile host\'un bilgisayarından izleyebilirsin (host\'un internetini kullanır).')
