@@ -6,6 +6,7 @@ import express from 'express';
 import { isContentId, isContentType } from './addon.js';
 import { normalizeStreams, normalizeAddonStreams } from './streams.js';
 import { isit } from './stremio-isit.js';
+import { kaydet as torrentKaydet, dokun as torrentDokun } from './bizim-torrentler.js';
 import { masaustuAc } from './masaustu-baslat.js';
 
 const STREAM_CACHE_MS = 10 * 60 * 1000;
@@ -211,6 +212,7 @@ export function createPanelApp({
       const normalized = normalizeAddonStreams(addonName, items, entry.seq);
       entry.seq += normalized.length;
       entry.streams = [...entry.streams.filter((s) => s.addonName !== addonName), ...normalized];
+      torrentKaydet(normalized);
       entry.errors = entry.errors.filter((e) => e.addonName !== addonName);
       write({ type: 'addon', addonName, streams: normalized, error: null });
       // İçerik seçilir seçilmez en umut verici torrent'ler Stremio'da açılıp kaynak aramaya

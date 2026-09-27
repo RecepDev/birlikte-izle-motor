@@ -25,6 +25,7 @@ import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
 import { createGiris } from './src/giris.js';
 import { createTercih } from './src/tercih.js';
+import { kaydet as torrentKaydet, dokun as torrentDokun, bizimMi, yeniMi } from './src/bizim-torrentler.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
 import { setExtraSources } from './src/streams.js';
 import { createRoomManager } from './src/rooms.js';
@@ -292,6 +293,7 @@ socketCtl = attachSocket(io, {
         const stream = room.streams.find((s) => s.streamId === p?.streamId && s.kind === 'torrent');
         if (!stream) return { error: 'badStream' };
         activeChecks.set(stream.infoHash, (activeChecks.get(stream.infoHash) || 0) + 1);
+        torrentDokun(stream.infoHash);
         let result;
         try {
           result = await stremioLocal.checkTorrent(stream);
@@ -525,6 +527,36 @@ konumTimer.unref();
 
 // Sonraki bölümü ısıt: torrent Stremio'da açılıp ilk 8 MB okunuyor (kapalı aralık).
 const isit = (stream) => isitStremio(stream, 8 * 1024 * 1024);
+
+// Sahipsiz torrent temizliği (her 30 sn): bu sunucunun açtırdığı torrent'lerden hiçbir odanın,
+// denetimin, sonraki bölüm hazırlığının kullanmadığı ve son 90 sn'de dokunulmayanlar kapatılır.
+// Oda yokken de çalışıyor: yoksa Stremio arkada indirmeye devam edip interneti yiyordu.
+const sahipsizTimer = setInterval(async () => {
+  const kullanilan = new Set(activeChecks.keys());
+  for (const r of rooms.list()) {
+    torrentKaydet(r.streams);
+    for (const id of r.statsStreamIds()) {
+      const h = r.streams.find((s) => s.streamId === id)?.infoHash;
+      if (h) kullanilan.add(h);
+    }
+    if (r.prefetch?.infoHash) kullanilan.add(r.prefetch.infoHash);
+  }
+  let acik = [];
+  try { acik = await stremioLocal.openTorrents(); } catch { return; }
+  for (const h of acik) {
+    if (!bizimMi(h) || kullanilan.has(h) || yeniMi(h)) continue;
+    await stremioLocal.removeTorrent({ infoHash: h }).catch(() => {});
+    log.info('Sahipsiz torrent kapatıldı', { infoHash: h });
+  }
+}, 30_000);
+sahipsizTimer.unref();
+// Sunucu açılırken Stremio'da açık kalmış torrent'ler önceki oturumlardan artakalan: onlar
+// da temizliğe dahil (sunucu yeni açıldığı için kayıtlarımızda yoklar).
+setTimeout(async () => {
+  try {
+    for (const h of await stremioLocal.openTorrents()) torrentKaydet([{ kind: 'torrent', infoHash: h }]);
+  } catch { /* Stremio kapalı */ }
+}, 5000).unref();
 
 // "Stop other downloads" room setting: while such a room has people in it, only the torrents
 // being watched (in any room) or tested right now may stay open in the host's Stremio.
