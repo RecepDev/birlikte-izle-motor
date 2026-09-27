@@ -23,7 +23,8 @@ export function createDownloadMeter(video, getBitrateMbps, windowMs = 6000) {
   video.addEventListener('seeking', reset);
   video.addEventListener('emptied', reset);
   setInterval(() => {
-    if (!video.currentSrc || video.readyState < 1) return reset();
+    // Uygulama köprüleri (mpv/ExoPlayer) currentSrc vermiyor, src veriyor.
+    if (!(video.currentSrc || video.src) || video.readyState < 1) return reset();
     const now = performance.now();
     samples.push({ t: now, end: bufferedAhead(video).end });
     samples = samples.filter((s) => now - s.t <= windowMs);

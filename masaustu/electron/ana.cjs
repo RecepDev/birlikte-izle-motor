@@ -460,12 +460,12 @@ async function durumDongusu() {
   if (!mpv) return;
   try {
     const [position, duration, paused, seeking, speed, width, height, cacheEnd, idle, stalled,
-      cacheSec, drops, decDrops, frames] = await Promise.all([
+      cacheSec, drops, decDrops, frames, netSpeed] = await Promise.all([
       mpv.get('time-pos'), mpv.get('duration'), mpv.get('pause'), mpv.get('seeking'),
       mpv.get('speed'), mpv.get('dwidth'), mpv.get('dheight'),
       mpv.get('demuxer-cache-time'), mpv.get('core-idle'), mpv.get('paused-for-cache'),
       mpv.get('demuxer-cache-duration'), mpv.get('frame-drop-count'), mpv.get('decoder-frame-drop-count'),
-      mpv.get('estimated-frame-number'),
+      mpv.get('estimated-frame-number'), mpv.get('cache-speed'),
     ].map((p) => p.catch(() => null)));
     if (Number.isFinite(position) && position > 0) sonKonum = position;
     sonOnbellekSn = Number(cacheSec) || 0;
@@ -483,6 +483,8 @@ async function durumDongusu() {
       cacheSec: Number(cacheSec) || 0,
       droppedFrames: (Number(drops) || 0) + (Number(decDrops) || 0),
       totalFrames: Number(frames) || 0,
+      // mpv'nin gerçek indirme hızı (bayt/sn): sayfadaki "↓ Mbps" bundan.
+      netMbps: Number.isFinite(netSpeed) ? (netSpeed * 8) / 1e6 : null,
       cacheStalled: Boolean(stalled),
       loaded: Number.isFinite(duration),
     });

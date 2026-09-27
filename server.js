@@ -415,6 +415,9 @@ const statsTimer = setInterval(async () => {
         if (stats) next[id] = stats;
       }
       dispatch(room, room.setTorrentStats(next));
+      // Relay ile izleyenlerin kişi başı hızı (host'un yüklemesi) da herkese.
+      const rs = relay.stats(room.id);
+      if (rs.users.length) dispatch(room, [{ to: 'room', event: 'relayStats', data: rs }]);
       watchStall(room, next[room.hostStreamId]);
     }
   } finally {

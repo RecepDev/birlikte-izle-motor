@@ -417,8 +417,11 @@ const downloadMeter = createDownloadMeter(video, () => requiredMbps(myStream()?.
 
 function liveDownload() {
   const r = downloadMeter.read();
+  // Masaüstünde mpv'nin ölçtüğü gerçek hız (önbellek dolunca okuma yavaşlar, o zaman tahmin).
+  const net = window.masaustuHiz?.();
+  const mbps = Number.isFinite(net) && net > 0.05 ? net : r.mbps;
   return {
-    downMbps: r.mbps === null ? null : Math.round(r.mbps * 10) / 10,
+    downMbps: mbps === null ? null : Math.round(mbps * 10) / 10,
     ahead: Math.round(r.ahead),
     complete: r.complete,
   };
@@ -433,12 +436,13 @@ function hostPcStats(u, status = u.status) {
   return state.room.torrentStats?.[u.ownStreamId || state.room.hostStreamId] || null;
 }
 
-function speedLabel(st, ts = null) {
+function speedLabel(st, ts = null, relayMbps = null) {
   if (st.source === 'none' || st.state === 'noStremio' || st.state === 'idle') return '';
   const parts = [];
   if (st.complete) parts.push('tamamı indi');
   else {
-    const down = ts ? ts.downMbps : st.downMbps;
+    // Relay'de kişinin gerçekten aldığı hız (host'tan giden), yoksa kendi ölçümü ya da torrent hızı.
+    const down = Number.isFinite(relayMbps) && st.source === 'relay' ? relayMbps : Number.isFinite(st.downMbps) ? st.downMbps : ts?.downMbps;
     if (Number.isFinite(down)) parts.push(`↓ ${formatMbps(down)} Mbps`);
   }
   if (ts) parts.push(`🧲 ${ts.peers}`);
@@ -521,7 +525,7 @@ function renderViewersOverlay() {
     return el('li', { title: ts ? '🧲 bağlı peer sayısı (host bilgisayarındaki Stremio)' : '' },
       el('span', { text: STATE_ICON[st.state] || '•' }),
       el('span', { class: 'n', text: `${u.name}${u.isHost ? ' 👑' : ''}${u.id === state.me ? ' (sen)' : ''}` }),
-      el('span', { class: 'sp', text: speedLabel(st, ts) }));
+      el('span', { class: 'sp', text: speedLabel(st, ts, state.relayStats?.[u.id]) }));
   }));
 }
 setInterval(renderViewersOverlay, 2000);
@@ -625,6 +629,7 @@ function renderUsersTab() {
   const count = renderUsers($('#user-list'), state.room, state.me, {
     streamLabel: (u) => streamLabel(streamById(u.ownStreamId || state.room.hostStreamId)),
     statsFor: (u) => hostPcStats(u),
+    relayFor: (u) => state.relayStats?.[u.id] ?? null,
     onKick: async (u) => {
       if (!confirm(`${u.name} odadan çıkarılsın mı? Tekrar giremez.`)) return;
       const res = await request('kick', { userId: u.id });
@@ -1222,6 +1227,12 @@ socket.on('content', (d) => {
   refreshCompat();
 });
 
+// Host üzerinden izleyenlere giden hız (host'un yüklemesi), kişi başı.
+socket.on('relayStats', (rs) => {
+  state.relayStats = Object.fromEntries((rs?.users || []).map((u) => [u.userId, u.mbps]));
+  renderViewersOverlay();
+  renderUsersTab();
+});
 socket.on('torrentStats', (stats) => {
   state.room.torrentStats = stats;
   renderViewersOverlay();

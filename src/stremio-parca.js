@@ -27,10 +27,30 @@ function iste(target, aralik) {
   });
 }
 
+// Dosya boyu (bytes=0-0 ile, kapalı aralık): ilk parça dosya sonunu aşmasın. Dosyanın son
+// kısmından okunurken (MKV dizini sonda) parça sonu dosyayı aşınca Stremio 416 dönüyordu,
+// telefon oynatıcısı takılı kalıyordu.
+const boylar = new Map();
+async function dosyaBoyu(target) {
+  const anahtar = target.split('?')[0];
+  if (boylar.has(anahtar)) return boylar.get(anahtar);
+  const up = await iste(target, 'bytes=0-0');
+  up.resume();
+  const boy = Number(String(up.headers['content-range'] || '').split('/')[1]) || null;
+  if (boy) boylar.set(anahtar, boy);
+  return boy;
+}
+
 // target: tam Stremio adresi; bas: istenen başlangıç; acik: istemci aralık istedi mi.
 export async function parcaliAkit(target, bas, acik, res, { onBytes = () => {} } = {}) {
   let konum = bas;
-  let toplam = null;
+  let toplam = await dosyaBoyu(target).catch(() => null);
+  if (toplam && konum >= toplam) {
+    res.writeHead(416, { 'content-range': `bytes */${toplam}` });
+    res.end();
+    return;
+  }
+  let basladi = false;
   let kapandi = false;
   let simdiki = null;
   res.on('close', () => {
@@ -41,13 +61,14 @@ export async function parcaliAkit(target, bas, acik, res, { onBytes = () => {} }
     const son = toplam === null ? konum + PARCA - 1 : Math.min(toplam - 1, konum + PARCA - 1);
     const up = await iste(target, `bytes=${konum}-${son}`);
     simdiki = up;
-    if (toplam === null) {
+    if (!basladi) {
+      basladi = true;
       if (up.statusCode !== 206) {
         res.writeHead(up.statusCode || 502, up.headers);
         up.pipe(res);
         return;
       }
-      toplam = Number(String(up.headers['content-range'] || '').split('/')[1]) || null;
+      toplam ||= Number(String(up.headers['content-range'] || '').split('/')[1]) || null;
       const baslik = {
         'content-type': up.headers['content-type'] || 'application/octet-stream',
         'accept-ranges': 'bytes',

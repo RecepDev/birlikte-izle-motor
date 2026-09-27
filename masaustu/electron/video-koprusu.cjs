@@ -179,6 +179,7 @@ ipcRenderer.on('mpv:sesler', (_e, liste) => {
 // yazıyı mpv kendi ekranında (alt ortada) gösteriyor.
 // Önündeki hazır veri (sn): bilgi kutusunda gösteriliyor.
 window.masaustuOnbellek = () => durum.cacheSec || 0;
+window.masaustuHiz = () => (Number.isFinite(durum.netMbps) ? durum.netMbps : null);
 window.masaustuBilgi = (metin) => ipcRenderer.send('mpv:bilgi', String(metin));
 
 // Dosyanın içindeki (gömülü) altyazılar: mpv listeliyor, kişi seçerse mpv çiziyor.

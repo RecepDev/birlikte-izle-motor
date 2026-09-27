@@ -24,7 +24,7 @@ export function durationMismatch(user, hostUser) {
   return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) > DURATION_TOLERANCE_S;
 }
 
-export function renderUsers(listEl, room, meId, { onKick, streamLabel, statsFor = () => null }) {
+export function renderUsers(listEl, room, meId, { onKick, streamLabel, statsFor = () => null, relayFor = () => null }) {
   const host = room.users.find((u) => u.id === room.hostUserId);
   const iAmHost = room.hostUserId === meId;
   const visible = room.users
@@ -38,7 +38,11 @@ export function renderUsers(listEl, room, meId, { onKick, streamLabel, statsFor 
         SOURCE[u.status.source], streamLabel(u)];
       // Real torrent numbers when the torrent runs on the host PC, else the browser's estimate.
       const ts = u.connected ? statsFor(u) : null;
-      const down = ts ? ts.downMbps : u.status.downMbps;
+      // Kişinin kendi ölçtüğü hız önce (host'un torrent hızı herkes için aynı sayıyı gösteriyordu);
+      // relay'de host'tan ona giden hız.
+      const relayMbps = relayFor(u);
+      const down = u.status.source === 'relay' && Number.isFinite(relayMbps) ? relayMbps
+        : Number.isFinite(u.status.downMbps) ? u.status.downMbps : ts?.downMbps;
       if (u.connected && Number.isFinite(down)) parts.push(`↓ ${down >= 10 ? Math.round(down) : down} Mbps`);
       if (ts) parts.push(`🧲 ${ts.peers} peer`);
       if (Number.isFinite(u.status.drift) && u.status.state === 'ready') {
