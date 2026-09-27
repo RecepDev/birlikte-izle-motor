@@ -600,11 +600,19 @@ function panelPenceresiniKapat() {
   spawn('powershell', ['-NoProfile', '-Command', betik], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
 }
 
+// Sunucu kapanınca bu bilgisayardaki Birlikte İzle uygulaması da (ve oynattığı mpv) kapansın:
+// sunucusuz oda çalışmıyor. Başka bilgisayarlardaki misafirler "oda kapandı" ile açılışa döner.
+function uygulamayiKapat() {
+  if (process.platform !== 'win32') return;
+  spawn('taskkill', ['/IM', 'Birlikte Izle.exe', '/T', '/F'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+}
+
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('Sunucu kapatılıyor');
   panelPenceresiniKapat();
+  uygulamayiKapat();
   tunnel.stop();
   socketCtl.stop();
   relay.stop();
