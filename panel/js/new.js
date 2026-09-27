@@ -199,8 +199,9 @@ function render() {
             const note = pictureNote(s);
             return note ? el('span', { class: `kind ${note.ok ? 'fine' : 'risk'}`, text: note.text }) : null;
           })(),
-          s.hdr ? el('span', { class: 'kind risk', text: ` · 🌗 ${s.hdr}: HDR olmayan ekranda karanlık görünebilir` }) : null,
-          s.embeddedSubs ? el('span', { class: 'kind', text: ` · 💬 gömülü altyazı${s.embeddedSubs.langs.length ? ` (${s.embeddedSubs.langs.join(', ')})` : ''}` }) : null,
+          // Açıklamalar simgenin üstünde (fareyle bekleyince), satırda yalnızca simge.
+          s.hdr ? el('span', { class: 'kind ikon', title: `${s.hdr}: HDR olmayan ekranda karanlık görünebilir` }, ' · 🌗') : null,
+          s.embeddedSubs ? el('span', { class: 'kind ikon', title: `Gömülü altyazı${s.embeddedSubs.langs.length ? `: ${s.embeddedSubs.langs.join(', ')}` : ''}` }, ' · 💬') : null,
           canliEtiket(s)),
         button,
       );
