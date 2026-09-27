@@ -96,3 +96,12 @@ html, body { overflow: hidden !important; }
 /* Çubuk ipucu (zaman + önizleme) videonun üstüne taşıyor: mpv penceresinde onun için de delik açılıyor. */
 .seek-tip { z-index: 5; }
 .skip-intro { border-radius: 0 !important; }
+
+/* Tam ekranda kontrol çubuğu videonun üstünde (Stremio gibi): video ekranın tamamını alıyor,
+   çubuk yalnızca fare hareket edince görünüyor ve mpv penceresinde onun için delik açılıyor
+   (bkz. onyukleme-kabuk.cjs). Böylece "Doldur"da altta boş şerit kalmıyor. */
+.player:fullscreen .controls {
+  position: absolute !important; left: 0; right: 0; bottom: 0;
+  background: #14161d !important;
+}
+.player:fullscreen.idle .controls { display: none !important; }

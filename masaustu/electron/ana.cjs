@@ -390,29 +390,35 @@ function hizala(rect) {
   if (!(simdiki.x === yeni.x && simdiki.y === yeni.y && simdiki.width === yeni.width && simdiki.height === yeni.height)) {
     videoPenceresi.setBounds(yeni);
   }
-  delikAc(yeni, rect.delik ? { ...rect.delik, x: b.x + rect.delik.x - yeni.x, y: b.y + rect.delik.y - yeni.y } : null);
+  const delikler = (rect.delikler || (rect.delik ? [rect.delik] : []))
+    .map((d) => ({ ...d, x: b.x + d.x - yeni.x, y: b.y + d.y - yeni.y }));
+  delikAc(yeni, delikler);
 }
 
-// Altyazı kutusu mpv'nin üstünde görünsün diye mpv penceresinin o kısmını kesiyoruz
-// (pencere biçimi). Video küçülmediği için altyazının yeri kutu açık/kapalı aynı.
+// HTML (kontrol kutuları, tam ekranda kontrol çubuğu) mpv'nin üstünde görünsün diye mpv
+// penceresinin o kısımlarını kesiyoruz (pencere biçimi). Video küçülmüyor; altyazının
+// yeri değişmiyor. Birden çok delik: pencere yatay şeritlere bölünüp her şeritte
+// deliklerin dışında kalan aralıklar bırakılıyor.
 let sonBicim = '';
-function delikAc(boyut, d) {
+function delikAc(boyut, delikler) {
   const w = boyut.width;
   const h = boyut.height;
-  let parcalar = [{ x: 0, y: 0, width: w, height: h }];
-  if (d) {
-    const sol = Math.max(0, Math.round(d.x));
-    const ust = Math.max(0, Math.round(d.y));
-    const sag = Math.min(w, Math.round(d.x + d.width));
-    const alt = Math.min(h, Math.round(d.y + d.height));
-    if (sag > sol && alt > ust) {
-      parcalar = [
-        { x: 0, y: 0, width: w, height: ust },
-        { x: 0, y: alt, width: w, height: h - alt },
-        { x: 0, y: ust, width: sol, height: alt - ust },
-        { x: sag, y: ust, width: w - sag, height: alt - ust },
-      ].filter((p) => p.width > 0 && p.height > 0);
+  const kutular = (delikler || []).map((d) => ({
+    sol: Math.max(0, Math.round(d.x)), ust: Math.max(0, Math.round(d.y)),
+    sag: Math.min(w, Math.round(d.x + d.width)), alt: Math.min(h, Math.round(d.y + d.height)),
+  })).filter((k) => k.sag > k.sol && k.alt > k.ust);
+  const parcalar = [];
+  const ysler = [...new Set([0, h, ...kutular.flatMap((k) => [k.ust, k.alt])])].sort((p, q) => p - q);
+  for (let i = 0; i < ysler.length - 1; i++) {
+    const y0 = ysler[i];
+    const y1 = ysler[i + 1];
+    const kesen = kutular.filter((k) => k.ust <= y0 && k.alt >= y1).sort((p, q) => p.sol - q.sol);
+    let x = 0;
+    for (const k of kesen) {
+      if (k.sol > x) parcalar.push({ x, y: y0, width: k.sol - x, height: y1 - y0 });
+      x = Math.max(x, k.sag);
     }
+    if (x < w) parcalar.push({ x, y: y0, width: w - x, height: y1 - y0 });
   }
   const anahtar = JSON.stringify(parcalar);
   if (anahtar === sonBicim) return;

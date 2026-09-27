@@ -37,16 +37,20 @@ function olcumKur() {
       bekleyen = false;
       const r = alan.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return;
-      // Kontrol çubuğunun bir kutusu (altyazı, sohbet, bölümler…) açıksa mpv penceresinde
-      // o kutu kadar delik açılıyor: video küçülmüyor, altyazının yeri de değişmiyor.
-      // Tek delik açılabiliyor: öncelik açık kutuda, sonra çubuk ipucunda, sonra "Girişi atla"da.
-      const k = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])']
-        .map((q) => document.querySelector(q)).find(Boolean)?.getBoundingClientRect();
-      const delik = k && k.width > 0 && k.height > 0 ? { x: k.x, y: k.y, width: k.width, height: k.height } : null;
-      const olcu = [r.x, r.y, r.width, r.height, delik?.x, delik?.y, delik?.width, delik?.height].map((n) => Math.round(n ?? -1)).join('|');
+      // Kontrol kutuları (altyazı, sohbet, bölümler…), çubuk ipucu, "Girişi atla" ve tam
+      // ekranda görünen kontrol çubuğu için mpv penceresinde delik açılıyor: HTML videonun
+      // üstünde görünüyor, video küçülmüyor.
+      const oyn = alan.closest('.player');
+      const secici = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])'];
+      if (document.fullscreenElement && oyn && !oyn.classList.contains('idle')) secici.push('.player .controls');
+      const delikler = secici.flatMap((q) => [...document.querySelectorAll(q)])
+        .map((e) => e.getBoundingClientRect())
+        .filter((k) => k.width > 0 && k.height > 0)
+        .map((k) => ({ x: k.x, y: k.y, width: k.width, height: k.height }));
+      const olcu = [r.x, r.y, r.width, r.height, ...delikler.flatMap((d) => [d.x, d.y, d.width, d.height])].map((n) => Math.round(n)).join('|');
       if (olcu === son) return;
       son = olcu;
-      ipcRenderer.send('kabuk:video-alani', { x: r.x, y: r.y, width: r.width, height: r.height, delik });
+      ipcRenderer.send('kabuk:video-alani', { x: r.x, y: r.y, width: r.width, height: r.height, delikler });
     });
   };
   new ResizeObserver(bildir).observe(alan);
@@ -57,6 +61,7 @@ function olcumKur() {
   if (oynatici) new MutationObserver(bildir).observe(oynatici, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'style'] });
   ipcRenderer.on('kabuk:olcum-iste', bildir);
   window.addEventListener('scroll', bildir, true);
+  document.addEventListener('fullscreenchange', bildir);
   bildir();
   return true;
 }
