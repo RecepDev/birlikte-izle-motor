@@ -174,9 +174,23 @@ async function onizlemeCikar(url, saniye) {
   if (!ok) return null;
   const dosya = path.join(os.tmpdir(), `bi-onizleme-${process.pid}.jpg`);
   await k.mpv.command('screenshot-to-file', dosya, 'video');
+  kucukKapatZamanla();
   const veri = fs.readFileSync(dosya);
   fs.rm(dosya, { force: true }, () => {});
   return `data:image/jpeg;base64,${veri.toString('base64')}`;
+}
+
+// Açık kalan önizleme bağlantısı Stremio'da ikinci bir "şuradan oku" isteği gibi duruyor:
+// Stremio hızı o noktayla oynatılan yer arasında bölüyor, asıl video takılıyordu.
+// Son önizlemeden 4 sn sonra dosya kapatılıyor (süreç açık kalıyor, yeniden açmak hızlı).
+let kucukZamanlayici = null;
+function kucukKapatZamanla() {
+  clearTimeout(kucukZamanlayici);
+  kucukZamanlayici = setTimeout(() => {
+    if (!kucuk?.mpv || onizlemeSuruyor) return;
+    kucuk.url = null;
+    kucuk.mpv.command('stop').catch(() => {});
+  }, 4000);
 }
 
 // Kalıcı mpv açılamazsa: her kare için tek seferlik süreç (yavaş ama çalışır).
