@@ -15,7 +15,7 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
   const programmatic = { play: 0, pause: 0, seeked: 0 };
   // Kendi yaptığımız sarma bitti mi: telefonda "seeked" yeni yer indirilince (saniyeler sonra)
   // geliyor; süreye bakılırsa kişinin sarması sanılıp yeniden sarılıyordu (sonsuz sarma).
-  let seekPending = false;
+  let seekPending = 0;
 
   const serverNow = () => Date.now() + offset;
   const target = () => (playback ? expectedPosition(playback, serverNow()) : 0);
@@ -23,7 +23,7 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
 
   function setTime(t) {
     programmatic.seeked = Date.now();
-    seekPending = true;
+    seekPending += 1;
     video.currentTime = Math.min(t, Math.max(0, (video.duration || t) - 0.5));
   }
 
@@ -66,6 +66,13 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
     drift = Math.round(diff * 1000) / 1000;
     if (playback.paused) {
       doPause();
+      // Duraklatılmışken de yerinde değilse (sarma kaybolduysa: telefon 17 sn geride "hazır"
+      // kalıyordu) yeniden sar.
+      if (!video.seeking && video.readyState >= 1 && Math.abs(diff) > 0.5
+        && Date.now() - lastAutoSeek > AUTO_SEEK_COOLDOWN_MS) {
+        lastAutoSeek = Date.now();
+        setTime(target());
+      }
       return;
     }
     if (video.paused) {
@@ -95,8 +102,9 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
   const intendsToPlay = () => Boolean(playback && (!playback.paused || autoPaused));
 
   function onMediaEvent(kind, action) {
-    if (kind === 'seeked' && seekPending) {
-      seekPending = false;
+    // Üst üste sarmalarda tarayıcı tek "seeked" yollayabiliyor: sayaç 30 sn sonra geçersiz.
+    if (kind === 'seeked' && seekPending > 0 && Date.now() - programmatic.seeked < 30_000) {
+      seekPending -= 1;
       return;
     }
     if (Date.now() - programmatic[kind] < PROGRAMMATIC_WINDOW_MS) return;
@@ -142,6 +150,8 @@ export function createSync({ video, request, canControl, onBlocked, onError }) {
       send('seek', position);
     },
     reapply: apply,
+    // Son oda komutu uygulandı ve yeni yer oynatılabilir durumda.
+    settled: () => !playback || !hasMedia() || (!video.seeking && video.readyState >= 3),
     target,
     drift: () => drift,
     stop: () => clearInterval(timer),

@@ -10,6 +10,10 @@ export const ROOM_ID_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const USER_STATES = ['idle', 'loading', 'ready', 'buffering', 'error', 'noStremio'];
 export const USER_SOURCES = ['local', 'relay', 'http', 'none'];
 const WAITABLE = new Set(['loading', 'buffering']);
+// Sarma kapısı: sarma/oynatmadan sonra oda, herkes yeni yere gelip hazır olduğunu bildirene
+// kadar (en fazla bu kadar) bekliyor. Yoksa hızlı olan hemen oynuyor, yavaş olan (telefon)
+// yeni yeri indirirken geride kalıyordu.
+const SEEK_GATE_MS = 15_000;
 const CHAT_KEEP = 200;
 const CHAT_MAX = 500;
 const CHAT_RATE = { count: 5, windowMs: 5000 };
@@ -44,6 +48,8 @@ export class Room {
     this.autoPaused = false;
     this.waitingUserIds = [];
     this.skippedUserIds = new Set();
+    this.rev = 0; // her sarma/oynatmada artar; istemciler yeni yere gelince bunu bildirir
+    this.gateUntil = 0;
     this.chatLog = [];
     this.chatSeq = 0;
     this.subtitles = [];
@@ -97,7 +103,7 @@ export class Room {
     return {
       to: 'room',
       event: 'playback',
-      data: { playback: { ...this.playback }, autoPaused: this.autoPaused, by: by ?? null },
+      data: { playback: { ...this.playback }, autoPaused: this.autoPaused, by: by ?? null, rev: this.rev },
       urgent: true,
     };
   }
@@ -131,9 +137,12 @@ export class Room {
     const msgs = [];
     const intendsToPlay = !this.playback.paused || this.autoPaused;
     let blockers = [];
+    const gateOpen = this.now() < this.gateUntil;
+    // Hazır görünen ama son sarmaya henüz gelmemiş kişi (yalnızca rev bildiren istemciler).
+    const behind = (u) => gateOpen && u.status.state === 'ready' && Number.isFinite(u.status.rev) && u.status.rev < this.rev;
     if (this.settings.waitMode === 'wait' && intendsToPlay) {
       blockers = this.connectedUsers()
-        .filter((u) => WAITABLE.has(u.status.state) && !this.skippedUserIds.has(u.id))
+        .filter((u) => (WAITABLE.has(u.status.state) || behind(u)) && !this.skippedUserIds.has(u.id))
         .map((u) => u.id)
         .sort();
     }
@@ -227,6 +236,12 @@ export class Room {
   }
 
   tick() {
+    // Sarma kapısının süresi doldu: gelmeyen olsa da devam.
+    if (this.gateUntil && this.now() >= this.gateUntil) {
+      this.gateUntil = 0;
+      const msgs = this.reevaluate();
+      if (msgs.length) return msgs;
+    }
     const host = this.users.get(this.hostUserId);
     if (!host || host.connected) return [];
     if (this.now() - host.disconnectedAt < this.graceMs) return [];
@@ -247,6 +262,10 @@ export class Room {
     if (position !== undefined && !valid) return { error: 'badPosition' };
     const pos = valid ? position : this.currentPosition();
     const now = this.now();
+    if (action !== 'pause') {
+      this.rev += 1;
+      this.gateUntil = now + SEEK_GATE_MS;
+    }
 
     if (action === 'play') {
       this.skippedUserIds.clear();
@@ -265,7 +284,10 @@ export class Room {
     } else {
       this.playback = { ...this.playback, position: pos, updatedAt: now };
     }
-    return { msgs: [this.playbackMsg(user.name), ...this.reevaluate()] };
+    // Önce bekleme kuralları (sarma kapısı odayı hemen durdurabilir), sonra tek bir playback
+    // mesajı: yoksa istemciler bir an oynatıp hemen duraklatıyordu.
+    const rest = this.reevaluate().filter((m) => m.event !== 'playback');
+    return { msgs: [this.playbackMsg(user.name), ...rest] };
   }
 
   status(userId, st = {}) {
@@ -274,6 +296,7 @@ export class Room {
     if (!USER_STATES.includes(st.state) || !USER_SOURCES.includes(st.source)) return { error: 'badStatus' };
     const num = (v) => (Number.isFinite(v) ? v : null);
     const prev = user.status.state;
+    const prevRev = user.status.rev;
     user.status = {
       state: st.state,
       source: st.source,
@@ -282,11 +305,12 @@ export class Room {
       quality: typeof st.quality === 'string' ? st.quality.slice(0, 10) : null,
       downMbps: num(st.downMbps) !== null && st.downMbps >= 0 ? Math.min(st.downMbps, 100_000) : null,
       ahead: num(st.ahead) !== null && st.ahead >= 0 ? Math.min(st.ahead, 100_000) : null,
+      rev: Number.isInteger(st.rev) && st.rev >= 0 ? st.rev : null,
       // Hata sebebi (unsupported/decode/network/timeout…): host panelde neden açılmadığını görsün.
       ...(st.state === 'error' && typeof st.error === 'string' ? { error: st.error.slice(0, 20) } : {}),
     };
     if (st.state === 'ready') this.skippedUserIds.delete(userId);
-    const changed = prev !== st.state;
+    const changed = prev !== st.state || (this.gateUntil && prevRev !== user.status.rev);
     return { msgs: [this.usersMsg(changed), ...(changed ? this.reevaluate() : [])] };
   }
 
@@ -533,6 +557,7 @@ export class Room {
       hostSubtitle: this.hostSubtitle,
       torrentStats: this.torrentStats,
       playback: { ...this.playback },
+      rev: this.rev,
       autoPaused: this.autoPaused,
       waitingUserIds: this.waitingUserIds,
       chat: this.chatLog,

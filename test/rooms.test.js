@@ -412,3 +412,29 @@ test('manager close removes the room', () => {
   assert.equal(mgr.get(room.id), undefined);
   assert.equal(mgr.close(room.id), false);
 });
+
+test('seek gate: room waits until every rev-reporting user reached the new position', () => {
+  const { room, host, join, advance } = setup({ waitMode: 'wait' });
+  const ali = join('ali');
+  room.status(host.id, { state: 'ready', source: 'local', rev: 0 });
+  room.status(ali.id, { state: 'ready', source: 'local', rev: 0 });
+  room.control(host.id, { action: 'play', position: 0 });
+  room.status(host.id, { state: 'ready', source: 'local', rev: 1 });
+  room.status(ali.id, { state: 'ready', source: 'local', rev: 1 });
+  assert.equal(room.playback.paused, false);
+
+  const res = room.control(host.id, { action: 'seek', position: 500 });
+  assert.equal(events(res.msgs, 'playback').length, 1);
+  assert.equal(room.playback.paused, true);
+  assert.equal(room.playback.position, 500);
+  room.status(host.id, { state: 'ready', source: 'local', rev: 2 });
+  assert.equal(room.playback.paused, true, 'ali has not arrived yet');
+  room.status(ali.id, { state: 'ready', source: 'local', rev: 2 });
+  assert.equal(room.playback.paused, false);
+
+  room.control(host.id, { action: 'seek', position: 900 });
+  assert.equal(room.playback.paused, true);
+  advance(16_000);
+  room.tick();
+  assert.equal(room.playback.paused, false, 'gate expires');
+});

@@ -22,6 +22,14 @@
   // "sarılıyor" bildiriliyor; oda telefonu bekliyor. ExoPlayer seek anında "sarıldı" diyordu,
   // sayfa telefonu hemen hazır sayıyor ve oda beklemeden devam ediyordu.
   let sarma = null;
+  // Konum ExoPlayer'dan 0,2 sn'de bir geliyor: aradaki zamanı tahmin et (oynuyorsa geçen süre
+  // kadar ileri). Yoksa senkron her okumada 0-0,2 sn titreyen bir sapma görüp hızı boşuna
+  // değiştiriyordu.
+  let durumZamani = 0;
+  function konumTahmini() {
+    if (durum.paused || durum.seeking || durum.cacheStalled || !durumZamani) return durum.position;
+    return durum.position + Math.min(0.5, (Date.now() - durumZamani) / 1000) * (durum.rate || 1);
+  }
   const yolla = (tip) => el && el.dispatchEvent(new Event(tip));
   const mutlak = (url) => (url ? new URL(url, location.href).href : '');
 
@@ -65,7 +73,7 @@
     A.ses(muted ? 0 : volume);
     const tanim = (ad, get, set) => Object.defineProperty(video, ad, { configurable: true, get, set });
 
-    tanim('currentTime', () => durum.position, (v) => {
+    tanim('currentTime', konumTahmini, (v) => {
       const hedef = Number(v) || 0;
       sarma = { hedef, at: Date.now() };
       Object.assign(durum, { position: hedef, seeking: true, cacheStalled: true });
@@ -148,7 +156,7 @@
       let sarmaBitti = false;
       if (sarma) {
         // İlk ~0,5 sn gelen durum sarmadan önceki olabilir (eski yer, READY): yok say.
-        const taze = Date.now() - sarma.at > 500;
+        const taze = Date.now() - sarma.at > 300;
         if (!taze) next = { ...next, position: sarma.hedef };
         if (!taze || next.cacheStalled) next = { ...next, seeking: true, cacheStalled: true };
         else {
@@ -157,6 +165,7 @@
         }
       }
       Object.assign(durum, next);
+      durumZamani = Date.now();
       if (!el) return;
       if (oncekiSure !== durum.duration) {
         yolla('durationchange');

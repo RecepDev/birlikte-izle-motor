@@ -574,10 +574,26 @@ function sendStatus() {
     duration: player.duration(),
     quality: myStream()?.quality ?? null,
     error: st.state === 'error' ? player.lastError() : null,
+    rev: ackRev,
     ...liveDownload(),
   });
 }
 setInterval(sendStatus, 2000);
+
+// Sarma kapısı: oda her sarma/oynatmada rev'i artırıyor; bu cihaz yeni yere gelip oynatılabilir
+// olunca rev'i hemen bildiriyor, oda herkes gelene kadar bekliyor (bkz. rooms.js SEEK_GATE_MS).
+// Saat farkı yalnızca girişte ölçülüyordu: telefon uykudan dönünce / saat düzeltilince kayıyordu.
+setInterval(() => {
+  if (state.room && socket.connected && !document.hidden) sync.calibrate().catch(() => {});
+}, 5 * 60_000);
+
+let roomRev = 0;
+let ackRev = 0;
+setInterval(() => {
+  if (ackRev === roomRev || !state.room || player.status().state !== 'ready' || !sync.settled()) return;
+  ackRev = roomRev;
+  sendStatus();
+}, 250);
 
 // ---- sync -------------------------------------------------------------------------
 
@@ -1020,11 +1036,22 @@ function renderQualityTab() {
 
 const DEBRID_WARNING = 'Bu bir doğrudan link (ör. Real-Debrid). Linkte hesabının anahtarı olabilir: arkadaşların senin hesabını kullanır ve bazı servisler farklı IP\'lerden aynı anda kullanımı ban sebebi sayar. Devam edilsin mi?';
 
+// Her sarmada oda herkesi kısa süre bekliyor (sarma kapısı): şerit 1,5 sn sürerse görünsün,
+// yoksa her sarmada yanıp sönüyordu.
+let bannerTimer = null;
 function renderBanner() {
   const ids = state.room?.waitingUserIds || [];
   const banner = $('#banner');
-  banner.hidden = ids.length === 0;
-  if (!ids.length) return;
+  if (!ids.length) {
+    clearTimeout(bannerTimer);
+    bannerTimer = null;
+    banner.hidden = true;
+    return;
+  }
+  if (banner.hidden) {
+    if (!bannerTimer) bannerTimer = setTimeout(() => { bannerTimer = null; if (state.room?.waitingUserIds?.length) { $('#banner').hidden = false; renderBanner(); } }, 1500);
+    return;
+  }
   $('#banner-text').textContent = `⏳ ${ids.map(userName).join(', ')} bekleniyor…`;
   $('#banner-skip').hidden = !isHost();
 }
@@ -1173,6 +1200,7 @@ function applySnapshot(snap, publicUrl) {
   state.room = snap;
   state.me = snap.you;
   state.publicUrl = publicUrl;
+  if (Number.isInteger(snap.rev)) roomRev = snap.rev;
   state.relayKey = null; // the server drops relay grants on disconnect
   $('#join').hidden = true;
   $('#app').hidden = false;
@@ -1221,13 +1249,18 @@ socket.on('connect', async () => {
 });
 
 socket.on('playback', (d) => {
+  if (Number.isInteger(d.rev)) roomRev = d.rev;
   const prev = state.room.playback;
+  const prevAuto = state.room.autoPaused;
   state.room.playback = d.playback;
   state.room.autoPaused = d.autoPaused;
   sync.setPlayback(d.playback, d.autoPaused);
   renderControls();
   if (d.by && d.by !== me()?.name) {
-    const verb = prev.paused !== d.playback.paused ? (d.playback.paused ? 'duraklattı' : 'oynattı') : `${formatTime(d.playback.position)} konumuna sardı`;
+    // Oynatma/sarma herkes hazır olana kadar "bekleniyor" (autoPaused) gelebiliyor: oynuyor say.
+    const wasPlaying = !prev.paused || prevAuto;
+    const nowPlaying = !d.playback.paused || d.autoPaused;
+    const verb = wasPlaying !== nowPlaying ? (nowPlaying ? 'oynattı' : 'duraklattı') : `${formatTime(d.playback.position)} konumuna sardı`;
     toast(`${d.by} ${verb}`);
   }
 });

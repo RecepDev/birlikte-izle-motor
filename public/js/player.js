@@ -5,7 +5,7 @@
 
 import { STREMIO_BASE, localTorrentUrl } from './shared/stream-url.js';
 
-const BUFFER_DEBOUNCE_MS = 700;
+const BUFFER_DEBOUNCE_MS = 1000;
 const LOAD_TIMEOUT_MS = 60_000;
 const PROBE_RETRY_MS = 3000;
 
