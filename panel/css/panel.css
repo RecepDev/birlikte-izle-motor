@@ -98,3 +98,10 @@ fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px
 .bolum-satir { display: grid; gap: 6px; }
 .bolum-satir button { text-align: left; background: #171920; border: 1px solid #2a2e39; }
 .bolum-satir button:hover { background: #1f2330; }
+
+/* Bölüm listesi: açılmış bölümler ve en son kalınan. */
+.bolum-satir button { display: flex; justify-content: space-between; gap: 8px; }
+.bolum-satir button.izlendi { color: var(--muted, #9096a6); }
+.bolum-satir button.son { box-shadow: inset 3px 0 0 #7b5cff; color: inherit; }
+.izlendi-etiket { font-size: 12px; color: #4ade80; white-space: nowrap; }
+.bolum-satir button.son .izlendi-etiket { color: #9c86ff; }

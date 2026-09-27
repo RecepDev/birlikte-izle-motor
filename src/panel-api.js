@@ -27,6 +27,7 @@ export function createPanelApp({
   installCloudflared,
   onRoomCreated = () => {},
   relayStats = () => null,
+  gecmis = { liste: () => [], izlenenler: () => [] },
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -159,12 +160,17 @@ export function createPanelApp({
 
   app.get('/api/series/:id/episodes', wrap(async (req, res) => {
     if (!isContentId(req.params.id)) return res.status(400).json({ error: 'Geçersiz id' });
+    const izlenen = new Set(gecmis.izlenenler(req.params.id));
     try {
-      res.json(await addons.seriesEpisodes(req.params.id));
+      const bolumler = await addons.seriesEpisodes(req.params.id);
+      res.json(bolumler.map((b) => ({ ...b, watched: izlenen.has(`${b.season}:${b.episode}`) })));
     } catch {
       res.json([]);
     }
   }));
+
+  // Daha önce oda açılan film ve diziler (en yenisi başta).
+  app.get('/api/gecmis', (req, res) => res.json(gecmis.liste()));
 
   app.get('/api/streams', wrap(async (req, res) => {
     const { type, id, retry } = req.query;

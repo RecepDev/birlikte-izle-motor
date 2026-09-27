@@ -19,6 +19,7 @@ import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter } from './src/stremio-restart.js';
 import { createIndirRouter } from './src/indir.js';
+import { createGecmis } from './src/gecmis.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
 import { createTunnel, installCloudflared } from './src/tunnel.js';
@@ -51,6 +52,7 @@ let lastAutoRestart = 0;
 // so it may only be closed once the last of them has finished.
 const activeChecks = new Map();
 const rooms = createRoomManager();
+const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
 const subtitles = createSubtitleService({
   addons,
   getAddons: () => config.get().addons,
@@ -221,7 +223,7 @@ socketCtl = attachSocket(io, {
         if (!isContentId(id)) return { error: 'badContent' };
         const episodes = await addons.seriesEpisodes(id).catch(() => []);
         if (!episodes.length) return { error: 'noEpisodes' };
-        return { reply: { ok: true, episodes }, msgs: [] };
+        return { reply: { ok: true, episodes, watched: gecmis.izlenenler(id) }, msgs: [] };
       },
       // Host picks a search result: fetch its streams and switch the room to it.
       changeContent: async (room, uid, p) => {
@@ -236,7 +238,10 @@ socketCtl = attachSocket(io, {
         const streams = normalizeStreams(results);
         if (!streams.length) return { error: 'noStreams' };
         const res = room.setContent(uid, { type, contentId: id, meta, streams, hostStreamId: streams[0].streamId });
-        if (!res.error) res.after = () => refreshSubtitles(room);
+        if (!res.error) {
+          gecmis.ekle({ type, contentId: id, meta });
+          res.after = () => refreshSubtitles(room);
+        }
         return res;
       },
     },
@@ -335,7 +340,11 @@ const panelServer = http.createServer(
     log,
     onShutdown: shutdown,
     installCloudflared: () => installCloudflared({ log }),
-    onRoomCreated: refreshSubtitles,
+    onRoomCreated: (room) => {
+      gecmis.ekle({ type: room.type, contentId: room.contentId, meta: room.meta });
+      refreshSubtitles(room);
+    },
+    gecmis,
     relayStats: (roomId) => relay.stats(roomId),
   }),
 );

@@ -1308,6 +1308,8 @@ async function openEpisodePicker(series, { current = null } = {}) {
     if (current) return box.replaceChildren(el('li', { class: 'muted', text: 'Aramak için yaz.' }));
     return renderSearchResults(lastSearchResults);
   }
+  // Daha önce açılmış bölümler (host'un geçmişi): "✓ izlendi" işareti.
+  const watched = new Set(res.watched || []);
   const bySeason = new Map();
   for (const ep of res.episodes) {
     if (!bySeason.has(ep.season)) bySeason.set(ep.season, []);
@@ -1330,12 +1332,13 @@ async function openEpisodePicker(series, { current = null } = {}) {
     for (const b of seasonTabs.children) b.classList.toggle('active', Number(b.dataset.season) === currentSeason);
     list.replaceChildren(...bySeason.get(currentSeason).map((ep) => {
       const playing = current && ep.season === current.season && ep.episode === current.episode;
+      const seen = watched.has(`${ep.season}:${ep.episode}`);
       const item = el(
         'li',
         { class: playing ? 'current' : '' },
         el('div', { class: 'info' },
           el('div', { class: 'name', text: `${ep.episode}. ${ep.name}` }),
-          el('div', { class: 'year', text: [currentSeason === 0 ? 'Özel' : `Sezon ${currentSeason}`, playing ? '▶ şu an' : ''].filter(Boolean).join(' · ') })),
+          el('div', { class: 'year', text: [currentSeason === 0 ? 'Özel' : `Sezon ${currentSeason}`, playing ? '▶ şu an' : seen ? '✓ izlendi' : ''].filter(Boolean).join(' · ') })),
       );
       item.addEventListener('click', () => pickContent('series', `${series.id}:${ep.season}:${ep.episode}`, item));
       return item;
