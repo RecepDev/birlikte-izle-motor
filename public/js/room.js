@@ -1465,14 +1465,21 @@ video.addEventListener('timeupdate', renderSkipIntro);
 // Dizide son %5'e gelince (jenerik) aynı yerde "Sonraki bölüm" düğmesi; ✕ ile o bölüm için
 // kapanıyor. Bölümü yalnızca host değiştirebildiği için host'a çıkıyor.
 let nextEpDismissed = null;
+// Yüzdeler Ayarlar'dan (host'un kendi cihazında saklanıyor). Otomatik geçiş 0 = kapalı.
+const pctSetting = (key, def, min, max) => {
+  const n = Number(storage.get(key));
+  return Number.isFinite(n) && storage.get(key) !== null && n >= min && n <= max ? n : def;
+};
+let nextEpPct = pctSetting('sonrakiDugmePct', 5, 1, 30);
+let autoNextPct = pctSetting('otomatikGecisPct', 1, 0, 30);
 function renderNextEp() {
   const d = video.duration;
   const id = state.room?.contentId;
   const show = isHost() && state.room?.type === 'series' && Number.isFinite(d) && d > 120
-    && video.currentTime >= d * 0.95 && nextEpDismissed !== id;
+    && video.currentTime >= d * (1 - Math.max(nextEpPct, autoNextPct) / 100) && nextEpDismissed !== id;
   $('#next-ep').hidden = !show;
   // Son %1'de kendiliğinden geçiyor (bölüm başına bir kez). ✕ ile kapatıldıysa geçmiyor.
-  if (show && video.currentTime >= d * 0.99 && autoNextFor !== id) {
+  if (show && autoNextPct > 0 && video.currentTime >= d * (1 - autoNextPct / 100) && autoNextFor !== id) {
     autoNextFor = id;
     $('#next-ep').hidden = true;
     stepEpisode(1);
@@ -1483,6 +1490,19 @@ video.addEventListener('timeupdate', renderNextEp);
 $('#next-ep-go').addEventListener('click', () => {
   $('#next-ep').hidden = true;
   stepEpisode(1);
+});
+$('#set-next-pct').value = String(nextEpPct);
+$('#set-auto-pct').value = String(autoNextPct);
+$('#set-next-pct').addEventListener('change', (e) => {
+  nextEpPct = Math.max(1, Math.min(30, Math.round(Number(e.target.value)) || 5));
+  e.target.value = String(nextEpPct);
+  storage.set('sonrakiDugmePct', String(nextEpPct));
+});
+$('#set-auto-pct').addEventListener('change', (e) => {
+  const n = Math.round(Number(e.target.value));
+  autoNextPct = Number.isFinite(n) ? Math.max(0, Math.min(30, n)) : 1;
+  e.target.value = String(autoNextPct);
+  storage.set('otomatikGecisPct', String(autoNextPct));
 });
 $('#next-ep-close').addEventListener('click', () => {
   nextEpDismissed = state.room?.contentId ?? null;
@@ -2339,7 +2359,7 @@ $('#open-settings').addEventListener('click', () => {
 });
 dialog.addEventListener('change', async (e) => {
   // Bu cihazın ayarları (kalite, donanım) kendi dinleyicilerinde; burası yalnızca oda ayarları.
-  if (!isHost() || !e.target.closest('#room-settings')) return;
+  if (!isHost() || !e.target.closest('#room-settings') || e.target.closest('.local-setting')) return;
   const res = await request('settings', {
     locked: $('#set-locked').checked,
     waitMode: dialog.querySelector('input[name="waitMode"]:checked')?.value,

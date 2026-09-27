@@ -251,6 +251,11 @@
         <label class="check"><input type="checkbox" id="set-seek-preview"> <span>Çubukta önizleme resmi göster</span> <span class="info-i" tabindex="0" title="Çubuğun üstünde gezinince o anın küçük resmi çıkar. Torrentte o dakikanın parçası da indirilir; internet yavaşsa kapat.">ⓘ</span></label>
       </fieldset>
       <div id="room-settings" class="settings-room" hidden>
+      <fieldset class="local-setting">
+        <legend>Sonraki bölüm (dizide)</legend>
+        <label class="field inline"><span>"Sonraki bölüm" düğmesi son % kaçta çıksın</span> <input type="number" id="set-next-pct" min="1" max="30"></label>
+        <label class="field inline"><span>Otomatik geçiş son % kaçta (0 = kapalı)</span> <input type="number" id="set-auto-pct" min="0" max="30"></label>
+      </fieldset>
       <fieldset id="intro-settings" hidden>
         <legend>Girişi atla (bu dizi)</legend>
         <p id="intro-settings-state" class="small"></p>
