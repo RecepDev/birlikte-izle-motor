@@ -161,7 +161,7 @@ export function evaluate({ device, streams, current = null, isHost = false, rela
 // If nothing is well seeded, the few best-seeded are tried instead. Streams whose addon gives no
 // seed count are left to the manual "test all" button.
 export const AUTO_SCAN_MIN_SEEDERS = 100;
-export const AUTO_SCAN_MAX = 3;
+export const AUTO_SCAN_MAX = 10;
 export const AUTO_SCAN_FALLBACK = 5;
 
 export function autoScanTargets(streams) {
