@@ -1471,7 +1471,14 @@ function renderNextEp() {
   const show = isHost() && state.room?.type === 'series' && Number.isFinite(d) && d > 120
     && video.currentTime >= d * 0.95 && nextEpDismissed !== id;
   $('#next-ep').hidden = !show;
+  // Son %1'de kendiliğinden geçiyor (bölüm başına bir kez). ✕ ile kapatıldıysa geçmiyor.
+  if (show && video.currentTime >= d * 0.99 && autoNextFor !== id) {
+    autoNextFor = id;
+    $('#next-ep').hidden = true;
+    stepEpisode(1);
+  }
 }
+let autoNextFor = null;
 video.addEventListener('timeupdate', renderNextEp);
 $('#next-ep-go').addEventListener('click', () => {
   $('#next-ep').hidden = true;
