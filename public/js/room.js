@@ -1277,7 +1277,23 @@ let seekPreviewOn = storage.get('seekPreview') !== '0';
 const previewVideo = el('video', { class: 'seek-onizleme', muted: true, playsinline: true, preload: 'metadata', hidden: true });
 previewVideo.muted = true;
 const seekTipTime = el('span');
-const seekTip = el('div', { class: 'seek-tip', hidden: true }, previewVideo, seekTipTime);
+// Masaüstünde kareyi mpv çıkarıyor (tarayıcı HEVC/MKV açamıyor): resim olarak geliyor.
+const previewImg = el('img', { class: 'seek-onizleme', alt: '', hidden: true });
+const seekTip = el('div', { class: 'seek-tip', hidden: true }, previewVideo, previewImg, seekTipTime);
+let imgWant = null;
+let imgTimer = null;
+function previewImage(src, t) {
+  imgWant = t;
+  clearTimeout(imgTimer);
+  imgTimer = setTimeout(async () => {
+    const data = await window.masaustuOnizleme(src, t).catch(() => null);
+    if (imgWant !== t || seekTip.hidden) return;
+    if (data) {
+      previewImg.src = data;
+      previewImg.hidden = false;
+    }
+  }, 150);
+}
 seek.parentElement.append(seekTip);
 let previewFor = null;
 let previewFailed = null;
@@ -1309,10 +1325,11 @@ function showSeekTip(x, width) {
   const t = (x / width) * d;
   seekTipTime.textContent = formatTime(t);
   // Kutu çubuğun kenarından taşmasın.
-  const half = (previewVideo.hidden ? 30 : 90);
+  const half = previewVideo.hidden && previewImg.hidden ? 30 : 90;
   seekTip.style.left = `${Math.max(half, Math.min(width - half, x))}px`;
   seekTip.hidden = false;
   const src = previewSource();
+  if (src && window.masaustuOnizleme) return previewImage(src, t);
   if (!src || src === previewFailed) {
     previewVideo.hidden = true;
     return;
@@ -1328,6 +1345,7 @@ function showSeekTip(x, width) {
 function hideSeekTip() {
   seekTip.hidden = true;
   previewWant = null;
+  imgWant = null;
 }
 seek.addEventListener('pointermove', (e) => {
   const r = seek.getBoundingClientRect();
@@ -1341,6 +1359,7 @@ seek.addEventListener('input', () => {
 seek.addEventListener('change', hideSeekTip);
 // Kaynak değişince önizleme eski dosyayı tutmasın.
 function resetPreview() {
+  previewImg.hidden = true;
   previewFor = null;
   previewVideo.removeAttribute('src');
   previewVideo.load();
@@ -1438,7 +1457,7 @@ function toggleFullscreen() {
   if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); // iOS
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
-for (const [id, name] of [['btn-next', 'next'], ['btn-compat', 'compat'], ['btn-info', 'info'], ['btn-audio', 'audio'],
+for (const [id, name] of [['btn-prev', 'prev'], ['btn-next', 'next'], ['btn-compat', 'compat'], ['btn-info', 'info'], ['btn-audio', 'audio'],
   ['btn-subs-panel', 'subs'], ['btn-chat', 'chat'], ['btn-episodes', 'episodes'], ['btn-fs', 'fs'], ['btn-more', 'more']]) setIcon($(`#${id}`), name);
 document.addEventListener('fullscreenchange', () => setIcon($('#btn-fs'), document.fullscreenElement ? 'fsExit' : 'fs'));
 
@@ -1569,21 +1588,24 @@ async function changeEpisode(id, ep) {
   const res = await request('changeContent', { type: 'series', id: `${id}:${ep.season}:${ep.episode}` });
   if (res?.error) toast(errorText(res.error));
 }
-// Oynat düğmesinin yanındaki ⏭: dizinin sıradaki bölümü (sezon geçişi dahil, özel bölümler hariç).
-$('#btn-next').addEventListener('click', async () => {
+// Oynat düğmesinin yanındaki ⏮ ⏭: dizinin önceki/sonraki bölümü (sezon geçişi dahil, özel bölümler hariç).
+async function stepEpisode(d) {
   const series = currentSeries();
   const data = series && (await loadEpisodes());
   if (!data) return toast('Bölüm listesi alınamadı.');
   const eps = data.episodes.filter((e) => e.season !== 0).sort((a, b) => a.season - b.season || a.episode - b.episode);
   const i = eps.findIndex((e) => e.season === series.season && e.episode === series.episode);
-  const next = i >= 0 ? eps[i + 1] : null;
-  if (!next) return toast('Sonraki bölüm yok.');
-  changeEpisode(series.id, next);
-});
+  const target = i >= 0 ? eps[i + d] : null;
+  if (!target) return toast(d > 0 ? 'Sonraki bölüm yok.' : 'Önceki bölüm yok.');
+  changeEpisode(series.id, target);
+}
+$('#btn-next').addEventListener('click', () => stepEpisode(1));
+$('#btn-prev').addEventListener('click', () => stepEpisode(-1));
 function renderCtlButtons() {
   const series = currentSeries();
   $('#btn-episodes').hidden = !series;
   $('#btn-next').hidden = !series || !isHost();
+  $('#btn-prev').hidden = !series || !isHost();
   $('#btn-audio').hidden = audioTracksList().length < 2;
 }
 setInterval(renderCtlButtons, 1000);

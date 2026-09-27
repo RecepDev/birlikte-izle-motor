@@ -4,6 +4,7 @@ const P = {
   play: '<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
   pause: '<path d="M7 4.5h3.2v15H7zM13.8 4.5H17v15h-3.2z" fill="currentColor" stroke="none"/>',
   next: '<path d="M6 5l10 7-10 7z"/><path d="M18 5v14"/>',
+  prev: '<path d="M18 5L8 12l10 7z"/><path d="M6 5v14"/>',
   mute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
   vol0: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/>',
   vol1: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/>',

@@ -76,9 +76,67 @@ const sonOzellikler = {};
 function oranUygula() {
   if (!mpv) return;
   const sabit = { '16:9': '16:9', '4:3': '4:3', '21:9': '21:9' }[sonOran];
-  mpv.set('keepaspect', sonOran !== 'stretch').catch(() => {});
-  mpv.set('panscan', sonOran === 'fill' ? 1 : 0).catch(() => {});
-  mpv.set('video-aspect-override', sabit || '-1').catch(() => {});
+  // Yalnızca değişeni yazıyoruz: her yazım videoyu yeniden ölçeklendiriyor, üçü birden
+  // yazılınca 16:9'a geçerken görüntü iki kez büyüyüp küçülüyordu.
+  const yeni = { 'video-aspect-override': sabit || '-1', panscan: sonOran === 'fill' ? 1 : 0, keepaspect: sonOran !== 'stretch' };
+  for (const [ad, deger] of Object.entries(yeni)) {
+    if (oranDegerleri[ad] === deger) continue;
+    oranDegerleri[ad] = deger;
+    mpv.set(ad, deger).catch(() => {});
+  }
+}
+// mpv yeniden açılınca sıfırlanıyor (bkz. mpvBaslat).
+let oranDegerleri = { 'video-aspect-override': '-1', panscan: 0, keepaspect: true };
+
+// Çubuk önizlemesi: tarayıcının <video>'su HEVC/MKV açamadığı için kareyi ayrı, görünmez
+// bir mpv çıkarıyor (--vo=image, tek kare, en yakın anahtar kareye atlayarak). Aynı anda
+// tek süreç; beklerken gelen isteklerden yalnızca sonuncusu işleniyor.
+const onizlemeOnbellek = new Map();
+let onizlemeSuruyor = false;
+let onizlemeSiradaki = null;
+function onizlemeCikar(url, saniye) {
+  return new Promise((resolve) => {
+    const klasor = fs.mkdtempSync(path.join(os.tmpdir(), 'bi-onizleme-'));
+    const cocuk = require('node:child_process').spawn(MPV, [
+      url, '--no-config', '--really-quiet', '--no-audio', '--sid=no', '--hr-seek=no', `--start=${Math.floor(saniye)}`,
+      '--frames=1', '--vo=image', '--vo-image-format=jpg', '--vo-image-jpeg-quality=70', `--vo-image-outdir=${klasor}`,
+      '--vf=scale=320:-2', '--hwdec=no', '--ytdl=no',
+    ], { windowsHide: true, stdio: 'ignore' });
+    const bitir = () => {
+      clearTimeout(zaman);
+      let sonuc = null;
+      try {
+        const dosya = fs.readdirSync(klasor).find((f) => f.endsWith('.jpg'));
+        if (dosya) sonuc = `data:image/jpeg;base64,${fs.readFileSync(path.join(klasor, dosya)).toString('base64')}`;
+      } catch { /* kare çıkmadı */ }
+      fs.rm(klasor, { recursive: true, force: true }, () => {});
+      resolve(sonuc);
+    };
+    const zaman = setTimeout(() => cocuk.kill(), 10_000);
+    cocuk.on('exit', bitir);
+    cocuk.on('error', bitir);
+  });
+}
+async function onizleme(url, saniye) {
+  if (!/^https?:\/\//.test(url)) return null;
+  const anahtar = `${url}|${Math.round(saniye / 10)}`;
+  if (onizlemeOnbellek.has(anahtar)) return onizlemeOnbellek.get(anahtar);
+  if (onizlemeSuruyor) {
+    // Öncekini bekleyen istek varsa boşa çıkıyor: yalnızca en son istenen kare önemli.
+    onizlemeSiradaki?.resolve(null);
+    return new Promise((resolve) => { onizlemeSiradaki = { url, saniye, resolve }; });
+  }
+  onizlemeSuruyor = true;
+  const sonuc = await onizlemeCikar(url, saniye);
+  if (sonuc) {
+    onizlemeOnbellek.set(anahtar, sonuc);
+    if (onizlemeOnbellek.size > 300) onizlemeOnbellek.delete(onizlemeOnbellek.keys().next().value);
+  }
+  onizlemeSuruyor = false;
+  const sira = onizlemeSiradaki;
+  onizlemeSiradaki = null;
+  if (sira) onizleme(sira.url, sira.saniye).then(sira.resolve);
+  return sonuc;
 }
 
 // Dosyanın içindeki altyazılar (dışarıdan eklediğimiz .vtt'ler hariç).
@@ -165,7 +223,8 @@ function altyaziStilUygula() {
   };
   for (const [ad, deger] of Object.entries(ayar)) mpv.set(ad, deger).catch((e) => console.error('altyazi-stil', ad, e.message));
   // Konum %2.5 adımlarla gidiyor; eski mpv sub-pos'u yalnızca tam sayı kabul ediyor.
-  const konum = Number(s.line) || 100;
+  // mpv en fazla 150 kabul ediyor; sayfa 200'e kadar gidebiliyor.
+  const konum = Math.min(150, Number(s.line) || 100);
   mpv.set('sub-pos', konum).catch(() => mpv.set('sub-pos', Math.round(konum)).catch((e) => console.error('altyazi-stil sub-pos', e.message)));
 }
 
@@ -272,6 +331,7 @@ async function durumDongusu() {
 
 async function mpvBaslat() {
   const { createMpv } = await import('../mpv.js');
+  oranDegerleri = { 'video-aspect-override': '-1', panscan: 0, keepaspect: true };
   mpv = createMpv({
     binary: MPV,
     pipeName: `birlikte-izle-kabuk-${process.pid}`,
@@ -639,6 +699,7 @@ app.whenReady().then(() => {
       return false;
     }
   });
+  ipcMain.handle('kabuk:onizleme', (_e, url, saniye) => onizleme(String(url), Number(saniye) || 0));
   ipcMain.on('kabuk:indir', (_e, url) => {
     if (/^https?:\/\//.test(url)) ana?.webContents.downloadURL(url);
   });

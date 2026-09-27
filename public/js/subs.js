@@ -155,7 +155,7 @@ export function createSubs({
   }
 
   function moveLine(delta) {
-    line = delta === null ? null : Math.round(Math.min(150, Math.max(0, (line ?? DEFAULT_LINE) + delta)) * 10) / 10;
+    line = delta === null ? null : Math.round(Math.min(200, Math.max(0, (line ?? DEFAULT_LINE) + delta)) * 10) / 10;
     storage.set('cueLine', line === null ? '' : String(line));
     applyLine();
     render();

@@ -202,6 +202,8 @@ window.masaustuHarici = {
   vlc: (url, ad, saniye) => ipcRenderer.invoke('kabuk:vlc', String(url), String(ad || ''), Number(saniye) || 0),
   indir: (url) => ipcRenderer.send('kabuk:indir', String(url)),
 };
+// Çubuk önizlemesi: o saniyenin küçük resmi (data: adresi) ya da null.
+window.masaustuOnizleme = (url, saniye) => ipcRenderer.invoke('kabuk:onizleme', String(url), Number(saniye) || 0);
 
 // Host odayı kapattı: açılış ekranına dön (oynatma durur).
 window.masaustuOdaKapandi = () => ipcRenderer.send('kabuk:baslangic');

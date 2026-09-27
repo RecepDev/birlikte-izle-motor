@@ -426,6 +426,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .ctl .ic { display: block; pointer-events: none; }
 .ctl:hover:not(:disabled) { color: #fff; }
 .settings-room { display: grid; gap: 14px; }
+.settings-room[hidden] { display: none; }
 /* Çubuğun üstünde gezinince o anın dakikası/saniyesi */
 .seek-tip {
   position: absolute; bottom: 24px; transform: translateX(-50%); pointer-events: none;
@@ -442,3 +443,6 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 }
 .skip-intro:hover { background: var(--accent); border-color: var(--accent); }
 .skip-intro[hidden] { display: none; }
+/* Sezon seçici: açılır listedeki seçenekler koyu zeminde okunsun. */
+.ep-head select { color-scheme: dark; }
+.ep-head select option { background: var(--panel); color: var(--text); }
