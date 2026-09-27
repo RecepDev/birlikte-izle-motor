@@ -2681,6 +2681,17 @@ function playAfterSwitch() {
   if (canControl() && !sync.intendsToPlay()) sync.toggle();
 }
 
+// Geri: odadan çık, önceki ekrana dön (oda açık kalır, başkaları izlemeye devam eder).
+// Uygulamada: "Oda aç"tan gelindiyse kaynak listesine, yoksa açılış ekranına.
+$('#room-back').addEventListener('click', () => {
+  if (history.length > 1 && document.referrer && new URL(document.referrer).origin !== location.origin) {
+    history.back();
+    return;
+  }
+  if (window.masaustuOdaKapandi) return window.masaustuOdaKapandi();
+  history.back();
+});
+
 const dialog = $('#settings-dialog');
 $('#open-settings').addEventListener('click', () => {
   const s = state.room.settings;

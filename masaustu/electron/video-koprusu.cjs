@@ -249,6 +249,9 @@ window.masaustuHarici = {
 window.masaustuOnizleme = (url, saniye) => ipcRenderer.invoke('kabuk:onizleme', String(url), Number(saniye) || 0);
 window.masaustuOnizlemeHazirla = (url) => ipcRenderer.send('kabuk:onizleme-hazirla', String(url));
 
+// Sayfadan çıkılınca (Geri, başka sayfa) video da dursun: yoksa mpv arkada oynamaya devam ediyordu.
+window.addEventListener('pagehide', () => ipcRenderer.send('mpv:durdur'));
+
 // Host odayı kapattı: açılış ekranına dön (oynatma durur).
 window.masaustuOdaKapandi = () => ipcRenderer.send('kabuk:baslangic');
 
