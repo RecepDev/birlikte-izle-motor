@@ -1727,16 +1727,6 @@ document.addEventListener('click', (e) => {
   toast(icon.title, 7000);
 });
 
-// HDR on an SDR screen often looks dark: point to the brightness control once per stream.
-let hdrHintFor = null;
-video.addEventListener('loadedmetadata', () => {
-  const s = myStream();
-  if (s?.hdr && pic.b === 1 && pic.s === 1 && hdrHintFor !== s.streamId) {
-    hdrHintFor = s.streamId;
-    toast(`${s.hdr} video: görüntü karanlıksa Kalite sekmesinden parlaklığı artırabilirsin.`, 8000);
-  }
-});
-
 // ---- keep picture quality option ----
 function renderKeepQuality() {
   $('#keep-quality').checked = keepQuality;
