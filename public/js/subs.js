@@ -23,6 +23,9 @@ export function createSubs({
   // Masaüstü/telefon uygulamasında dosyanın içindeki (gömülü) altyazıyı seçen kişi.
   // Kişisel seçim: oynatıcı çiziyor, odanın altyazısı bu kişide kapanıyor.
   let embeddedChosen = null;
+  // Varsayılan: yalnızca Türkçe ve İngilizce altyazılar listelenir; kişi "Diğer dilleri de
+  // göster" derse hepsi (tercih bu cihazda saklanır). Seçili olan hangi dilde olursa olsun görünür.
+  let showAllLangs = storage.get('tumAltyaziDilleri') === '1';
   // Kişisel ses gecikmesi (masaüstü): bluetooth kulaklıkta ses görüntünün gerisinde kalırsa.
   let audioDelay = Number(storage.get('sesGecikme')) || 0;
   function nudgeAudioDelay(delta) {
@@ -291,19 +294,29 @@ export function createSubs({
     // can't show those tracks, so they're listed as info, not as choices.
     // Uygulama dosyanın gerçek altyazı listesini veriyorsa onu gösteriyoruz; dosya
     // adından tahmin edilen "gömülü" bilgi satırlarına gerek kalmıyor.
-    const realEmbedded = embeddedTracks();
-    const embeddedLangs = new Set(realEmbedded.length ? [] : embeddedLangsOf());
+    const allEmbedded = embeddedTracks();
+    const realEmbedded = showAllLangs ? allEmbedded : allEmbedded.filter((t) => embeddedRank(t) <= 1 || eff.subId === embeddedKey(t));
+    const embeddedLangs = new Set(allEmbedded.length ? [] : embeddedLangsOf());
     for (const lang of embeddedLangs) if (!groups.has(lang)) groups.set(lang, []);
     const embeddedRow = (lang) => el('li', { class: 'embedded' },
       el('span', { text: `💬 ${lang} · dosyanın içinde` }),
       el('span', { class: 'tag-embedded', text: 'gömülü' }),
       el('span', { class: 'info-i', tabindex: '0', title: 'Bu altyazı video dosyasının içinde. Tarayıcı gömülü altyazıyı gösteremez; bu dilde aşağıdan bir altyazı seç.' }, 'i'));
 
+    // Türkçe/İngilizce dışındaki gruplar: yalnızca "hepsini göster" açıksa ya da seçili altyazı
+    // o gruptaysa görünür.
+    const sortedGroups = [...groups].map((g, i) => ({ g, i }))
+      .sort((a, b) => groupRank(a.g[0]) - groupRank(b.g[0]) || a.i - b.i)
+      .map(({ g }) => g);
+    const visibleGroups = sortedGroups.filter(([name, subs]) => showAllLangs || groupRank(name) <= 2
+      || subs.some((x) => x.subId === eff.subId));
+    const hiddenCount = sortedGroups.filter((g) => !visibleGroups.includes(g)).reduce((n, [, subs]) => n + Math.max(1, subs.length), 0)
+      + allEmbedded.length - realEmbedded.length;
     const fileInput = el('input', { type: 'file', accept: '.srt,.vtt,text/vtt', hidden: true, onchange: (e) => upload(e.target.files[0]) });
     // replaceChildren would print null/false as text, so drop them first.
     const put = (...nodes) => panel.replaceChildren(...nodes.filter((n) => n !== null && n !== undefined && n !== false));
-    const embedded = realEmbedded.length ? null : embeddedInfo();
-    const embeddedGroup = realEmbedded.length
+    const embedded = allEmbedded.length ? null : embeddedInfo();
+    const embeddedGroup = allEmbedded.length
       ? [
         el('h3', {}, '📦 Dosyanın içindeki altyazılar'),
         el('ul', {}, ...realEmbedded.map((t, i) => el('li', {},
@@ -393,10 +406,14 @@ export function createSubs({
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),
         el('button', { type: 'button', text: '↻ Listeyi yenile', title: "Altyazıları addon'lardan yeniden çek", onclick: refreshList })),
+      // Açıkken de görünsün ki geri kapatılabilsin.
+      hiddenCount || showAllLangs
+        ? el('label', { class: 'row muted small' },
+          el('input', { type: 'checkbox', checked: showAllLangs || null, onchange: (e) => { showAllLangs = e.target.checked; storage.set('tumAltyaziDilleri', showAllLangs ? '1' : '0'); render(); } }),
+          hiddenCount ? ` Diğer dilleri de göster (${hiddenCount})` : ' Diğer dilleri de göster')
+        : null,
       // Dil grupları her platformda aynı sırada: kendi dosyaların, Türkçe, İngilizce, diğerleri.
-      ...[...groups].map((g, i) => ({ g, i }))
-        .sort((a, b) => groupRank(a.g[0]) - groupRank(b.g[0]) || a.i - b.i)
-        .map(({ g }) => g)
+      ...visibleGroups
         .flatMap(([name, subs]) => {
         const emb = embeddedLangs.has(name);
         return [

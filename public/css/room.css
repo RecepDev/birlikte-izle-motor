@@ -359,19 +359,19 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .chip.unknown { color: var(--muted); }
 .compat-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
-/* Tam ekranda Altyazı/Dil paneli: oynatıcının sağında sabit, dar bir sütun; kendi içinde
-   kayar. Oynatıcı sağdan o kadar boşluk bırakıyor, video kalan alana sığıyor (masaüstünde
-   mpv de yerini buna göre ayarlıyor). */
-.player.subs-panel-open { --subs-panel-w: min(300px, 32vw); padding-right: var(--subs-panel-w) !important; }
+/* Tam ekranda Altyazı/Dil kutusu: Stremio'daki gibi sağ altta, kontrollerin üstünde, kendi
+   içinde kayan bir kutu. Telefonda ve tarayıcıda videonun üstünde yüzüyor. */
+.player.subs-panel-open { --subs-panel-w: min(640px, 55vw); --subs-panel-h: min(380px, 52vh); }
 .player.subs-panel-open > .tab-body[data-tab="subs"] {
-  position: absolute; top: 0; right: 0; bottom: 0; width: var(--subs-panel-w);
+  position: absolute; right: 16px; bottom: 64px; width: var(--subs-panel-w); max-height: var(--subs-panel-h);
   overflow-y: auto; overscroll-behavior: contain;
-  background: var(--panel); border-left: 1px solid var(--line);
-  padding: 8px; z-index: 30; font-size: 13px;
+  background: rgba(20, 22, 29, .96); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .55);
+  padding: 12px 14px; z-index: 30; font-size: 13px;
 }
 .player.subs-panel-open > .tab-body[data-tab="subs"] .row { gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
-.player.subs-panel-open > .tab-body[data-tab="subs"] button { padding: 3px 7px; font-size: 12px; }
+.player.subs-panel-open > .tab-body[data-tab="subs"] button { padding: 3px 8px; font-size: 12px; }
 .player.subs-panel-open > .tab-body[data-tab="subs"] ul { margin: 0 0 6px; }
-.player.subs-panel-open > .tab-body[data-tab="subs"] li button { padding: 5px 8px; }
+.player.subs-panel-open > .tab-body[data-tab="subs"] li button { padding: 6px 10px; }
 .player.subs-panel-open > .tab-body[data-tab="subs"] h3 { margin: 8px 0 4px; font-size: 12px; }
 .player.subs-panel-open > .tab-body[data-tab="subs"] select { font-size: 12px; }

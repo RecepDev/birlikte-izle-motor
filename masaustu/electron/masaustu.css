@@ -98,3 +98,7 @@ html, body { overflow: hidden !important; }
   animation: mpv-don 0.9s linear infinite;
 }
 @keyframes mpv-don { to { transform: rotate(360deg); } }
+
+/* Tam ekran Altyazı/Dil kutusu: HTML mpv'nin üstüne çıkamadığı için video kutunun
+   solunda kalan alana sığıyor; kutu sağ altta, Stremio'daki boyutta. */
+.player.subs-panel-open { padding-right: calc(var(--subs-panel-w) + 24px) !important; }
