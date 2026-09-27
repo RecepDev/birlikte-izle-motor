@@ -356,6 +356,7 @@ function sonSunucuyuKaydet(adres) {
   } catch { /* file:// ya da geçersiz adres */ }
 }
 ipcMain.on('kabuk:son-sunucu', (e) => { e.returnValue = ayarOku().sonSunucu || null; });
+ipcMain.on('kabuk:surum', (e) => { e.returnValue = kabuk.surum; });
 
 // birlikteizle://<oda adresi> bağlantısı uygulamayı açsın. Tarayıcıdaki "Masaüstü
 // uygulamasında aç" düğmesi bu şemayı kullanıyor.

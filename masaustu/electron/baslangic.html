@@ -37,8 +37,10 @@
     <button type="submit">Odaya gir</button>
     <button id="panel" type="button" class="ikincil" hidden>Film ara ve oda aç</button>
     <p id="panel-ipucu" class="ipucu" hidden>Sunucu bu bilgisayarda çalışıyor: Stremio'ya girmeden ara, seç, oda aç.</p>
+    <p id="surum" class="ipucu" style="text-align:center"></p>
   </form>
 <script>
+  document.getElementById('surum').textContent = `Sürüm ${window.kabuk.surum?.() || '?'}`;
   document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = document.getElementById('link').value.trim();

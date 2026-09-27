@@ -6,6 +6,7 @@ const { ipcRenderer } = require('electron');
 window.kabuk = {
   odayaGit: (url) => ipcRenderer.send('kabuk:odaya-git', url),
   sonSunucu: () => ipcRenderer.sendSync('kabuk:son-sunucu'),
+  surum: () => ipcRenderer.sendSync('kabuk:surum'),
 };
 
 // Masaüstüne özel düzen: kontroller/bildirimler videonun dışına alınır (mpv üstlerini örter).

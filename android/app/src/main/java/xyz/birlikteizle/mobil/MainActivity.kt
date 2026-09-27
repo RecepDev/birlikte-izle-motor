@@ -210,6 +210,14 @@ class MainActivity : AppCompatActivity() {
         kart.addView(gir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply {
             topMargin = dp(16)
         })
+        // Hangi sürümün kurulu olduğu görünsün (güncelleme geldi mi diye bakmak için).
+        kart.addView(TextView(this).apply {
+            text = "Sürüm ${packageManager.getPackageInfo(packageName, 0).versionName}"
+            textSize = 12f
+            setTextColor(soluk)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(12), 0, 0)
+        })
 
         val kok = LinearLayout(this).apply {
             gravity = Gravity.CENTER
