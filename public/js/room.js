@@ -736,6 +736,14 @@ $('#restart-stremio').addEventListener('click', async () => {
   setTimeout(() => { btn.disabled = false; }, 15_000);
 });
 
+$('#boost-peers').addEventListener('click', async () => {
+  const btn = $('#boost-peers');
+  btn.disabled = true;
+  const res = await request('boostPeers');
+  if (res?.error) toast(errorText(res.error));
+  setTimeout(() => { btn.disabled = false; }, 30_000);
+});
+
 $('#quality-filter-btn').addEventListener('click', () => {
   $('#quality-filter-panel').hidden = !$('#quality-filter-panel').hidden;
 });
@@ -879,6 +887,7 @@ function renderQualityTab() {
   renderQualityAddonTabs();
   $('#quality-refresh-addons').hidden = !isHost();
   $('#restart-stremio').hidden = !isHost();
+  $('#boost-peers').hidden = !isHost() || myStream()?.kind !== 'torrent';
   const addonStreams = qualityAddonFilter === 'all'
     ? state.room.streams
     : state.room.streams.filter((s) => s.addonName === qualityAddonFilter);

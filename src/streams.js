@@ -92,6 +92,12 @@ function cleanSubtitles(list) {
     .map((s) => ({ id: String(s.id ?? s.url), url: s.url, lang: String(s.lang || 'und') }));
 }
 
+// Ek tracker'lar (bkz. torrent-hiz.js): her torrent'in kaynak listesine ekleniyor.
+let extraSources = [];
+export function setExtraSources(list) {
+  extraSources = Array.isArray(list) ? list : [];
+}
+
 function normalizeOne(raw, addonName) {
   if (!raw || typeof raw !== 'object') return null;
   const base = {
@@ -119,9 +125,9 @@ function normalizeOne(raw, addonName) {
       ...base,
       infoHash: raw.infoHash.toLowerCase(),
       fileIdx: Number.isInteger(raw.fileIdx) ? raw.fileIdx : null,
-      sources: (raw.sources || []).filter(
+      sources: [...new Set([...(raw.sources || []).filter(
         (s) => typeof s === 'string' && (s.startsWith('tracker:') || s.startsWith('dht:')),
-      ),
+      ), ...extraSources])],
       url: null,
       notWebReady,
       subtitles,

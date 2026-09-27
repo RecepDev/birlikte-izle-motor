@@ -23,6 +23,8 @@ import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
 import { createGiris } from './src/giris.js';
+import { createTorrentHiz } from './src/torrent-hiz.js';
+import { setExtraSources } from './src/streams.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
 import { createTunnel, installCloudflared, readFixedTunnel } from './src/tunnel.js';
@@ -60,6 +62,11 @@ const rooms = createRoomManager();
 const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
 const kesif = createKesif({ file: path.join(DATA, 'kesif.json'), log });
 const giris = createGiris({ file: path.join(DATA, 'giris.json'), log });
+const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), log });
+// Ek tracker'lar yeni açılan torrent'lere ekleniyor; Stremio'nun peer arama sınırı yükseltiliyor.
+setInterval(() => setExtraSources(torrentHiz.kaynaklar()), 60_000).unref();
+setExtraSources(torrentHiz.kaynaklar());
+setTimeout(() => torrentHiz.stremioAyarla(), 15_000).unref();
 const subtitles = createSubtitleService({
   addons,
   getAddons: () => config.get().addons,
@@ -150,6 +157,25 @@ socketCtl = attachSocket(io, {
         room.subsRefreshedAt = Date.now();
         refreshSubtitles(room);
         return { msgs: [] };
+      },
+      // Host: "Daha çok kaynak bul" - Stremio'nun sınırlarını yükselt, Stremio'yu yeniden
+      // başlat, torrent'i ek tracker'larla aç; izleyenler kaldıkları yerden devam eder.
+      boostPeers: (room, uid) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        setExtraSources(torrentHiz.kaynaklar());
+        (async () => {
+          await torrentHiz.stremioAyarla();
+          const res = await stremioRestarter.restart('kaynak');
+          if (res.ok) {
+            const stream = room.streams.find((s) => s.streamId === room.hostStreamId);
+            await torrentHiz.torrentAc(stream);
+          }
+          dispatch(room, [
+            room.systemChat(res.ok ? 'Stremio daha çok kaynakla yeniden açıldı, video devam ediyor.' : 'Stremio yeniden başlatılamadı; elle kapatıp açmayı dene.'),
+            ...(res.ok ? [{ to: 'room', event: 'stremioRestarted', data: {}, urgent: true }] : []),
+          ]);
+        })();
+        return { msgs: [room.systemChat('Daha çok kaynak aranıyor: Stremio yeniden başlatılıyor…')] };
       },
       // Host'un elle "Stremio'yu yeniden başlat" düğmesi.
       restartStremio: (room, uid) => {

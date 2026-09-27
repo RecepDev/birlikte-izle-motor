@@ -1,8 +1,7 @@
 // Stremio'nun yayın sunucusunu (stremio-runtime.exe server.js, port 11470) yeniden başlatır.
 //
 // Stremio bazen takılıp hiçbir torrent için hız vermiyor; Stremio'yu kapatıp açmak
-// düzeltiyor. Bütün uygulamayı değil, yalnızca yayın sunucusunu yeniden başlatıyoruz:
-// Stremio penceresi açık kalıyor, sunucu birkaç saniyede geri geliyor.
+// düzeltiyor. Uygulamanın tamamı kapatılıp yeniden açılıyor (bkz. restart).
 
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -60,25 +59,33 @@ export function createStremioRestarter({ stremioLocal, log, platform = process.p
     return false;
   }
 
+  // Stremio'nun tamamını kapatıp açar. Yalnızca yayın sunucusunu (stremio-runtime) öldürmek
+  // Stremio 5'te "streaming server exited" hata penceresi açtırıyordu ve sunucu geri
+  // gelmiyordu; uygulamayı baştan açmak hem temiz hem Stremio'nun kendi ayarlarıyla başlıyor.
   async function restart(reason = 'elle') {
     if (platform !== 'win32') return { error: 'unsupported' };
     // Aynı anda iki yeniden başlatma olmasın: ikinci çağrı ilkini bekler.
     if (busy) return busy;
     busy = (async () => {
+      const exe = stremioYolu();
       const procs = await runtimeProcesses().catch(() => []);
       const proc = procs.find((p) => serverScript(p.CommandLine)) || procs[0];
-      if (!proc) return { error: 'notRunning' };
-      const exe = proc.ExecutablePath;
-      const script = serverScript(proc.CommandLine);
-      log.warn('Stremio yayın sunucusu yeniden başlatılıyor', { reason, pid: proc.ProcessId });
-      await run('taskkill', ['/PID', String(proc.ProcessId), '/F'], { windowsHide: true }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 600));
-      // Stremio penceresi sunucuyu kendisi geri açabiliyor; açmadıysa biz açıyoruz.
-      if (!(await stremioLocal.isUp().catch(() => false)) && exe && script) {
-        const child = spawn(exe, [script], { detached: true, stdio: 'ignore', windowsHide: true });
-        child.unref();
+      log.warn('Stremio yeniden başlatılıyor', { reason, exe });
+      for (const ad of ['stremio-shell-ng.exe', 'stremio.exe', 'stremio-runtime.exe']) {
+        await run('taskkill', ['/IM', ad, '/T', '/F'], { windowsHide: true }).catch(() => {});
       }
-      const up = await waitUntilUp();
+      await new Promise((r) => setTimeout(r, 800));
+      if (exe) {
+        // Simge durumunda açılsın: izlerken Stremio penceresi öne fırlamasın.
+        spawn('powershell', ['-NoProfile', '-Command', `Start-Process -FilePath '${exe.replace(/'/g, "''")}' -WindowStyle Minimized`],
+          { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      } else if (proc?.ExecutablePath && serverScript(proc.CommandLine)) {
+        // Uygulama bulunamadıysa en azından yayın sunucusunu aç.
+        spawn(proc.ExecutablePath, [serverScript(proc.CommandLine)], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      } else {
+        return { error: 'notRunning' };
+      }
+      const up = await waitUntilUp(30_000);
       log.info('Stremio yayın sunucusu', { up });
       return up ? { ok: true } : { error: 'notUp' };
     })().finally(() => {
