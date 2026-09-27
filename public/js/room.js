@@ -225,9 +225,17 @@ async function compatSource(stream) {
   return window.Hls?.isSupported() ? { url, source, hls: true } : null;
 }
 
+// Misafirin kendi Stremio'su yoksa relay'e kendiliğinden geçmiyoruz: önce "Stremio açık
+// değil" uyarısı çıkıyor (Stremio'ya bağlan / Host üzerinden izle). Relay host'un
+// internetini kullandığı için kişinin onayıyla. "Hep host üzerinden" seçilirse bir daha sormuyor.
+function relayApproved() {
+  return state.relayApproved || storage.get('hepRelay') === '1';
+}
+
 async function resolveFallback(stream, opts) {
   if (opts.compat) return compatSource(stream);
   if (stream.kind !== 'torrent' || isHost()) return null;
+  if (!relayApproved()) return null;
   const key = await ensureRelay();
   if (!key || !(await relayAlive(key))) return null;
   return { url: `/relay/${roomId}/${key}${torrentPath(stream)}`, source: 'relay' };
@@ -578,7 +586,7 @@ function renderRelayBadge() {
 
 // Stremio'yu aç, açılınca oynatıcıyı yeniden kur: kaynak seçimi kendi Stremio'yu relay'e tercih ediyor.
 let stremioWatch = null;
-$('#connect-stremio').addEventListener('click', () => {
+function connectStremio() {
   launchStremio();
   clearInterval(stremioWatch);
   const started = Date.now();
@@ -589,7 +597,10 @@ $('#connect-stremio').addEventListener('click', () => {
     toast("Stremio'ya bağlanıldı, video artık kendi Stremio'ndan geliyor.", 5000);
     player.reload();
   }, 2000);
-});
+}
+$('#connect-stremio').addEventListener('click', connectStremio);
+// Relay rozetine basınca da Stremio'ya bağlanmayı dene.
+$('#relay-badge').addEventListener('click', connectStremio);
 
 function renderHeader() {
   const { meta } = state.room;
@@ -983,16 +994,26 @@ function renderNotice() {
       }));
     }
   } else if (st.state === 'noStremio') {
-    text = isTouch
-      ? 'Bu cihazda Stremio bulunamadı.\nTelefonda videoyu host üzerinden izleyebilirsin.'
-      : 'Stremio açık değil.\nBilgisayarında Stremio uygulamasını aç, sayfa kendiliğinden bağlanır.\nTarayıcı "yerel ağdaki cihazlara erişim" izni sorarsa İzin ver\'e bas.';
+    const relayNote = state.room?.settings.relayEnabled && !isHost()
+      ? '\n\nStremio\'n yoksa "Host üzerinden izle" ile host\'un bilgisayarından izleyebilirsin (host\'un internetini kullanır).'
+      : '';
+    text = (isTouch
+      ? 'Bu cihazda Stremio\'ya bağlanılamadı.\nTelefonunda Stremio kuruluysa "Stremio\'ya bağlan"a bas.'
+      : 'Stremio açık değil.\nBilgisayarında Stremio varsa "Stremio\'ya bağlan"a bas, açılınca kendiliğinden bağlanır.\nTarayıcı "yerel ağdaki cihazlara erişim" izni sorarsa İzin ver\'e bas.') + relayNote;
     if (state.relayError && !isHost()) text += `\n\nHost üzerinden izleme: ${errorText(state.relayError)}`;
-    if (!isTouch) actions.push(button("🔌 Stremio'ya bağlan", launchStremio, true));
+    actions.push(button("🔌 Stremio'ya bağlan", connectStremio, true));
     if (state.room?.settings.relayEnabled && !isHost()) {
       actions.push(button('📶 Host üzerinden izle', () => {
         state.relayError = null;
+        state.relayApproved = true;
         player.reload();
       }, true));
+      actions.push(button('📶 Bu cihazda hep host üzerinden izle', () => {
+        storage.set('hepRelay', '1');
+        state.relayError = null;
+        state.relayApproved = true;
+        player.reload();
+      }));
     }
   } else if (st.state === 'error') {
     const reason = player.lastError();
