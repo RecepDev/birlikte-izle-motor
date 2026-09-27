@@ -112,6 +112,18 @@ function renderRoom(room) {
       el('div', { class: 't' },
         el('b', { text: room.meta?.name || room.contentId }),
         el('div', { class: 'muted small', text: `Oda ${room.id} · ${room.playback.paused ? 'duraklatıldı' : 'oynuyor'} · ${room.settings.waitMode === 'wait' ? 'herkes bekler' : 'beklemeden devam'}${room.relay?.totalMbps ? ` · relay ${room.relay.totalMbps} Mbps` : ''}` })),
+      // Odaya bu bilgisayardaki Birlikte İzle uygulamasıyla (host olarak) gir.
+      el('button', {
+        type: 'button',
+        text: '🖥️ Uygulamada gir',
+        onclick: async (e) => {
+          const b = e.target;
+          b.disabled = true;
+          const res = await api(`/api/rooms/${room.id}/masaustu`, { method: 'POST' }).catch((err) => ({ error: err.message }));
+          b.disabled = false;
+          if (res.error) alert(res.error === 'yok' ? 'Birlikte İzle uygulaması bulunamadı. Bir kez masaüstündeki kısayoldan aç, sonra tekrar dene.' : res.error);
+        },
+      }),
       link ? el('button', { type: 'button', text: '🔗 Linki kopyala', onclick: (e) => copy(link, e.target) }) : el('span', { class: 'muted small', text: 'tünel hazır değil' }),
       el('button', {
         type: 'button',

@@ -227,6 +227,15 @@ export function createPanelApp({
     });
   }));
 
+  // Odayı bu bilgisayardaki masaüstü uygulamasında aç. Host bağlantısı (#host=…) ile:
+  // uygulama odaya host olarak giriyor.
+  app.post('/api/rooms/:id/masaustu', (req, res) => {
+    const room = rooms.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 'Oda yok' });
+    const url = `${publicBase}/room/${room.id}#${new URLSearchParams({ host: room.creatorToken, name: config.get().nickname })}`;
+    res.json(masaustuAc(url));
+  });
+
   app.get('/api/rooms', (req, res) => {
     res.json(rooms.list().map((r) => ({ ...r.summary(), relay: relayStats(r.id) })));
   });
