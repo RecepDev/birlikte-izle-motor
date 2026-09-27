@@ -5,7 +5,10 @@
 
 import http from 'node:http';
 
-const PARCA = 48 * 1024 * 1024;
+// Büyük parça: Stremio bir isteğin aralığındaki parçaları öncelikli indiriyor. 48 MB (~15 sn)
+// küçük kalıyordu; hız yüksekken bile ilerisi hazırlanmıyor, "2 sn hazır"da kalıyordu. 1 GB
+// (~5 dk) eski ucu açık istek kadar ileriyi kapsıyor, yine de birikme yapmıyor.
+const PARCA = 1024 * 1024 * 1024;
 export const ACIK_ARALIK = /^bytes=(\d+)-$/;
 // Tek dosya adresi: /<infoHash>/<sıra> (HLS, stats vb. değil).
 export const dosyaYolu = (yol) => /^\/[0-9a-f]{40}\/[^/?]+(\?|$)/i.test(yol);

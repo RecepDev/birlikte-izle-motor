@@ -81,7 +81,7 @@ class ParcaliKaynak(private val ic: HttpDataSource) : DataSource {
     override fun close() = ic.close()
 
     companion object {
-        private const val PARCA = 48L * 1024 * 1024
+        private const val PARCA = 1024L * 1024 * 1024 // ~1 GB: ilerisi de öncelikli insin
         private val DOSYA = Regex("^/[0-9a-fA-F]{40}/[^/]+$")
         private val gorulen = java.util.Collections.synchronizedSet(HashSet<String>())
     }

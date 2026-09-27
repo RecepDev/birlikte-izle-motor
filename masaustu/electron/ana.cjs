@@ -527,6 +527,9 @@ async function mpvBaslat() {
       '--cache=yes', '--demuxer-max-bytes=1GiB', '--demuxer-readahead-secs=180',
       // Önbellek biterse saniyelik kesik kesik oynamak yerine 6 sn doldurup öyle devam et.
       '--cache-pause-wait=6',
+      // Açılışta ve her sarmadan sonra da önce 6 sn hazırla, sonra oynat: sarınca hemen
+      // oynayıp saniyede bir takılmasın (bu arada oda o kişiyi bekliyor).
+      '--cache-pause-initial=yes',
       // Ayar bilgileri (oran, ses…) görüntünün alt ortasında.
       '--osd-align-x=center', '--osd-align-y=bottom', '--osd-margin-y=48', '--osd-font-size=34',
     ],

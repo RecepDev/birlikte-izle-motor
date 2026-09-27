@@ -13,7 +13,9 @@
 const http = require('node:http');
 
 const STREMIO = { host: '127.0.0.1', port: 11470 };
-const PARCA = 48 * 1024 * 1024; // her kapalı istek ~48 MB (4K'da ~15 sn)
+// Büyük parça (~1 GB, 4K.da ~5 dk): Stremio isteğin aralığını öncelikli indiriyor; küçük parça
+// ilerisini hazırlatmıyordu (hız yüksekken "2 sn hazır"). Kapalı aralık olduğu için birikme yok.
+const PARCA = 1024 * 1024 * 1024;
 const ACIK_ARALIK = /^bytes=(\d+)-$/;
 
 let sunucu = null;
