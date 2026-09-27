@@ -531,10 +531,17 @@ const isit = (stream) => isitStremio(stream, 8 * 1024 * 1024);
 // Sahipsiz torrent temizliği (her 30 sn): bu sunucunun açtırdığı torrent'lerden hiçbir odanın,
 // denetimin, sonraki bölüm hazırlığının kullanmadığı ve son 90 sn'de dokunulmayanlar kapatılır.
 // Oda yokken de çalışıyor: yoksa Stremio arkada indirmeye devam edip interneti yiyordu.
+// Herkes çıkmış oda da kullanmıyor sayılır (30 sn sonra; sayfa yenileme/kısa kopma için pay).
+// Hiç kimse girmemiş yeni oda: host panelden odaya geçiyor olabilir, 3 dk bekleniyor.
+const odaBosMu = (r) => {
+  if (r.connectedUsers().length || r.emptySince === null) return false;
+  return r.now() - r.emptySince > (r.users.size ? 30_000 : 180_000);
+};
 const sahipsizTimer = setInterval(async () => {
   const kullanilan = new Set(activeChecks.keys());
   for (const r of rooms.list()) {
     torrentKaydet(r.streams);
+    if (odaBosMu(r)) continue;
     for (const id of r.statsStreamIds()) {
       const h = r.streams.find((s) => s.streamId === id)?.infoHash;
       if (h) kullanilan.add(h);
@@ -548,7 +555,7 @@ const sahipsizTimer = setInterval(async () => {
     await stremioLocal.removeTorrent({ infoHash: h }).catch(() => {});
     log.info('Sahipsiz torrent kapatıldı', { infoHash: h });
   }
-}, 30_000);
+}, 15_000);
 sahipsizTimer.unref();
 // Sunucu açılırken Stremio'da açık kalmış torrent'ler önceki oturumlardan artakalan: onlar
 // da temizliğe dahil (sunucu yeni açıldığı için kayıtlarımızda yoklar).
