@@ -2683,13 +2683,26 @@ function playAfterSwitch() {
 
 // Geri: odadan çık, önceki ekrana dön (oda açık kalır, başkaları izlemeye devam eder).
 // Uygulamada: "Oda aç"tan gelindiyse kaynak listesine, yoksa açılış ekranına.
-$('#room-back').addEventListener('click', () => {
+function goBack() {
   if (history.length > 1 && document.referrer && new URL(document.referrer).origin !== location.origin) {
     history.back();
     return;
   }
   if (window.masaustuOdaKapandi) return window.masaustuOdaKapandi();
   history.back();
+}
+// Host'a sor: odadan mı çıkılsın (oda açık kalır) yoksa oda herkes için mi kapansın.
+$('#room-back').addEventListener('click', () => {
+  if (!isHost()) return goBack();
+  $('#back-dialog').showModal();
+});
+$('#back-leave').addEventListener('click', () => { $('#back-dialog').close(); goBack(); });
+$('#back-close').addEventListener('click', async () => {
+  $('#back-dialog').close();
+  const res = await request('closeRoom');
+  if (res?.error) return toast(errorText(res.error));
+  state.ended = true;
+  goBack();
 });
 
 const dialog = $('#settings-dialog');

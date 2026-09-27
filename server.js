@@ -251,6 +251,12 @@ socketCtl = attachSocket(io, {
         })();
         return { msgs: [room.systemChat('Daha çok kaynak aranıyor: Stremio yeniden başlatılıyor…')] };
       },
+      // Host odanın Geri düğmesinden "Odayı kapat" dedi: herkes için kapanır.
+      closeRoom: (room, uid) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        log.info('Oda host tarafından kapatıldı', { roomId: room.id });
+        return { reply: { ok: true }, msgs: [], after: () => socketCtl.closeRoom(room.id) };
+      },
       // Host'un elle "Stremio'yu yeniden başlat" düğmesi.
       restartStremio: (room, uid) => {
         if (uid !== room.hostUserId) return { error: 'notHost' };
