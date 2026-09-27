@@ -73,11 +73,27 @@ class MainActivity : AppCompatActivity() {
         if (son.scheme?.startsWith("http") != true) return
         val sunucu = "${son.scheme}://${son.authority}"
         thread {
-            val metin = Guncelleme.oku("$sunucu/odalar.json", 4000) ?: return@thread
-            val liste = runCatching { JSONArray(metin) }.getOrNull() ?: return@thread
-            if (liste.length() == 0) return@thread
-            runOnUiThread { odalariCiz(kutu, sunucu, liste) }
+            val liste = Guncelleme.oku("$sunucu/odalar.json", 4000)?.let { runCatching { JSONArray(it) }.getOrNull() }
+            runOnUiThread {
+                when {
+                    // Host sunucuyu yeniden başlatınca tünel adresi değişiyor: eski adres cevap vermez.
+                    liste == null -> odaNotu(kutu, "Son girdiğin sunucuya ulaşılamadı. Adres değişmiş olabilir: arkadaşından yeni oda linkini iste, bir kez gir, liste yine gelir.")
+                    liste.length() == 0 -> odaNotu(kutu, "Şu an açık oda yok.")
+                    else -> odalariCiz(kutu, sunucu, liste)
+                }
+            }
         }
+    }
+
+    private fun odaNotu(kutu: LinearLayout, metin: String) {
+        kutu.removeAllViews()
+        kutu.addView(TextView(this).apply {
+            text = metin
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(context, R.color.soluk))
+            setPadding(0, 0, 0, dp(12))
+        })
+        kutu.visibility = android.view.View.VISIBLE
     }
 
     private fun odalariCiz(kutu: LinearLayout, sunucu: String, liste: JSONArray) {
