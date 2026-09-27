@@ -95,3 +95,4 @@ html, body { overflow: hidden !important; }
 
 /* Çubuk ipucu (zaman + önizleme) videonun üstüne taşıyor: mpv penceresinde onun için de delik açılıyor. */
 .seek-tip { z-index: 5; }
+.skip-intro { border-radius: 0 !important; }

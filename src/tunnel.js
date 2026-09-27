@@ -1,4 +1,7 @@
-// Runs a Cloudflare quick tunnel (cloudflared) in front of the public port.
+// Runs a Cloudflare tunnel (cloudflared) in front of the public port.
+// Varsayılan: hesapsız "quick tunnel" (adres her açılışta değişir, ntfy ile duyurulur).
+// data/tunel.json varsa ({ "token": "...", "adres": "https://izle.alanadi.com" }) Cloudflare
+// hesabındaki adlı tünel çalışır: adres hiç değişmez, linkler ve uygulamalar hep aynı yeri bulur.
 
 import { spawn as nodeSpawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -31,6 +34,7 @@ export function createTunnel({
   find = findCloudflared,
   backoffMs = [5_000, 15_000, 60_000],
   onChange = () => {},
+  fixed = () => null,
 }) {
   let status = { state: 'stopped', url: null };
   let current = null;
@@ -51,7 +55,11 @@ export function createTunnel({
       set({ state: 'missing', url: null });
       return;
     }
-    const child = spawn(bin, ['tunnel', '--url', `http://127.0.0.1:${port}`, '--no-autoupdate'], { windowsHide: true });
+    const sabit = fixed();
+    const args = sabit
+      ? ['tunnel', '--no-autoupdate', 'run', '--token', sabit.token]
+      : ['tunnel', '--url', `http://127.0.0.1:${port}`, '--no-autoupdate'];
+    const child = spawn(bin, args, { windowsHide: true });
     current = child;
     set({ state: 'starting', url: null });
 
@@ -61,7 +69,8 @@ export function createTunnel({
       for (const line of text.split('\n')) {
         if (/\bERR\b/.test(line)) log.warn(`cloudflared: ${line.trim().slice(0, 300)}`);
       }
-      const url = extractTunnelUrl(text);
+      // Adlı tünelde adres bizde; Cloudflare'e bağlanınca hazır sayılır.
+      const url = sabit ? (/Registered tunnel connection/i.test(text) ? sabit.adres : null) : extractTunnelUrl(text);
       if (url && url !== status.url) {
         attempt = 0;
         log.info('Tünel hazır', { url });
@@ -129,4 +138,16 @@ export function installCloudflared({ log, spawn = nodeSpawn }) {
       resolve(code);
     });
   });
+}
+
+// data/tunel.json: adlı tünel ayarı (yoksa quick tunnel).
+export function readFixedTunnel(file, { log } = {}) {
+  try {
+    const { token, adres } = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (typeof token === 'string' && token.length > 20 && /^https:\/\/[a-z0-9.-]+$/i.test(String(adres || '').replace(/\/$/, ''))) {
+      return { token, adres: String(adres).replace(/\/$/, '') };
+    }
+    log?.warn('data/tunel.json geçersiz: token ve https adres gerekli');
+  } catch { /* dosya yok: quick tunnel */ }
+  return null;
 }

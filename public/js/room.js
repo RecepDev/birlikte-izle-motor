@@ -1355,7 +1355,44 @@ $('#set-seek-preview').addEventListener('change', (e) => {
 });
 seek.addEventListener('change', () => {
   seeking = false;
+  learnIntro(video.currentTime, Number(seek.value));
   sync.seek(Number(seek.value));
+});
+
+// ---- Girişi atla: host bölüm başında 30-180 sn ileri sararsa sunucu aralığı öğreniyor,
+// sonraki bölümlerde o aralıkta düğme çıkıyor (bkz. src/giris.js).
+let intro = null;
+let introFor = null;
+function learnIntro(from, to) {
+  if (!isHost() || state.room?.type !== 'series' || !Number.isFinite(from)) return;
+  const jump = to - from;
+  if (from > 600 || jump < 30 || jump > 180) return;
+  const hadIntro = Boolean(intro);
+  request('introLearn', { from, to }).then((res) => {
+    if (!res?.ok) return;
+    intro = res.intro;
+    if (!hadIntro) toast('Giriş aralığı kaydedildi: sonraki bölümlerde "Girişi atla" çıkacak.', 5000);
+  });
+}
+function refreshIntro() {
+  const id = state.room?.contentId ?? null;
+  if (id === introFor) return;
+  introFor = id;
+  intro = null;
+  $('#skip-intro').hidden = true;
+  if (state.room?.type !== 'series') return;
+  request('introInfo').then((res) => { if (introFor === id) intro = res?.intro || null; });
+}
+function renderSkipIntro() {
+  const t = video.currentTime;
+  $('#skip-intro').hidden = !(intro && canControl() && t >= intro.start - 2 && t < intro.end - 3);
+}
+video.addEventListener('timeupdate', renderSkipIntro);
+setInterval(refreshIntro, 1000);
+$('#skip-intro').addEventListener('click', () => {
+  if (!intro) return;
+  $('#skip-intro').hidden = true;
+  sync.seek(intro.end);
 });
 video.addEventListener('timeupdate', () => {
   if (!seeking) seek.value = String(video.currentTime);

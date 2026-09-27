@@ -22,9 +22,10 @@ import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-rest
 import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
+import { createGiris } from './src/giris.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
-import { createTunnel, installCloudflared } from './src/tunnel.js';
+import { createTunnel, installCloudflared, readFixedTunnel } from './src/tunnel.js';
 import { createPanelApp } from './src/panel-api.js';
 import { createSubtitleService, createSubtitleRouter } from './src/subtitles.js';
 import { createRelay } from './src/relay.js';
@@ -58,6 +59,7 @@ const activeChecks = new Map();
 const rooms = createRoomManager();
 const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
 const kesif = createKesif({ file: path.join(DATA, 'kesif.json'), log });
+const giris = createGiris({ file: path.join(DATA, 'giris.json'), log });
 const subtitles = createSubtitleService({
   addons,
   getAddons: () => config.get().addons,
@@ -234,6 +236,16 @@ socketCtl = attachSocket(io, {
         if (!episodes.length) return { error: 'noEpisodes' };
         return { reply: { ok: true, episodes, watched: gecmis.izlenenler(id) }, msgs: [] };
       },
+      // Girişi atla: dizinin öğrenilmiş giriş aralığı (yoksa null).
+      introInfo: async (room) => ({ reply: { ok: true, intro: room.type === 'series' ? giris.bul(room.contentId) : null }, msgs: [] }),
+      // Host bölümün başında ileri sardı: giriş aralığı olabilir, öğren.
+      introLearn: async (room, uid, p) => {
+        const denied = room.requireHost(uid);
+        if (denied) return denied;
+        if (room.type !== 'series') return { reply: { ok: false }, msgs: [] };
+        const ok = giris.ogren(room.contentId, p?.from, p?.to);
+        return { reply: { ok, intro: ok ? giris.bul(room.contentId) : null }, msgs: [] };
+      },
       // Host picks a search result: fetch its streams and switch the room to it.
       changeContent: async (room, uid, p) => {
         const denied = room.requireHost(uid);
@@ -260,6 +272,7 @@ socketCtl = attachSocket(io, {
 tunnel = createTunnel({
   port: PUBLIC_PORT,
   log,
+  fixed: () => readFixedTunnel(path.join(DATA, 'tunel.json'), { log }),
   onChange: (s) => {
     if (s.state === 'up') {
       socketCtl.broadcastPublicUrl(s.url);

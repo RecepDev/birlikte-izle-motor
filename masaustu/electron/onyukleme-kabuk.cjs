@@ -39,7 +39,9 @@ function olcumKur() {
       if (r.width <= 0 || r.height <= 0) return;
       // Kontrol çubuğunun bir kutusu (altyazı, sohbet, bölümler…) açıksa mpv penceresinde
       // o kutu kadar delik açılıyor: video küçülmüyor, altyazının yeri de değişmiyor.
-      const k = document.querySelector('.player > .ctl-pop:not([hidden]), .seek-tip:not([hidden])')?.getBoundingClientRect();
+      // Tek delik açılabiliyor: öncelik açık kutuda, sonra çubuk ipucunda, sonra "Girişi atla"da.
+      const k = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])']
+        .map((q) => document.querySelector(q)).find(Boolean)?.getBoundingClientRect();
       const delik = k && k.width > 0 && k.height > 0 ? { x: k.x, y: k.y, width: k.width, height: k.height } : null;
       const olcu = [r.x, r.y, r.width, r.height, delik?.x, delik?.y, delik?.width, delik?.height].map((n) => Math.round(n ?? -1)).join('|');
       if (olcu === son) return;
