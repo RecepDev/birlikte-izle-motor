@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import { isContentId, isContentType } from './addon.js';
-import { normalizeStreams, normalizeAddonStreams } from './streams.js';
+import { normalizeStreams, normalizeAddonStreams, bestStream } from './streams.js';
+import { isit } from './stremio-isit.js';
 import { masaustuAc } from './masaustu-baslat.js';
 
 const STREAM_CACHE_MS = 10 * 60 * 1000;
@@ -209,6 +210,17 @@ export function createPanelApp({
       entry.streams = [...entry.streams.filter((s) => s.addonName !== addonName), ...normalized];
       entry.errors = entry.errors.filter((e) => e.addonName !== addonName);
       write({ type: 'addon', addonName, streams: normalized, error: null });
+      // İçerik seçilir seçilmez en umut verici torrent'ler Stremio'da açılıp kaynak aramaya
+      // başlıyor: hangisi seçilirse seçilsin oda açılınca beklemeden oynasın. En iyi aday +
+      // en çok kaynaklı 3 tek bölüm; seçilmeyenleri oda açılınca temizlik kapatıyor.
+      entry.isitildi ||= new Set();
+      const adaylar = [bestStream(entry.streams), ...entry.streams.filter((s) => s.kind === 'torrent' && !s.pack)
+        .sort((a, b) => (Number(b.seeders) || 0) - (Number(a.seeders) || 0)).slice(0, 3)];
+      for (const s of adaylar) {
+        if (s?.kind !== 'torrent' || entry.isitildi.has(s.infoHash) || entry.isitildi.size >= 4) continue;
+        entry.isitildi.add(s.infoHash);
+        isit(s);
+      }
     });
     const [, { errors }] = await Promise.all([metaPromise, streamsPromise]);
     for (const e of errors) log.warn('Addon cevap vermedi', { addon: e.addonName, content: id, error: e.message });

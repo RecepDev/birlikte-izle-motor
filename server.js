@@ -16,7 +16,7 @@ import { createConfigStore } from './src/config.js';
 import { createAddonsClient } from './src/addons-client.js';
 import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
 import { normalizeStreams, normalizeAddonStreams, bestStream } from './src/streams.js';
-import { localTorrentUrl } from './public/js/shared/stream-url.js';
+import { isit as isitStremio } from './src/stremio-isit.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
@@ -496,13 +496,7 @@ const konumTimer = setInterval(() => {
 konumTimer.unref();
 
 // Sonraki bölümü ısıt: torrent Stremio'da açılıp ilk 8 MB okunuyor (kapalı aralık).
-function isit(stream) {
-  try {
-    const req = http.get(localTorrentUrl(stream, 'http://127.0.0.1:11470'), { headers: { range: 'bytes=0-8388607' } }, (r) => r.resume());
-    req.on('error', () => {});
-    req.setTimeout(120_000, () => req.destroy());
-  } catch { /* olmazsa geçişte normal açılır */ }
-}
+const isit = (stream) => isitStremio(stream, 8 * 1024 * 1024);
 
 // "Stop other downloads" room setting: while such a room has people in it, only the torrents
 // being watched (in any room) or tested right now may stay open in the host's Stremio.
