@@ -92,3 +92,6 @@ html, body { overflow: hidden !important; }
   background: rgb(20, 22, 29) !important;
 }
 .controls { padding: 8px 14px 4px !important; }
+
+/* Çubuk ipucu videonun üstüne çıkamıyor (mpv); çubuğun altında görünür. */
+.seek-tip { bottom: auto !important; top: 18px; z-index: 5; }

@@ -420,3 +420,15 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .ctl-row { gap: 0; }
   .ctl-row .ctl { min-width: 36px; padding: 4px; font-size: 16px; }
 }
+
+/* SVG kontrol simgeleri */
+.ctl { display: inline-grid; place-items: center; color: #e8e9ee; }
+.ctl .ic { display: block; pointer-events: none; }
+.ctl:hover:not(:disabled) { color: #fff; }
+.settings-room { display: grid; gap: 14px; }
+/* Çubuğun üstünde gezinince o anın dakikası/saniyesi */
+.seek-tip {
+  position: absolute; bottom: 24px; transform: translateX(-50%); pointer-events: none;
+  background: rgba(20, 22, 29, .95); border: 1px solid var(--line); border-radius: 6px;
+  padding: 2px 7px; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap;
+}

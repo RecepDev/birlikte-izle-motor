@@ -9,6 +9,7 @@ import { renderUsers, durationMismatch } from './users.js';
 import { renderQuality, streamLabel, formatMbps } from './quality.js';
 import { requiredMbps, createDownloadMeter } from './bandwidth.js';
 import { createSubs } from './subs.js';
+import { setIcon } from './icons.js';
 import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS, COMPAT_WIDTHS } from './shared/stream-url.js';
 import { langLabel } from './shared/subtitle-text.js';
 import { browserCodecs, isRealSafari } from './codecs.js';
@@ -1038,7 +1039,7 @@ function renderNotice() {
 
 function renderControls() {
   const control = canControl();
-  $('#btn-play').textContent = sync.intendsToPlay() ? '⏸' : '▶';
+  setIcon($('#btn-play'), sync.intendsToPlay() ? 'pause' : 'play');
   $('#btn-play').disabled = !control;
   $('#seek').disabled = !control;
   $('#lock-hint').hidden = control;
@@ -1046,7 +1047,8 @@ function renderControls() {
 }
 
 function updateHostUi() {
-  $('#open-settings').hidden = !isHost();
+  $('#open-settings').hidden = false;
+  $('#room-settings').hidden = !isHost();
   $('#tab-search').hidden = !isHost();
   renderHeader();
   renderControls();
@@ -1268,6 +1270,19 @@ seek.addEventListener('input', () => {
   $('#dur').textContent = formatTime(video.duration);
   renderSeekBar();
 });
+// Çubuğun üstünde gezinince imlecin denk geldiği an (dakika:saniye).
+const seekTip = el('div', { class: 'seek-tip', hidden: true });
+seek.parentElement.append(seekTip);
+seek.addEventListener('pointermove', (e) => {
+  const d = video.duration;
+  if (!Number.isFinite(d) || d <= 0) return;
+  const r = seek.getBoundingClientRect();
+  const x = Math.max(0, Math.min(r.width, e.clientX - r.left));
+  seekTip.textContent = formatTime((x / r.width) * d);
+  seekTip.style.left = `${x}px`;
+  seekTip.hidden = false;
+});
+seek.addEventListener('pointerleave', () => { seekTip.hidden = true; });
 seek.addEventListener('change', () => {
   seeking = false;
   sync.seek(Number(seek.value));
@@ -1289,7 +1304,7 @@ video.addEventListener('pause', renderControls);
 const volume = $('#volume');
 video.volume = Number(storage.get('volume') ?? 1);
 volume.value = String(video.volume);
-$('#btn-mute').textContent = volumeIcon(); // kayıtlı düzeye göre başlasın
+setIcon($('#btn-mute'), volumeIcon()); // kayıtlı düzeye göre başlasın
 volume.addEventListener('input', () => {
   video.volume = Number(volume.value);
   video.muted = video.volume === 0;
@@ -1299,16 +1314,16 @@ volume.addEventListener('input', () => {
 $('#btn-mute').addEventListener('click', () => {
   video.muted = !video.muted;
 });
-// Ses simgesi düzeye göre: 🔇 kapalı, 🔈 kısık, 🔉 orta, 🔊 yüksek.
+// Ses simgesi düzeye göre: kapalı, kısık, orta, yüksek.
 function volumeIcon() {
   const v = video.volume;
-  return video.muted || v === 0 ? '🔇' : v < 0.34 ? '🔈' : v < 0.67 ? '🔉' : '🔊';
+  return video.muted || v === 0 ? 'mute' : v < 0.34 ? 'vol0' : v < 0.67 ? 'vol1' : 'vol2';
 }
 video.addEventListener('volumechange', () => {
-  $('#btn-mute').textContent = volumeIcon();
+  setIcon($('#btn-mute'), volumeIcon());
 });
 // Kaydırıcı sürüklenirken de anında güncellensin (masaüstü/telefon oynatıcısı olayı geç yolluyor).
-$('#volume').addEventListener('input', () => { $('#btn-mute').textContent = volumeIcon(); });
+$('#volume').addEventListener('input', () => { setIcon($('#btn-mute'), volumeIcon()); });
 
 function toggleFullscreen() {
   if (document.fullscreenElement) return document.exitFullscreen();
@@ -1316,6 +1331,9 @@ function toggleFullscreen() {
   if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); // iOS
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
+for (const [id, name] of [['btn-next', 'next'], ['btn-compat', 'compat'], ['btn-info', 'info'], ['btn-audio', 'audio'],
+  ['btn-subs-panel', 'subs'], ['btn-chat', 'chat'], ['btn-episodes', 'episodes'], ['btn-fs', 'fs'], ['btn-more', 'more']]) setIcon($(`#${id}`), name);
+document.addEventListener('fullscreenchange', () => setIcon($('#btn-fs'), document.fullscreenElement ? 'fsExit' : 'fs'));
 
 // ---- kontrol çubuğu kutuları (Stremio düzeni) ----
 // Altyazı/Dil ve Sohbet: yan panel görünüyorsa o sekmeye geçer; görünmüyorsa (tam ekran,
@@ -1434,7 +1452,7 @@ async function renderEpisodesPop(refresh = false) {
         ...seasons.map((n) => el('option', { value: String(n), selected: n === popSeason }, seasonName(n)))),
       el('button', { type: 'button', text: 'Sonraki ›', disabled: i >= seasons.length - 1, onclick: () => go(1) })),
     list,
-    host ? null : el('p', { class: 'muted small', text: 'Bölümü host değiştirebilir.' }),
+    ...(host ? [] : [el('p', { class: 'muted small', text: 'Bölümü host değiştirebilir.' })]),
   );
   const cur = list.querySelector('.current');
   if (cur) box.scrollTop = cur.offsetTop - box.clientHeight / 2;
@@ -2056,7 +2074,9 @@ $('#open-settings').addEventListener('click', () => {
   $('#set-stop-others').checked = s.stopOtherDownloads !== false;
   dialog.showModal();
 });
-dialog.addEventListener('change', async () => {
+dialog.addEventListener('change', async (e) => {
+  // Bu cihazın ayarları (kalite, donanım) kendi dinleyicilerinde; burası yalnızca oda ayarları.
+  if (!isHost() || !e.target.closest('#room-settings')) return;
   const res = await request('settings', {
     locked: $('#set-locked').checked,
     waitMode: dialog.querySelector('input[name="waitMode"]:checked')?.value,
