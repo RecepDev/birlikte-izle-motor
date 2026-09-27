@@ -277,3 +277,64 @@ try {
   $('#title').textContent = 'Hata';
   $('#streams').replaceChildren(el('p', { class: 'error', text: err.message }));
 }
+
+// Kalite tercihi (Stremio'dan doğrudan gelindiyse burada soruluyor; aramadan gelindiyse orada sorulmuştu). Masaüstü
+// uygulamasında açılış ekranında seçildiyse o kullanılıyor (sunucuya da bildiriliyor).
+(async () => {
+  const sunucuda = (await api('/api/tercih').catch(() => null))?.kalite;
+  const uygulamada = window.kabuk?.kalite?.();
+  if (sunucuda) return;
+  if (uygulamada) return api('/api/tercih', { method: 'POST', body: { kalite: uygulamada } }).catch(() => {});
+  const sor = $('#kalite-sor');
+  for (const b of sor.querySelectorAll('button[data-q]')) {
+    b.addEventListener('click', async () => {
+      await api('/api/tercih', { method: 'POST', body: { kalite: b.dataset.q } }).catch(() => {});
+      window.kabuk?.kaliteYaz?.(b.dataset.q);
+      sor.close();
+      tercihKalite = b.dataset.q;
+      render();
+    });
+  }
+  sor.showModal();
+})();
+    return;
+  }
+  gorunur('#gecmis-kart', false);
+  $('#ara-durum').textContent = 'Aranıyor…';
+  const sonuclar = await api(`/api/search?q=${encodeURIComponent(q)}`);
+  const filmler = sonuclar.filter((s) => s.type === 'movie');
+  const diziler = sonuclar.filter((s) => s.type === 'series');
+  $('#ara-durum').textContent = sonuclar.length ? `${filmler.length} film, ${diziler.length} dizi` : 'Sonuç yok.';
+  $('#filmler').replaceChildren(...filmler.map((s) => kart(s, () => odayaGit('movie', s.id))));
+  $('#diziler').replaceChildren(...diziler.map((s) => kart(s, () => bolumleriAc(s))));
+  gorunur('#filmler-kart', filmler.length > 0);
+  gorunur('#diziler-kart', diziler.length > 0);
+}
+
+// Daha önce oda açılanlar: aramanın üstünde. Dizide bölüm listesi, kaldığın bölüm işaretli.
+let gecmisKayitlari = [];
+async function gecmisiGoster() {
+  const liste = await api('/api/gecmis').catch(() => []);
+  gecmisKayitlari = liste;
+  gorunur('#gecmis-kart', liste.length > 0 && !$('#ara-input').value.trim());
+  $('#gecmis').replaceChildren(...liste.map((k) => kart(
+    k,
+    () => (k.type === 'series' ? bolumleriAc(k) : odayaGit('movie', k.id)),
+    k.type === 'series'
+      ? `📺 ${k.watched.length} bölüm${k.last ? ` · son S${k.last.split(':')[0]}E${k.last.split(':')[1]}` : ''}`
+      : '🎬 film',
+  )));
+}
+gecmisiGoster();
+
+$('#ara-btn').addEventListener('click', ara);
+$('#ara-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') ara(); });
+$('#bolum-geri').addEventListener('click', () => (history.state?.dizi ? history.back() : ara()));
+window.addEventListener('popstate', (e) => {
+  if (e.state?.dizi) bolumleriAc(e.state.dizi, { gecmiseEkle: false });
+  else ara();
+});
+// Kaynak listesinden geri gelindi ya da sayfa yenilendi: son arama ve açık dizi geri gelsin.
+try { $('#ara-input').value = sessionStorage.getItem('araQ') || ''; } catch { /* yok */ }
+if (history.state?.dizi) bolumleriAc(history.state.dizi, { gecmiseEkle: false });
+else if ($('#ara-input').value.trim()) ara();

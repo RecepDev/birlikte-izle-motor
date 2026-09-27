@@ -174,6 +174,7 @@ export function createPanelApp({
   // Daha önce oda açılan film ve diziler (en yenisi başta).
   app.get('/api/gecmis', (req, res) => res.json(gecmis.liste()));
   app.get('/api/tercih', (req, res) => res.json({ kalite: tercih.kalite() }));
+  app.post('/api/tercih', (req, res) => res.json({ ok: tercih.ayarla?.(req.body?.kalite) ?? false }));
 
   app.get('/api/streams', wrap(async (req, res) => {
     const { type, id, retry } = req.query;

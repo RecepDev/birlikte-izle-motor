@@ -114,3 +114,8 @@ fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px
 .refresh-btn { font-size: 13px; padding: 5px 12px; }
 .head-actions { display: flex; gap: 8px; align-items: center; }
 .streams .kind.ikon { cursor: help; }
+dialog.kalite-sor { background: #171920; color: inherit; border: 1px solid #2a2e39; border-radius: 16px; padding: 22px; width: min(440px, 90vw); }
+dialog.kalite-sor::backdrop { background: rgba(0, 0, 0, .6); }
+dialog.kalite-sor h2 { margin: 0 0 8px; font-size: 18px; }
+.kalite-secenek { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.kalite-secenek button { padding: 10px 18px; font-size: 15px; }

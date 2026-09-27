@@ -64,6 +64,24 @@ async function ara() {
     gorunur('#filmler-kart', false);
     gorunur('#diziler-kart', false);
     gecmisiGoster();
+
+// Kalite tercihi: daha içerik seçmeden, oda kurmaya başlarken bir kez soruluyor. Masaüstü
+// uygulamasında açılış ekranında seçildiyse o kullanılıyor (sunucuya da bildiriliyor).
+(async () => {
+  const sunucuda = (await api('/api/tercih').catch(() => null))?.kalite;
+  const uygulamada = window.kabuk?.kalite?.();
+  if (sunucuda) return;
+  if (uygulamada) return api('/api/tercih', { method: 'POST', body: { kalite: uygulamada } }).catch(() => {});
+  const sor = $('#kalite-sor');
+  for (const b of sor.querySelectorAll('button[data-q]')) {
+    b.addEventListener('click', async () => {
+      await api('/api/tercih', { method: 'POST', body: { kalite: b.dataset.q } }).catch(() => {});
+      window.kabuk?.kaliteYaz?.(b.dataset.q);
+      sor.close();
+    });
+  }
+  sor.showModal();
+})();
     return;
   }
   gorunur('#gecmis-kart', false);
