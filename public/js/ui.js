@@ -38,6 +38,10 @@ export function toast(message, ms = 3000) {
   const node = $('#toast');
   if (!node) return;
   node.textContent = message;
+  // Açık bir pencere (Ayarlar) varsa bildirim onun içine taşınıyor: yoksa arkasında kalıyordu.
+  const open = document.querySelector('dialog[open]');
+  const home = open || document.body;
+  if (node.parentElement !== home) home.append(node);
   node.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { node.hidden = true; }, ms);
