@@ -997,6 +997,7 @@ function renderQualityTab() {
       if (s?.kind === 'http' && !confirm(DEBRID_WARNING)) return;
       const res = await request('setHostStream', { streamId });
       if (res?.error) toast(errorText(res.error));
+      else playAfterSwitch();
     },
     needFor: (s) => requiredMbps(s.sizeBytes, contentDuration()),
     pictureFor: (s) => pictureVerdict(s),
@@ -1956,6 +1957,7 @@ $('#weak-src-go').addEventListener('click', async () => {
   if (!weakSuggestion) return;
   const res = await request('setHostStream', { streamId: weakSuggestion });
   if (res?.error) toast(errorText(res.error));
+  else playAfterSwitch();
 });
 $('#weak-src-close').addEventListener('click', () => { $('#weak-src').hidden = true; });
 
@@ -2672,6 +2674,11 @@ function renderShortcuts() {
       host ? row('N', 'Sonraki bölüm (dizide)') : null,
     ];
   $('#shortcut-list').replaceChildren(...rows.filter(Boolean));
+}
+
+// Host kalite listesinden kaynak seçince oda duraklatılmışsa da oynamaya başlasın.
+function playAfterSwitch() {
+  if (canControl() && !sync.intendsToPlay()) sync.toggle();
 }
 
 const dialog = $('#settings-dialog');

@@ -289,7 +289,8 @@ ipcRenderer.on('mpv:durum', (_e, next) => {
     if (oncekiSure === null && durum.duration !== null) yolla('loadedmetadata');
   }
   if (oncekiHazir < 3 && readyState() >= 3) yolla('canplay');
-  if (yukleniyor && readyState() >= 3 && durum.width > 0) yuklemeDurumu(false);
+  // Duraklatılmışken de ilk kare geldiyse gösterge kalksın (yoksa "yükleniyor" asılı kalıyordu).
+  if (yukleniyor && durum.width > 0 && (readyState() >= 3 || (durum.paused && durum.loaded))) yuklemeDurumu(false);
   else if (yukleniyor) yerlestir();
   if (oncekiDuraklat !== durum.paused) yolla(durum.paused ? 'pause' : 'play');
   if (durum.cacheStalled || durum.seeking) yolla('waiting');
