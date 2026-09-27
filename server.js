@@ -158,6 +158,32 @@ socketCtl = attachSocket(io, {
         refreshSubtitles(room);
         return { msgs: [] };
       },
+      // "İnternet" penceresi: bağlantı nerelere gidiyor. Host bilgisayarındaki Stremio'nun tüm
+      // torrent'leri (indirme/yükleme) yalnızca host'a; relay kullanımı host'a hepsi, misafire kendisi.
+      bandwidth: async (room, uid) => {
+        const host = uid === room.hostUserId;
+        let torrents = [];
+        if (host) {
+          const izlenen = new Map();
+          for (const r of rooms.list()) {
+            const s = r.streams.find((x) => x.streamId === r.hostStreamId);
+            if (s?.infoHash) izlenen.set(s.infoHash, r.id === room.id ? 'bu oda' : 'başka oda');
+          }
+          try {
+            const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(4000) })).json();
+            torrents = Object.values(stats || {}).map((t) => ({
+              name: String(t.name || t.infoHash),
+              downMbps: Math.round(((t.downloadSpeed || 0) * 8) / 1e5) / 10,
+              upMbps: Math.round(((t.uploadSpeed || 0) * 8) / 1e5) / 10,
+              peers: t.peers || 0,
+              role: izlenen.get(t.infoHash) || (activeChecks.has(t.infoHash) ? 'hız denetimi' : 'açık kalmış'),
+            }));
+          } catch { torrents = null; }
+        }
+        const rs = relay.stats(room.id);
+        const relayUsers = host ? rs.users : rs.users.filter((u) => u.userId === uid);
+        return { reply: { ok: true, host, torrents, relay: relayUsers, relayTotal: host ? rs.totalMbps : null }, msgs: [] };
+      },
       // Host: "Daha çok kaynak bul" - Stremio'nun sınırlarını yükselt, Stremio'yu yeniden
       // başlat, torrent'i ek tracker'larla aç; izleyenler kaldıkları yerden devam eder.
       boostPeers: (room, uid) => {

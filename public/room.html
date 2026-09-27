@@ -63,6 +63,7 @@
       <div class="top-actions">
         <button id="open-compat" type="button" title="Bu cihaz videoları açabiliyor mu?">🩺 <span class="hide-narrow">Uyumluluk</span> <span id="compat-badge" class="pill" hidden></span></button>
         <button id="copy-link" type="button">🔗 <span class="hide-narrow">Linki kopyala</span></button>
+        <button id="net-usage" type="button" title="İnternet bağlantın nerelere gidiyor">📶 <span class="hide-narrow">İnternet</span></button>
         <button id="open-desktop" type="button" title="Odayı masaüstü uygulamasında aç: gerçek HDR, tüm ses dilleri, donanım çözme">🖥️ <span class="hide-narrow">Masaüstünde aç</span></button>
         <button id="open-settings" type="button" title="Ayarlar">⚙️ <span class="hide-narrow">Ayarlar</span></button>
       </div>
@@ -241,6 +242,14 @@
       </aside>
     </main>
   </div>
+
+  <dialog id="net-dialog">
+    <form method="dialog" class="settings">
+      <h2>İnternet kullanımı</h2>
+      <div id="net-body" class="net-body"><p class="muted">Yükleniyor…</p></div>
+      <div class="dialog-actions"><button value="close" class="primary">Kapat</button></div>
+    </form>
+  </dialog>
 
   <dialog id="settings-dialog">
     <form method="dialog" class="settings">

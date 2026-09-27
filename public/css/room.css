@@ -470,3 +470,10 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .next-ep .skip-intro-like { border-radius: 8px 0 0 8px; }
 .next-ep .next-ep-close { border-radius: 0 8px 8px 0; border-left: none; padding: 10px 12px; font-weight: 400; }
 .next-ep button:hover { background: var(--accent); border-color: var(--accent); }
+.net-body { display: grid; gap: 6px; min-width: min(460px, calc(100vw - 64px)); }
+.net-body h3 { margin: 8px 0 2px; font-size: 13px; color: var(--muted); }
+.net-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; font-size: 13px; }
+.net-row b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.net-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.net-total { border-top: 1px solid var(--line); padding-top: 4px; }
+#net-dialog { width: min(560px, calc(100% - 32px)); }

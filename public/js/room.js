@@ -2348,6 +2348,53 @@ function selectTab(name) {
 }
 for (const b of document.querySelectorAll('.tabs button')) b.addEventListener('click', () => selectTab(b.dataset.tab));
 
+// "İnternet" penceresi: bu cihazın video indirmesi, host bilgisayarındaki Stremio'nun
+// torrent'leri (indirme + torrent kişilerine yükleme) ve host üzerinden izleyenlere giden yükleme.
+const netDialog = $('#net-dialog');
+let netTimer = null;
+const mbps = (n) => (Number.isFinite(n) ? `${n.toFixed(1)} Mbps` : '—');
+async function renderNet() {
+  const mine = liveDownload();
+  const src = player.status().source;
+  const srcText = { local: "kendi Stremio'n", relay: 'host üzerinden (relay)', http: 'doğrudan link' }[src] || '—';
+  const res = await request('bandwidth').catch(() => null);
+  const rows = [
+    el('h3', { text: 'Bu cihaz' }),
+    el('div', { class: 'net-row' }, el('span', { text: `▶ Video (${srcText})` }), el('b', { text: `↓ ${mbps(mine.downMbps)}` })),
+  ];
+  if (res?.host) {
+    rows.push(el('h3', { text: 'Bu bilgisayardaki Stremio' }));
+    if (res.torrents === null) rows.push(el('p', { class: 'muted small', text: "Stremio'ya ulaşılamadı." }));
+    else if (!res.torrents.length) rows.push(el('p', { class: 'muted small', text: 'Açık torrent yok.' }));
+    let down = 0;
+    let up = 0;
+    for (const t of res.torrents || []) {
+      down += t.downMbps;
+      up += t.upMbps;
+      rows.push(el('div', { class: 'net-row' },
+        el('span', { class: 'net-name', title: t.name, text: `${t.role === 'bu oda' ? '🎬' : t.role === 'açık kalmış' ? '⚠️' : '🧲'} ${t.name}` },
+          el('small', { class: 'muted', text: ` · ${t.role} · ${t.peers} kişi` })),
+        el('b', { text: `↓ ${mbps(t.downMbps)} · ↑ ${mbps(t.upMbps)}` })));
+    }
+    if ((res.torrents || []).length > 1) rows.push(el('div', { class: 'net-row net-total' }, el('span', { text: 'Toplam torrent' }), el('b', { text: `↓ ${mbps(down)} · ↑ ${mbps(up)}` })));
+    rows.push(el('p', { class: 'muted small', text: '↑ torrent: Stremio indirdiği parçaları başkalarına da yüklüyor (torrent böyle çalışıyor).' }));
+  }
+  if (res?.relay?.length || res?.host) {
+    rows.push(el('h3', { text: res?.host ? 'Host üzerinden izleyenler (senin yüklemen)' : 'Host üzerinden izleme' }));
+    if (!res.relay.length) rows.push(el('p', { class: 'muted small', text: 'Kimse host üzerinden izlemiyor.' }));
+    for (const u of res.relay) rows.push(el('div', { class: 'net-row' }, el('span', { text: `👤 ${u.name}` }), el('b', { text: `↑ ${mbps(u.mbps)}` })));
+    if (res.host && res.relay.length > 1) rows.push(el('div', { class: 'net-row net-total' }, el('span', { text: 'Toplam' }), el('b', { text: `↑ ${mbps(res.relayTotal)}` })));
+  }
+  $('#net-body').replaceChildren(...rows);
+}
+$('#net-usage').addEventListener('click', () => {
+  netDialog.showModal();
+  renderNet();
+  clearInterval(netTimer);
+  netTimer = setInterval(renderNet, 2000);
+});
+netDialog.addEventListener('close', () => clearInterval(netTimer));
+
 $('#copy-link').addEventListener('click', async () => {
   const local = ['127.0.0.1', 'localhost'].includes(location.hostname);
   const base = state.publicUrl || (local ? null : location.origin);
