@@ -21,6 +21,7 @@ import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
 import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
+import { createKesif } from './src/kesif.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
 import { createTunnel, installCloudflared } from './src/tunnel.js';
@@ -56,6 +57,7 @@ let lastAutoRestart = 0;
 const activeChecks = new Map();
 const rooms = createRoomManager();
 const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
+const kesif = createKesif({ file: path.join(DATA, 'kesif.json'), log });
 const subtitles = createSubtitleService({
   addons,
   getAddons: () => config.get().addons,
@@ -101,6 +103,11 @@ publicApp.use(relay.router);
 publicApp.use(createIndirRouter({ root: ROOT, log }));
 // Uygulamaların açılış ekranı: şu an açık odalar (misafir de görebiliyor, girebiliyor).
 // Tünel adresi yalnızca linki paylaştığın kişilerde olduğu için liste de onlarda.
+// Uygulamalar bu konu adını saklıyor; tünel adresi değişince yenisini ntfy.sh'den buluyorlar.
+publicApp.get('/kesif.json', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.json({ konu: kesif.konu });
+});
 publicApp.get('/odalar.json', (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Cache-Control', 'no-store');
@@ -255,7 +262,10 @@ tunnel = createTunnel({
   port: PUBLIC_PORT,
   log,
   onChange: (s) => {
-    if (s.state === 'up') socketCtl.broadcastPublicUrl(s.url);
+    if (s.state === 'up') {
+      socketCtl.broadcastPublicUrl(s.url);
+      kesif.adresDegisti(s.url);
+    }
   },
 });
 

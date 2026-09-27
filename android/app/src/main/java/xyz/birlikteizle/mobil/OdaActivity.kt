@@ -137,6 +137,11 @@ class OdaActivity : AppCompatActivity() {
             }
         }
         Guncelleme.apkDenetle(this, sunucu)
+        // Sunucunun ntfy konusu: tünel adresi değişince açılış ekranı yenisini oradan bulur.
+        thread {
+            val konu = Guncelleme.oku("$sunucu/kesif.json")?.let { runCatching { JSONObject(it).optString("konu") }.getOrNull() }
+            if (!konu.isNullOrEmpty()) getSharedPreferences("ayar", MODE_PRIVATE).edit().putString("konu", konu).apply()
+        }
         ana.post(durumDongusu)
     }
 

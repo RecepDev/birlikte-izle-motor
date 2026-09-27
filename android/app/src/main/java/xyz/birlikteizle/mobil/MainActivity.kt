@@ -30,11 +30,8 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         linktenAc(intent)?.let { return odayaGit(it) }
         ekraniKur()
-        // Açılışta da güncellemeye bak: son girilen odanın sunucusuna soruyoruz
-        // (odaya girince de ayrıca bakılıyor).
-        kayit.getString("sonLink", null)?.let { Uri.parse(it) }?.takeIf { it.scheme?.startsWith("http") == true }?.let {
-            Guncelleme.apkDenetle(this, "${it.scheme}://${it.authority}")
-        }
+        // Açılışta da güncellemeye bak (odaya girince de ayrıca bakılıyor).
+        thread { Guncelleme.apkDenetle(this, sunucuBul()) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -68,11 +65,17 @@ class MainActivity : AppCompatActivity() {
 
     // Son girilen odanın sunucusundaki açık odalar. Tünel adresi değiştiyse (host sunucuyu
     // yeniden başlattıysa) liste gelmez, yeni linki yapıştırmak gerekir.
+    // Host'un sunucusu: önce ntfy.sh'deki güncel adres (tünel adresi değişmiş olabilir),
+    // yoksa son girilen odanınki. Ağ kullandığı için arka planda çağrılmalı.
+    private fun sunucuBul(): String? {
+        Guncelleme.ntfyAdresi(kayit.getString("konu", null))?.let { return it }
+        val son = kayit.getString("sonLink", null)?.let { Uri.parse(it) } ?: return null
+        return if (son.scheme?.startsWith("http") == true) "${son.scheme}://${son.authority}" else null
+    }
+
     private fun odalariGetir(kutu: LinearLayout) {
-        val son = kayit.getString("sonLink", null)?.let { Uri.parse(it) } ?: return
-        if (son.scheme?.startsWith("http") != true) return
-        val sunucu = "${son.scheme}://${son.authority}"
         thread {
+            val sunucu = sunucuBul() ?: return@thread
             val liste = Guncelleme.oku("$sunucu/odalar.json", 4000)?.let { runCatching { JSONArray(it) }.getOrNull() }
             runOnUiThread {
                 when {
@@ -209,6 +212,21 @@ class MainActivity : AppCompatActivity() {
         link.setOnEditorActionListener { _, _, _ -> git(); true }
         kart.addView(gir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply {
             topMargin = dp(16)
+        })
+        val guncelle = Button(this).apply {
+            text = "Güncellemeleri denetle"
+            setTextColor(yazi)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(0xFF232633.toInt())
+            }
+            setOnClickListener {
+                Toast.makeText(this@MainActivity, "Denetleniyor…", Toast.LENGTH_SHORT).show()
+                thread { Guncelleme.apkDenetle(this@MainActivity, sunucuBul(), elle = true) }
+            }
+        }
+        kart.addView(guncelle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
+            topMargin = dp(10)
         })
         // Hangi sürümün kurulu olduğu görünsün (güncelleme geldi mi diye bakmak için).
         kart.addView(TextView(this).apply {

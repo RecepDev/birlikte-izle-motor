@@ -293,26 +293,43 @@ async function mpvBaslat() {
 // kod dosyalarını kullanıcı klasörüne indiriyoruz; başlatıcı (baslat.cjs) bir sonraki
 // açılışta onları çalıştırıyor. Electron ve mpv pakette kalıyor.
 const kabuk = global.kabuk || { surum: '0.0.0', dahaYeni: () => false, guncelKlasor: path.join(app.getPath('userData'), 'guncelleme') };
-let guncellemeBakildi = false;
-
-async function guncellemeDenetle(sayfaUrl) {
-  if (guncellemeBakildi) return;
-  let kok;
+const gunlukDosyasi = path.join(app.getPath('userData'), 'guncelleme.log');
+// Hatalar sessiz kalmasın: neden güncellenmediği sonradan okunabilsin.
+function gunluk(metin) {
   try {
-    kok = new URL(sayfaUrl).origin;
-  } catch {
+    fs.appendFileSync(gunlukDosyasi, `${new Date().toISOString()} ${metin}\n`);
+  } catch { /* yazılamazsa önemli değil */ }
+}
+
+let guncellemeSuruyor = false;
+let sonDenetim = 0;
+
+// kok: sunucu adresi (http://…). elle: kullanıcı "Güncellemeleri denetle"ye bastı;
+// o zaman "güncelsin" / hata da bildiriliyor. Kendiliğinden denetim her oda
+// açılışında (en sık 5 dakikada bir) yapılıyor; önceden oturum başına bir kezdi ve o
+// an yeni sürüm yoksa uygulama kapanana kadar bir daha bakmıyordu.
+async function guncellemeDenetle(kok, { elle = false } = {}) {
+  const { dialog } = require('electron');
+  const bildir = (tip, mesaj, detay = '') => elle && dialog.showMessageBox(ana, { type: tip, title: 'Güncelleme', message: mesaj, detail: detay });
+  if (!kok?.startsWith('http')) {
+    bildir('warning', 'Sunucu bulunamadı.', 'Önce bir odaya gir ya da oda linkini yapıştır.');
     return;
   }
-  if (!kok.startsWith('http')) return;
-  guncellemeBakildi = true;
+  if (guncellemeSuruyor || (!elle && Date.now() - sonDenetim < 5 * 60_000)) return;
+  guncellemeSuruyor = true;
+  sonDenetim = Date.now();
   try {
-    const bilgi = await (await fetch(`${kok}/indir/surum.json`)).json();
-    if (!bilgi.masaustu || !kabuk.dahaYeni(bilgi.masaustu, kabuk.surum)) return;
+    const bilgi = await (await fetch(`${kok}/indir/surum.json`, { signal: AbortSignal.timeout(8000) })).json();
+    gunluk(`denetim ${kok}: sunucu ${bilgi.masaustu}, bu ${kabuk.surum}`);
+    if (!bilgi.masaustu || !kabuk.dahaYeni(bilgi.masaustu, kabuk.surum)) {
+      bildir('info', `Güncelsin (sürüm ${kabuk.surum}).`);
+      return;
+    }
     const gecici = `${kabuk.guncelKlasor}-yeni`;
     fs.rmSync(gecici, { recursive: true, force: true });
     for (const ad of bilgi.masaustuDosyalari || []) {
-      const yanit = await fetch(`${kok}/indir/masaustu/${ad}`);
-      if (!yanit.ok) throw new Error(`${ad}: ${yanit.status}`);
+      const yanit = await fetch(`${kok}/indir/masaustu/${ad}`, { signal: AbortSignal.timeout(20_000) });
+      if (!yanit.ok) throw new Error(`${ad}: HTTP ${yanit.status}`);
       const hedef = path.join(gecici, ...ad.split('/'));
       fs.mkdirSync(path.dirname(hedef), { recursive: true });
       fs.writeFileSync(hedef, Buffer.from(await yanit.arrayBuffer()));
@@ -321,25 +338,30 @@ async function guncellemeDenetle(sayfaUrl) {
     // Hepsi indikten sonra yer değiştir: yarım inen güncelleme hiç çalışmasın.
     fs.rmSync(kabuk.guncelKlasor, { recursive: true, force: true });
     fs.renameSync(gecici, kabuk.guncelKlasor);
-    const { dialog } = require('electron');
+    gunluk(`indirildi ${bilgi.masaustu}`);
     const secim = await dialog.showMessageBox(ana, {
       type: 'info',
       title: 'Güncelleme hazır',
       message: `Yeni sürüm indirildi (${bilgi.masaustu}).`,
-      detail: 'Şimdi yeniden başlatılsın mı? Oda bağlantın yeniden açılınca devam eder.',
+      detail: 'Şimdi yeniden başlatılsın mı? Açık oda yeniden açılır.',
       buttons: ['Yeniden başlat', 'Sonra'],
       defaultId: 0,
     });
     if (secim.response === 0) {
-      app.relaunch({ args: [...process.argv.slice(1).filter((a) => !/^https?:\/\//.test(a)), ana.webContents.getURL()] });
+      const adres = ana.webContents.getURL();
+      app.relaunch({ args: [...process.argv.slice(1).filter((a) => !/^https?:\/\//.test(a)), ...(adres.startsWith('http') ? [adres] : [])] });
       app.exit(0);
     }
   } catch (err) {
-    console.error('Güncelleme indirilemedi:', err.message);
+    gunluk(`hata ${kok}: ${err.message}`);
+    bildir('error', 'Güncelleme indirilemedi.', err.message);
+  } finally {
+    guncellemeSuruyor = false;
   }
 }
 
-// Son girilen odanın sunucusu: açılış ekranı oradaki açık odaları listeliyor.
+// ---- sunucuyu bulma ------------------------------------------------------------------
+// Son girilen odanın sunucusu ve ntfy.sh konusu (tünel adresi değişince yenisi oradan).
 const ayarDosyasi = path.join(app.getPath('userData'), 'ayar.json');
 function ayarOku() {
   try {
@@ -348,15 +370,62 @@ function ayarOku() {
     return {};
   }
 }
-function sonSunucuyuKaydet(adres) {
+function ayarYaz(ek) {
   try {
-    const u = new URL(adres);
-    if (!u.pathname.startsWith('/room/')) return;
-    fs.writeFileSync(ayarDosyasi, JSON.stringify({ ...ayarOku(), sonSunucu: u.origin }));
-  } catch { /* file:// ya da geçersiz adres */ }
+    fs.writeFileSync(ayarDosyasi, JSON.stringify({ ...ayarOku(), ...ek }));
+  } catch { /* önemli değil */ }
 }
+async function odaSayfasiYuklendi(adres) {
+  let u;
+  try {
+    u = new URL(adres);
+  } catch {
+    return;
+  }
+  if (!u.protocol.startsWith('http') || !u.pathname.startsWith('/room/')) return;
+  ayarYaz({ sonSunucu: u.origin });
+  guncellemeDenetle(u.origin);
+  try {
+    const { konu } = await (await fetch(`${u.origin}/kesif.json`, { signal: AbortSignal.timeout(5000) })).json();
+    if (konu) ayarYaz({ konu });
+  } catch { /* eski sunucu */ }
+}
+
+// ntfy.sh'deki son duyurulan adres (host'un güncel tünel adresi).
+async function ntfyAdresi(konu) {
+  if (!konu) return null;
+  try {
+    const metin = await (await fetch(`https://ntfy.sh/${konu}/json?poll=1&since=12h`, { signal: AbortSignal.timeout(5000) })).text();
+    const mesajlar = metin.trim().split('\n').filter(Boolean).map((s) => JSON.parse(s)).filter((m) => m.event === 'message');
+    const son = mesajlar.at(-1)?.message?.trim();
+    return /^https?:\/\//.test(son || '') ? son : null;
+  } catch {
+    return null;
+  }
+}
+
+// Açılış ekranı için bilinen sunucular: sende çalışan, ntfy'deki güncel, son girilen.
+async function sunucular() {
+  const ayar = ayarOku();
+  const guncel = await ntfyAdresi(ayar.konu);
+  if (guncel && guncel !== ayar.sonSunucu) ayarYaz({ sonSunucu: guncel });
+  return [...new Set(['http://127.0.0.1:7000', guncel, ayar.sonSunucu].filter(Boolean))];
+}
+ipcMain.handle('kabuk:sunucular', () => sunucular());
 ipcMain.on('kabuk:son-sunucu', (e) => { e.returnValue = ayarOku().sonSunucu || null; });
 ipcMain.on('kabuk:surum', (e) => { e.returnValue = kabuk.surum; });
+// "Güncellemeleri denetle" düğmesi: yerel sunucu (host'ta) ya da bulunan sunucu.
+ipcMain.handle('kabuk:guncelle', async () => {
+  const liste = await sunucular();
+  let kok = null;
+  for (const s of liste) {
+    try {
+      const yanit = await fetch(`${s}/indir/surum.json`, { signal: AbortSignal.timeout(4000) });
+      if (yanit.ok) { kok = s; break; }
+    } catch { /* sıradaki */ }
+  }
+  await guncellemeDenetle(kok, { elle: true });
+});
 
 // birlikteizle://<oda adresi> bağlantısı uygulamayı açsın. Tarayıcıdaki "Masaüstü
 // uygulamasında aç" düğmesi bu şemayı kullanıyor.
@@ -549,8 +618,7 @@ app.whenReady().then(() => {
   // Dış bağlantılar (yardım linkleri) uygulamanın içinde değil tarayıcıda açılsın.
   ana.webContents.on('did-finish-load', () => {
     const adres = ana.webContents.getURL();
-    guncellemeDenetle(adres);
-    sonSunucuyuKaydet(adres);
+    odaSayfasiYuklendi(adres);
   });
   // stremio:// gibi uygulama bağlantıları ("Stremio'ya bağlan") işletim sistemine gitsin.
   ana.webContents.on('will-navigate', (e, url) => {
