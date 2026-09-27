@@ -252,6 +252,14 @@
     </main>
   </div>
 
+  <dialog id="pref-dialog">
+    <form method="dialog" class="settings">
+      <h2>Hangi görüntü kalitesini tercih edersin?</h2>
+      <p class="muted small">Kalite listesinde bu kalite en üstte olur ve önce onun kaynakları aranır. Sonra Ayarlar'dan değiştirebilirsin.</p>
+      <div id="pref-choices" class="pref-choices"></div>
+    </form>
+  </dialog>
+
   <dialog id="net-dialog">
     <form method="dialog" class="settings">
       <h2>İnternet kullanımı</h2>
@@ -268,6 +276,10 @@
         <p id="hw-status" class="small">Donanım hızlandırma kontrol ediliyor…</p>
         <label class="check"><input type="checkbox" id="keep-quality"> <span>Görüntü kalitesini koru</span> <span id="keep-quality-note" class="info-i" tabindex="0">ⓘ</span></label>
         <label class="check"><input type="checkbox" id="set-seek-preview"> <span>Çubukta önizleme resmi göster</span> <span class="info-i" tabindex="0" title="Çubuğun üstünde gezinince o anın küçük resmi çıkar. Torrentte o dakikanın parçası da indirilir; internet yavaşsa kapat.">ⓘ</span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Görüntü kalitesi</legend>
+        <label class="field inline"><span>Tercih ettiğin kalite (listede en üstte)</span> <select id="set-pref-quality"></select></label>
       </fieldset>
       <fieldset>
         <legend>Kısayollar</legend>

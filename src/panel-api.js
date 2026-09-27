@@ -29,6 +29,7 @@ export function createPanelApp({
   onRoomCreated = () => {},
   relayStats = () => null,
   gecmis = { liste: () => [], izlenenler: () => [] },
+  tercih = { kalite: () => null },
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -172,6 +173,7 @@ export function createPanelApp({
 
   // Daha önce oda açılan film ve diziler (en yenisi başta).
   app.get('/api/gecmis', (req, res) => res.json(gecmis.liste()));
+  app.get('/api/tercih', (req, res) => res.json({ kalite: tercih.kalite() }));
 
   app.get('/api/streams', wrap(async (req, res) => {
     const { type, id, retry } = req.query;
@@ -214,9 +216,10 @@ export function createPanelApp({
       // başlıyor: hangisi seçilirse seçilsin oda açılınca beklemeden oynasın. En iyi aday +
       // en çok kaynaklı 3 tek bölüm; seçilmeyenleri oda açılınca temizlik kapatıyor.
       entry.isitildi ||= new Set();
-      // Eldeki listenin ilk 6'sı: önce 4K (2160p) içinden en çok kaynaklılar, 4K yetmezse
+      // Eldeki listenin ilk 6'sı: önce tercih edilen kalite (yoksa 4K) içinden en çok kaynaklılar, yetmezse
       // diğerleri. Sonra gelen addon daha iyisini getirirse o da açılıyor (toplam en fazla 10).
-      const k4 = (s) => (s.quality === '2160p' ? 1 : 0);
+      const hedef = tercih.kalite() || '2160p';
+      const k4 = (s) => (s.quality === hedef ? 1 : 0);
       const adaylar = entry.streams.filter((s) => s.kind === 'torrent')
         .sort((a, b) => k4(b) - k4(a) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0)).slice(0, 6);
       for (const s of adaylar) {

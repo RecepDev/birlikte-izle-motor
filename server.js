@@ -24,6 +24,7 @@ import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
 import { createGiris } from './src/giris.js';
+import { createTercih } from './src/tercih.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
 import { setExtraSources } from './src/streams.js';
 import { createRoomManager } from './src/rooms.js';
@@ -63,6 +64,7 @@ const rooms = createRoomManager();
 const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
 const kesif = createKesif({ file: path.join(DATA, 'kesif.json'), log });
 const giris = createGiris({ file: path.join(DATA, 'giris.json'), log });
+const tercih = createTercih({ file: path.join(DATA, 'tercih.json'), log });
 const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), log });
 // Ek tracker'lar yeni açılan torrent'lere ekleniyor; Stremio'nun peer arama sınırı yükseltiliyor.
 setInterval(() => setExtraSources(torrentHiz.kaynaklar()), 60_000).unref();
@@ -189,6 +191,11 @@ socketCtl = attachSocket(io, {
         if (!/^[0-9a-f]{40}$/.test(infoHash)) return { error: 'badStream' };
         await stremioLocal.removeTorrent({ infoHash });
         return { reply: { ok: true }, msgs: [] };
+      },
+      // Host'un kalite tercihi: "Oda aç" ekranı listeyi ve denetim sırasını buna göre yapıyor.
+      setPreferredQuality: (room, uid, p) => {
+        if (uid !== room.hostUserId) return { reply: { ok: false }, msgs: [] };
+        return { reply: { ok: tercih.ayarla(p?.quality) }, msgs: [] };
       },
       // Tepki emojisi: herkese yayılır, videonun üstünde uçar.
       react: (room, uid, p) => {
@@ -546,6 +553,7 @@ const panelServer = http.createServer(
       refreshSubtitles(room);
     },
     gecmis,
+    tercih,
     relayStats: (roomId) => relay.stats(roomId),
   }),
 );

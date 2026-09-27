@@ -878,7 +878,13 @@ if (deviceCaps) {
 }
 // Kalite sırası: en yüksek çözünürlük en üstte (4K/2160p), aynı kalitede çok kaynaklı önce.
 const QUALITY_RANK = ['2160p', '1440p', '1080p', '720p', '576p', '480p', '360p'];
-const qualityRank = (q) => { const i = QUALITY_RANK.indexOf(q); return i < 0 ? QUALITY_RANK.length : i; };
+// Kişinin tercih ettiği kalite (ilk girişte soruluyor, Ayarlar'dan değişiyor) hep en üstte.
+let preferredQuality = ['2160p', '1080p', '720p'].includes(storage.get('tercihKalite')) ? storage.get('tercihKalite') : null;
+const qualityRank = (q) => {
+  if (preferredQuality && q === preferredQuality) return -1;
+  const i = QUALITY_RANK.indexOf(q);
+  return i < 0 ? QUALITY_RANK.length : i;
+};
 const byQualityThenSeeders = (a, b) => qualityRank(a.quality) - qualityRank(b.quality) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0);
 
 function renderQualityResFilter(streams) {
@@ -1922,6 +1928,52 @@ socket.on('reaction', ({ emoji, name }) => {
   playerEl.append(node);
   setTimeout(() => node.remove(), 2600);
 });
+
+// ---- Tercih edilen kalite: uygulamada ilk girişte soruluyor, kaydediliyor. Kalite listesinde
+// o kalite en üstte; host'ta o kalitenin en çok kaynaklı torrent'leri kendiliğinden denetleniyor.
+const QUALITY_CHOICES = [['2160p', '4K (2160p)'], ['1080p', '1080p'], ['720p', '720p']];
+function setPreferredQuality(q) {
+  preferredQuality = q;
+  storage.set('tercihKalite', q);
+  $('#set-pref-quality').value = q;
+  if (isHost()) request('setPreferredQuality', { quality: q }).catch(() => {});
+  preferredCheckedFor = null;
+  renderQualityTab();
+  checkPreferredStreams();
+}
+function askPreferredQuality() {
+  if (!state.room || preferredQuality || !window.masaustuSes || $('#pref-dialog').open || document.querySelector('dialog[open]')) return;
+  $('#pref-choices').replaceChildren(...QUALITY_CHOICES.map(([q, label]) => el('button', {
+    type: 'button', class: q === '2160p' ? 'primary' : '', text: label,
+    onclick: () => { setPreferredQuality(q); $('#pref-dialog').close(); },
+  })));
+  $('#pref-dialog').showModal();
+}
+$('#set-pref-quality').replaceChildren(el('option', { value: '', text: 'Seçilmedi' }),
+  ...QUALITY_CHOICES.map(([q, label]) => el('option', { value: q, text: label })));
+$('#set-pref-quality').value = preferredQuality || '';
+$('#set-pref-quality').addEventListener('change', (e) => { if (e.target.value) setPreferredQuality(e.target.value); });
+
+// Host: tercih edilen kalitenin en çok kaynaklı 4 torrent'i gerçekten denenir (bağlanan kişi, hız).
+let preferredCheckedFor = null;
+let preferredSent = false;
+function checkPreferredStreams() {
+  if (!isHost() || !preferredQuality || !state.room?.streams?.length) return;
+  // Oda aç ekranı da bilsin (host olunca bir kez).
+  if (!preferredSent) {
+    preferredSent = true;
+    request('setPreferredQuality', { quality: preferredQuality }).catch(() => {});
+  }
+  const key = `${state.room.contentId}|${preferredQuality}`;
+  if (preferredCheckedFor === key) return;
+  preferredCheckedFor = key;
+  const top = state.room.streams
+    .filter((s) => s.kind === 'torrent' && s.quality === preferredQuality && !streamChecks.has(s.streamId))
+    .sort((a, b) => (Number(b.seeders) || 0) - (Number(a.seeders) || 0))
+    .slice(0, 4);
+  for (const s of top) checkStream(s.streamId);
+}
+setInterval(() => { askPreferredQuality(); checkPreferredStreams(); }, 3000);
 
 // ---- content search (host only): switch the room to a different title ----
 let searchSeq = 0;

@@ -29,7 +29,14 @@ const QUALITIES = ['2160p', '1080p', '720p'];
 let qualityFilter = localStorage.getItem('odaAcKalite') || '';
 const qualityOf = (s) => (QUALITIES.includes(s.quality) ? s.quality : 'diger');
 // Liste ve denetim sırası: önce 4K, aynı kalitede çok kaynaklı önce.
-const siraQ = (s) => { const i = QUALITIES.indexOf(s.quality); return i < 0 ? 9 : i; };
+// Tercih edilen kalite (odada seçiliyor) en üstte, sonra 4K, 1080p, 720p.
+let tercihKalite = null;
+const siraQ = (s) => {
+  if (tercihKalite && s.quality === tercihKalite) return -1;
+  const i = QUALITIES.indexOf(s.quality);
+  return i < 0 ? 9 : i;
+};
+api('/api/tercih').then((t) => { tercihKalite = t?.kalite || null; render(); }).catch(() => {});
 const siraliStream = (a, b) => siraQ(a) - siraQ(b) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0);
 
 // Bir addon (yeniden) cevap verince o addon'un eski sonuçlarının yerini alıyor.
