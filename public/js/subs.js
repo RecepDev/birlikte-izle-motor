@@ -43,7 +43,16 @@ export function createSubs({
     .map((t, i) => ({ t, i }))
     .sort((a, b) => embeddedRank(a.t) - embeddedRank(b.t) || a.i - b.i)
     .map(({ t }) => t);
-  window.addEventListener('masaustu-gomulu', () => render());
+  // Parça listesi gelince (dosya yüklendi) paylaşılan gömülü seçimi eşleştir.
+  window.addEventListener('masaustu-gomulu', () => apply());
+  // Gömülü altyazı, uygulamalar arasında "dil + o dildeki sırası" ile anlatılıyor:
+  // mpv ile ExoPlayer'ın parça numaraları farklı, dosyadaki sıra aynı.
+  const embeddedKey = (track) => {
+    const label = track.lang ? langLabel(track.lang) : 'Bilinmeyen';
+    const same = embeddedTracks().filter((t) => (t.lang ? langLabel(t.lang) : 'Bilinmeyen') === label);
+    return `gomulu:${label}:${Math.max(0, same.indexOf(track))}`;
+  };
+  const embeddedIdForKey = (key) => embeddedTracks().find((t) => embeddedKey(t) === key)?.id ?? null;
   let reloadCount = 0;
   const originals = new WeakMap();
   let size = Number(storage.get('cueSize')) || 1;
@@ -177,24 +186,21 @@ export function createSubs({
     // Masaüstü kabuğunda altyazıyı mpv çiziyor: mpv yerel (native) bir pencerede
     // çizdiği için ne <track> ipuçları ne de bu HTML katmanı videonun üstüne gelebiliyor.
     window.masaustuAltyazi?.uygula(eff.subId && findSub(eff.subId) ? srcFor(eff.subId) : null, eff.offset);
+    // Dosyanın içindeki altyazı (host'un ya da kişisel seçim): oynatıcı çiziyor.
+    const want = eff.subId?.startsWith('gomulu:') ? embeddedIdForKey(eff.subId) : null;
+    if (want !== embeddedChosen) {
+      window.masaustuGomulu?.sec(want || '');
+      embeddedChosen = want;
+    }
   }
 
-  function clearEmbedded() {
-    if (embeddedChosen === null) return;
-    window.masaustuGomulu?.sec('');
-    embeddedChosen = null;
-  }
-
-  function chooseEmbedded(id) {
-    personal = { subId: null, offset: 0 };
-    apply();
-    window.masaustuGomulu?.sec(id);
-    embeddedChosen = id;
-    render();
+  // Host seçerse herkese gider (her uygulama aynı dili kendi listesinde bulur),
+  // misafir seçerse yalnızca onda.
+  function chooseEmbedded(track) {
+    choose(embeddedKey(track));
   }
 
   async function choose(subId) {
-    clearEmbedded();
     const localOnly = localFiles.some((f) => f.subId === subId);
     if (isHost() && !localOnly) {
       personal = null;
@@ -272,7 +278,7 @@ export function createSubs({
     const offsetText = `${eff.offset > 0 ? '+' : ''}${eff.offset.toFixed(1)} sn`;
     const mode = personal
       ? el('div', { class: 'row' }, el('span', { text: '👤 Kişisel seçim (host değişiklikleri sana uygulanmıyor)' }),
-        el('button', { type: 'button', text: "Host'unkine dön", onclick: () => { clearEmbedded(); personal = null; apply(); } }))
+        el('button', { type: 'button', text: "Host'unkine dön", onclick: () => { personal = null; apply(); } }))
       : el('div', { class: 'muted small', text: isHost() ? 'Seçtiğin altyazı herkese uygulanır.' : "Host'un seçimini izliyorsun. Kendin seçersen kişisel moda geçersin." });
 
     const groups = new Map();
@@ -303,11 +309,11 @@ export function createSubs({
         el('ul', {}, ...realEmbedded.map((t, i) => el('li', {},
           el('button', {
             type: 'button',
-            class: embeddedChosen === t.id ? 'current' : '',
-            onclick: () => chooseEmbedded(t.id),
+            class: eff.subId === embeddedKey(t) ? 'current' : '',
+            onclick: () => chooseEmbedded(t),
           },
           el('span', { text: t.title || (t.lang ? langLabel(t.lang) : `Altyazı ${i + 1}`) }),
-          el('span', { class: 'muted small', text: [t.lang ? langLabel(t.lang) : '', 'sadece sende'].filter(Boolean).join(' · ') }))))),
+          el('span', { class: 'muted small', text: [t.lang ? langLabel(t.lang) : '', isHost() ? 'herkese' : 'sadece sende'].filter(Boolean).join(' · ') }))))),
       ]
       : [];
     const tracks = audioTracks();
@@ -351,6 +357,10 @@ export function createSubs({
       mode,
       embedded ? el('div', { class: 'row' }, el('span', { text: '💬 Bu dosyada gömülü altyazı var' }),
         el('span', { class: 'info-i', tabindex: '0', title: embedded }, 'i')) : null,
+      eff.subId?.startsWith('gomulu:') && !window.masaustuGomulu
+        ? el('div', { class: 'row warning-row' },
+          el('span', { text: `📦 Host dosyanın içindeki altyazıyı seçti (${eff.subId.split(':')[1]}). Tarayıcı bunu gösteremiyor: aşağıdan bir altyazı seç ya da Birlikte İzle uygulamasını kullan.` }))
+        : null,
       trackFailed
         ? el('div', { class: 'row warning-row' },
           el('span', { text: '⚠️ Altyazı yüklenemedi.' }),
@@ -378,7 +388,7 @@ export function createSubs({
         fileInput,
         el('button', { type: 'button', text: '📄 .srt / .vtt yükle', onclick: () => fileInput.click() }),
         el('span', { class: 'muted small', text: isHost() ? 'herkese eklenir' : 'sadece sende görünür' })),
-      el('ul', {}, el('li', {}, el('button', { type: 'button', class: eff.subId || embeddedChosen !== null ? '' : 'current', onclick: () => choose(null), text: 'Kapalı' }))),
+      el('ul', {}, el('li', {}, el('button', { type: 'button', class: eff.subId ? '' : 'current', onclick: () => choose(null), text: 'Kapalı' }))),
       ...embeddedGroup,
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),

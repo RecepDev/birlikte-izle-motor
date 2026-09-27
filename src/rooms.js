@@ -471,7 +471,9 @@ export class Room {
   setSubtitles(list) {
     this.subtitles = list;
     const msgs = [{ to: 'room', event: 'subtitles', data: { subtitles: this.publicSubtitles() }, urgent: true }];
-    if (this.hostSubtitle && !list.some((s) => s.subId === this.hostSubtitle.subId)) {
+    // Dosyanın içindeki altyazı listede hiç olmuyor: liste yenilenince seçim düşmesin.
+    const embedded = this.hostSubtitle?.subId?.startsWith('gomulu:');
+    if (this.hostSubtitle && !embedded && !list.some((s) => s.subId === this.hostSubtitle.subId)) {
       this.hostSubtitle = null;
       msgs.push({ to: 'room', event: 'hostSubtitle', data: null, urgent: true });
     }
@@ -481,7 +483,12 @@ export class Room {
   setHostSubtitle(userId, { subId = null, offset = 0 } = {}) {
     const denied = this.requireHost(userId);
     if (denied) return denied;
-    const entry = subId === null ? null : this.subtitles.find((s) => s.subId === subId);
+    // "gomulu:<dil>:<sıra>": dosyanın içindeki altyazı. Listede yok; her uygulama aynı dili
+    // kendi oynatıcısının parça listesinden buluyor (masaüstü/telefon uygulaması).
+    const embedded = typeof subId === 'string' && /^gomulu:[^:]{1,40}:\d{1,2}$/.test(subId)
+      ? { subId, label: `${subId.split(':')[1]} (dosyanın içindeki)` }
+      : null;
+    const entry = subId === null ? null : embedded || this.subtitles.find((s) => s.subId === subId);
     if (subId !== null && !entry) return { error: 'badSubtitle' };
     if (!Number.isFinite(offset) || Math.abs(offset) > 600) return { error: 'badOffset' };
     const changed = (this.hostSubtitle?.subId ?? null) !== subId;
