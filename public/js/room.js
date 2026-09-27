@@ -647,11 +647,22 @@ function embeddedSubsText(s) {
 
 // Icons for the quality list; the explanation sits behind an ⓘ.
 function pictureVerdict(s) {
-  const v = pictureVerdictBase(s);
-  const items = [{ icon: v.ok ? '✅' : '⚠️', text: v.text.replace(/^(✅|⚠️)\s*/, '') }];
+  // Uygulamalarda (masaüstü mpv, telefon ExoPlayer) her görüntü ve ses biçimi açılıyor:
+  // "açılır mı" simgeleri gereksiz ve ses için yanıltıcıydı; yalnızca HDR bilgisi kalıyor.
+  const shell = Boolean(window.masaustuSes);
+  const items = [];
+  if (!shell) {
+    const v = pictureVerdictBase(s);
+    items.push({ icon: v.ok ? '✅' : '⚠️', text: v.text.replace(/^(✅|⚠️)\s*/, '') });
+  }
   if (s.hdr) items.push({ icon: '🌗', text: `${s.hdr}: HDR olmayan ekranda karanlık ya da soluk görünebilir (parlaklık ayarı yukarıda).` });
-  if (s.embeddedSubs) items.push({ icon: '💬', text: embeddedSubsText(s) });
-  if (s.audioRisk) {
+  if (s.embeddedSubs) {
+    const langs = s.embeddedSubs.langs || [];
+    items.push({ icon: '💬', text: shell
+      ? `Dosyanın içinde gömülü altyazı var${langs.length ? `: ${langs.join(', ')}` : ''}. Altyazı sekmesinden seçebilirsin.`
+      : embeddedSubsText(s) });
+  }
+  if (s.audioRisk && !shell) {
     items.push(audioNeedsReencode(s)
       ? { icon: '🔇', text: `${s.audioRisk}: tarayıcın bu sesi açamıyor, otomatik Uyumlu moda geçilir (sadece ses dönüştürülür).` }
       : { icon: '🔊', text: `${s.audioRisk}: tarayıcın açabiliyor, orijinal kalite` });
