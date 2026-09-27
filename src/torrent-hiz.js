@@ -10,14 +10,17 @@ import path from 'node:path';
 const STREMIO = 'http://127.0.0.1:11470';
 const LISTE_URL = 'https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt';
 const LISTE_OMRU_MS = 24 * 60 * 60_000;
-// Stremio'nun kendi "ultra hızlı" profiline yakın değerler.
-const HIZLI = { btDownloadSpeedSoftLimit: 25 * 1024 * 1024, btMinPeersForStable: 30, btMaxConnections: 250 };
+// Peer araması 4K'ya yetecek kadar geniş, ama bağlantı sayısı ölçülü: torrent başına 250
+// bağlantı ev modeminin bağlantı tablosunu doldurup evdeki her şeyin internetini kesiyordu
+// (yüzlerce peer'e yükleme de upload hattını tıkıyordu).
+const HIZLI = { btDownloadSpeedSoftLimit: 25 * 1024 * 1024, btMinPeersForStable: 20, btMaxConnections: 80 };
+const PEER_ARAMA = { min: 30, max: 80 };
 
 export function createTorrentHiz({ file, log, fetchImpl = fetch }) {
   let liste = [];
   try {
     const kayit = JSON.parse(fs.readFileSync(file, 'utf8'));
-    liste = Array.isArray(kayit.liste) ? kayit.liste : [];
+    liste = Array.isArray(kayit.liste) ? kayit.liste.slice(0, 20) : [];
     if (Date.now() - (kayit.at || 0) < LISTE_OMRU_MS && liste.length) return api();
   } catch { /* ilk çalıştırma */ }
   tazele();
@@ -26,7 +29,7 @@ export function createTorrentHiz({ file, log, fetchImpl = fetch }) {
   async function tazele() {
     try {
       const metin = await (await fetchImpl(LISTE_URL, { signal: AbortSignal.timeout(10_000) })).text();
-      const yeni = metin.split(/\s+/).filter((t) => /^(udp|https?):\/\/\S+$/.test(t)).slice(0, 40);
+      const yeni = metin.split(/\s+/).filter((t) => /^(udp|https?):\/\/\S+$/.test(t)).slice(0, 20);
       if (!yeni.length) return;
       liste = yeni;
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -41,17 +44,17 @@ export function createTorrentHiz({ file, log, fetchImpl = fetch }) {
     return {
       // "tracker:udp://…" biçiminde, Stremio kaynak listesine eklenecek.
       kaynaklar: () => liste.map((t) => `tracker:${t}`),
-      // Stremio'nun sınırlarını yükseltir (kullanıcı daha yükseğini seçtiyse dokunmaz).
+      // Stremio'nun sınırlarını bu değerlere getirir (eski sürümün yükselttiği 250 bağlantı da iner).
       async stremioAyarla() {
         try {
           const { values } = await (await fetchImpl(`${STREMIO}/settings`, { signal: AbortSignal.timeout(5000) })).json();
-          const degisecek = Object.fromEntries(Object.entries(HIZLI).filter(([k, v]) => !(Number(values?.[k]) >= v)));
+          const degisecek = Object.fromEntries(Object.entries(HIZLI).filter(([k, v]) => Number(values?.[k]) !== v));
           if (!Object.keys(degisecek).length) return false;
           await fetchImpl(`${STREMIO}/settings`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(degisecek), signal: AbortSignal.timeout(5000),
           });
-          log.info('Stremio torrent sınırları yükseltildi', degisecek);
+          log.info('Stremio torrent sınırları ayarlandı', degisecek);
           return true;
         } catch (err) {
           log.warn('Stremio ayarları değiştirilemedi', { error: err.message });
@@ -65,7 +68,7 @@ export function createTorrentHiz({ file, log, fetchImpl = fetch }) {
         try {
           await fetchImpl(`${STREMIO}/${stream.infoHash}/create`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ torrent: { infoHash: stream.infoHash }, peerSearch: { sources, min: 60, max: 250 } }),
+            body: JSON.stringify({ torrent: { infoHash: stream.infoHash }, peerSearch: { sources, ...PEER_ARAMA } }),
             signal: AbortSignal.timeout(15_000),
           });
         } catch (err) {

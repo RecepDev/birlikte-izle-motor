@@ -13,10 +13,23 @@
 const http = require('node:http');
 
 const STREMIO = { host: '127.0.0.1', port: 11470 };
-// Büyük parça (~1 GB, 4K.da ~5 dk): Stremio isteğin aralığını öncelikli indiriyor; küçük parça
-// ilerisini hazırlatmıyordu (hız yüksekken "2 sn hazır"). Kapalı aralık olduğu için birikme yok.
-// Ayarlar'da 20 dakikaya kadar önü hazırlanabildiği için parça 4 GB (4K'da ~20 dk).
-const PARCA = 4 * 1024 * 1024 * 1024;
+// Parça boyu = "Önünü hazırla" süresi kadar video (+%25, +30 sn). Stremio istenen parçanın
+// tamamını tam hızla indiriyor: sabit 4 GB (4K'da ~20 dk) her açılışta/sarmada gigabaytlarca
+// indirip evdeki interneti tıkıyordu; çok küçük parça da ilerisini hazırlatmıyordu.
+const MB = 1024 * 1024;
+const PARCA_EN_AZ = 128 * MB;
+const PARCA_EN_COK = 4 * 1024 * MB;
+let videoSuresi = null; // sn (mpv'den)
+let onbellekSn = 180;
+function parcaBoyu(toplam) {
+  if (!toplam || !videoSuresi) return 256 * MB;
+  const saniyeBasi = toplam / videoSuresi;
+  return Math.round(Math.min(PARCA_EN_COK, Math.max(PARCA_EN_AZ, saniyeBasi * (onbellekSn * 1.25 + 30))));
+}
+function ayarla({ sure, onbellek } = {}) {
+  if (Number.isFinite(sure) && sure > 0) videoSuresi = sure;
+  if (Number.isFinite(onbellek) && onbellek > 0) onbellekSn = onbellek;
+}
 const ACIK_ARALIK = /^bytes=(\d+)-$/;
 
 let sunucu = null;
@@ -60,7 +73,8 @@ async function isle(req, res) {
   let ilk = true;
   let toplam = null;
   while (!kapandi && (toplam === null || konum < toplam)) {
-    const son = toplam === null ? konum + PARCA - 1 : Math.min(toplam - 1, konum + PARCA - 1);
+    const parca = parcaBoyu(toplam);
+    const son = toplam === null ? konum + parca - 1 : Math.min(toplam - 1, konum + parca - 1);
     const cevap = await yukari(yol, `bytes=${konum}-${son}`);
     simdiki = cevap;
     if (ilk) {
@@ -120,4 +134,4 @@ async function vekilAdres(url) {
   return url.replace(/^http:\/\/(127\.0\.0\.1|localhost):11470/, `http://127.0.0.1:${port}`);
 }
 
-module.exports = { vekilAdres };
+module.exports = { vekilAdres, ayarla };

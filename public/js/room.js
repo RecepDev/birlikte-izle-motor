@@ -52,9 +52,9 @@ const state = {
 };
 
 const socket = io({ autoConnect: false, transports: ['websocket', 'polling'] });
-function request(event, payload = {}) {
+function request(event, payload = {}, timeoutMs = 8000) {
   return new Promise((resolve) => {
-    socket.timeout(8000).emit(event, payload, (err, res) => resolve(err ? { error: 'timeout' } : res));
+    socket.timeout(timeoutMs).emit(event, payload, (err, res) => resolve(err ? { error: 'timeout' } : res));
   });
 }
 
@@ -2836,6 +2836,23 @@ $('#open-settings').addEventListener('click', () => {
   $('#set-stop-others').checked = s.stopOtherDownloads !== false;
   renderIntroSettings();
   dialog.showModal();
+  if (isHost()) {
+    request('yuklemeSiniriOku').then((res) => {
+      if (!res?.error) $('#set-upload').value = res.mbps ? String(res.mbps) : '';
+    });
+  }
+});
+$('#set-upload').addEventListener('change', async (e) => {
+  const mbps = e.target.value ? Number(e.target.value) : null;
+  toast('Windows onay penceresi açılıyor: "Evet" de.', 6000);
+  e.target.disabled = true;
+  const res = await request('yuklemeSiniri', { mbps }, 130_000);
+  e.target.disabled = false;
+  if (res?.error) {
+    toast(res.error === 'izinYok' ? 'Onay verilmedi, sınır değişmedi.' : errorText(res.error));
+    const now = await request('yuklemeSiniriOku');
+    e.target.value = now?.mbps ? String(now.mbps) : '';
+  } else toast(res.mbps ? `Stremio yükleme sınırı: ${res.mbps} Mbps` : 'Yükleme sınırı kaldırıldı');
 });
 dialog.addEventListener('change', async (e) => {
   // Bu cihazın ayarları (kalite, donanım) kendi dinleyicilerinde; burası yalnızca oda ayarları.

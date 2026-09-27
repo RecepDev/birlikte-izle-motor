@@ -9,7 +9,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const { vekilAdres } = require('./stremio-vekil.cjs');
+const { vekilAdres, ayarla: vekilAyarla } = require('./stremio-vekil.cjs');
 
 // mpv kurulum yeri kişiden kişiye değişiyor; bilinen yerlere ve PATH'e bakıyoruz.
 const MPV_ADAYLARI = [
@@ -309,6 +309,8 @@ function delikAc(boyut, delikler) {
   }
 }
 
+// Ara katmanın parça boyu için video süresi (bkz. stremio-vekil.cjs).
+let sonVekilSure = null;
 // mpv'den okunan değerleri sayfaya iter. Sayfa bunları <video> gibi görür.
 async function durumDongusu() {
   if (!mpv) return;
@@ -322,6 +324,10 @@ async function durumDongusu() {
       mpv.get('estimated-frame-number'), mpv.get('cache-speed'),
     ].map((p) => p.catch(() => null)));
     if (Number.isFinite(position) && position > 0) sonKonum = position;
+    if (Number.isFinite(duration) && duration !== sonVekilSure) {
+      sonVekilSure = duration;
+      vekilAyarla({ sure: duration, onbellek: onbellekSn() });
+    }
     sonOnbellekSn = Number(cacheSec) || 0;
     ana?.webContents.send('mpv:durum', {
       position: Number(position) || 0,
@@ -562,6 +568,7 @@ ipcMain.on('kabuk:onbellek', (e) => { e.returnValue = onbellekSn(); });
 ipcMain.on('kabuk:onbellek-yaz', (_e, sn) => {
   if (![60, 180, 300, 600, 1200].includes(sn)) return;
   ayarYaz({ onbellekSn: sn });
+  vekilAyarla({ onbellek: sn });
   mpv?.set('demuxer-readahead-secs', sn).catch(() => {});
 });
 // Tercih edilen görüntü kalitesi: açılış ekranında bir kez soruluyor, oda sayfası da okuyor.

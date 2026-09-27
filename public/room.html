@@ -329,6 +329,19 @@
         <label class="field inline"><span>"Sonraki bölüm" düğmesi son % kaçta çıksın</span> <input type="number" id="set-next-pct" min="1" max="30"></label>
         <label class="field inline"><span>Otomatik geçiş son % kaçta (0 = kapalı)</span> <input type="number" id="set-auto-pct" min="0" max="30"></label>
       </fieldset>
+      <fieldset class="local-setting">
+        <legend>Bu bilgisayarın interneti</legend>
+        <label class="field inline"><span>Stremio'nun yükleme (upload) sınırı</span>
+          <select id="set-upload">
+            <option value="">Sınır yok</option>
+            <option value="2">2 Mbps</option>
+            <option value="5">5 Mbps</option>
+            <option value="10">10 Mbps</option>
+            <option value="20">20 Mbps</option>
+            <option value="50">50 Mbps</option>
+          </select></label>
+        <p class="muted small">Stremio indirirken başkalarına da yükler. Ev internetinin yükleme hattı dolunca evdeki her şeyin bağlantısı kesilir. Yükleme hızının yarısı kadar bir sınır iyi olur. Windows yönetici onayı ister. Misafirlere aktarılan video bu sınırdan etkilenmez.</p>
+      </fieldset>
       <fieldset id="intro-settings" hidden>
         <legend>Girişi atla (bu dizi)</legend>
         <p id="intro-settings-state" class="small"></p>

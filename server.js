@@ -28,6 +28,7 @@ import { createTercih } from './src/tercih.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun, bizimMi, yeniMi } from './src/bizim-torrentler.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
 import { createTani } from './src/tani.js';
+import { sinirOku as yuklemeSiniriOku, sinirKoy as yuklemeSiniriKoy } from './src/yukleme-siniri.js';
 import { setExtraSources } from './src/streams.js';
 import { createRoomManager } from './src/rooms.js';
 import { attachSocket } from './src/socket.js';
@@ -159,6 +160,20 @@ socketCtl = attachSocket(io, {
     roomEvents: {
       setHostSubtitle: (room, uid, p) =>
         room.setHostSubtitle(uid, { subId: p.subId ?? null, offset: Number(p.offset ?? 0) }),
+      // Stremio'nun yükleme sınırı (host bilgisayarı, Windows QoS; bkz. src/yukleme-siniri.js).
+      yuklemeSiniriOku: async (room, uid) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        return { reply: { ok: true, mbps: await yuklemeSiniriOku() }, msgs: [] };
+      },
+      yuklemeSiniri: async (room, uid, p) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        const mbps = p.mbps === null ? null : Number(p.mbps);
+        if (mbps !== null && !(mbps >= 1 && mbps <= 100)) return { error: 'badValue' };
+        const res = await yuklemeSiniriKoy(mbps);
+        if (res.error) return { error: res.error };
+        log.info('Stremio yükleme sınırı', { mbps: res.mbps });
+        return { reply: { ok: true, mbps: res.mbps }, msgs: [] };
+      },
       // Tanı kaydı (bkz. src/tani.js): cihaz yolluyor, host kişinin kaydını açabiliyor.
       tani: (room, uid, p) => {
         const user = room.users.get(uid);
