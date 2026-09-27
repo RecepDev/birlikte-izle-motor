@@ -365,8 +365,9 @@ statsTimer.unref();
 
 // Stremio her video isteğinde dosyayı bir kez daha "seçiyor" ve bunları hiç bırakmıyor:
 // uzun izlemede (sarmalar, önizlemeler, yeniden bağlanmalar) yüzlerce kopya birikiyor ve
-// Stremio parça seçerken her birini tek tek dolaşıyor, indirme yavaşlıyor. Birikme çoksa
-// Stremio temiz açılıyor ve izleyenler kaldıkları yerden devam ediyor (en fazla 20 dk'da bir).
+// Stremio parça seçerken her birini tek tek dolaşıyor, indirme yavaşlıyor. Birikme çoksa,
+// izlemeyi kesmemek için yalnızca video duraklatılmışken Stremio temiz açılıyor; oynatılınca
+// kaldığı yerden devam ediyor (en fazla 20 dk'da bir).
 const BIRIKME_SINIRI = 60;
 const BIRIKME_ARALIK_MS = 20 * 60_000;
 let sonBirikmeTemizligi = 0;
@@ -375,7 +376,7 @@ const birikmeTimer = setInterval(async () => {
   const room = rooms.list().find((r) => r.users && [...r.users.values()].some((u) => u.connected));
   if (!room) return;
   const stream = room.streams.find((s) => s.streamId === room.hostStreamId);
-  if (stream?.kind !== 'torrent') return;
+  if (stream?.kind !== 'torrent' || !room.playback?.paused) return;
   let secim = 0;
   try {
     const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(5000) })).json();
