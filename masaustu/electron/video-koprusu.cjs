@@ -39,7 +39,9 @@ function yuklemeDurumu(deger) {
 // readyState: sayfa >=1 ile "medya var mı", >=3 ile "oynatılabilir mi" diye bakıyor.
 function readyState() {
   if (!durum.loaded || durum.duration === null) return 0;
-  if (durum.cacheStalled) return 2;
+  // Sarılırken (yeni yerin verisi torrent'ten gelirken) de "hazır değil": oda o kişiyi bekliyor.
+  // Yoksa kişi "hazır" görünüp geride kalıyor, senkron tekrar tekrar sarıp atlama yapıyordu.
+  if (durum.cacheStalled || durum.seeking) return 2;
   return 4;
 }
 
@@ -74,6 +76,8 @@ function bagla(video) {
     durumZamani = Date.now();
     durum.seeking = true;
     ipcRenderer.send('mpv:sar', t);
+    yolla('seeking');
+    yolla('waiting');
   });
   tanim('duration', () => (durum.duration === null ? NaN : durum.duration));
   tanim('paused', () => durum.paused);
@@ -288,7 +292,7 @@ ipcRenderer.on('mpv:durum', (_e, next) => {
   if (yukleniyor && readyState() >= 3 && durum.width > 0) yuklemeDurumu(false);
   else if (yukleniyor) yerlestir();
   if (oncekiDuraklat !== durum.paused) yolla(durum.paused ? 'pause' : 'play');
-  if (durum.cacheStalled) yolla('waiting');
+  if (durum.cacheStalled || durum.seeking) yolla('waiting');
   yolla('timeupdate');
 });
 ipcRenderer.on('mpv:sarildi', () => yolla('seeked'));
