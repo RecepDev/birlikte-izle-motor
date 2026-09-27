@@ -25,6 +25,11 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         linktenAc(intent)?.let { return odayaGit(it) }
         ekraniKur()
+        // Açılışta da güncellemeye bak: son girilen odanın sunucusuna soruyoruz
+        // (odaya girince de ayrıca bakılıyor).
+        kayit.getString("sonLink", null)?.let { Uri.parse(it) }?.takeIf { it.scheme?.startsWith("http") == true }?.let {
+            Guncelleme.apkDenetle(this, "${it.scheme}://${it.authority}")
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
