@@ -187,6 +187,11 @@ function renderQualityChips() {
   );
 }
 
+// Geri: arama/bölüm listesine (geçmiş varsa oraya, yoksa arama sayfasına).
+$('#geri').addEventListener('click', () => {
+  if (history.length > 1 && document.referrer) history.back();
+  else location.href = '/ara';
+});
 $('#filter').addEventListener('input', render);
 $('#refresh-addons').addEventListener('click', refreshAll);
 

@@ -14,7 +14,10 @@ function kart(sonuc, tiklama, alt = sonuc.year) {
 
 const odayaGit = (type, id) => { location.href = `/new?type=${type}&id=${encodeURIComponent(id)}`; };
 
-async function bolumleriAc(dizi) {
+// Geri dönülebilsin: bölüm listesi tarayıcı geçmişine bir adım olarak ekleniyor (Geri tuşu,
+// fare geri tuşu, "Aramaya dön"); kaynak listesinden (/new) geri gelince de aynı yere dönülüyor.
+async function bolumleriAc(dizi, { gecmiseEkle = true } = {}) {
+  if (gecmiseEkle) history.pushState({ dizi: { id: dizi.id, name: dizi.name, last: dizi.last || null } }, '', '#bolumler');
   gorunur('#filmler-kart', false);
   gorunur('#diziler-kart', false);
   gorunur('#gecmis-kart', false);
@@ -54,6 +57,7 @@ async function bolumleriAc(dizi) {
 
 async function ara() {
   const q = $('#ara-input').value.trim();
+  try { sessionStorage.setItem('araQ', q); } catch { /* yok */ }
   gorunur('#bolumler-kart', false);
   if (!q) {
     $('#ara-durum').textContent = 'Aramak için yaz.';
@@ -92,4 +96,12 @@ gecmisiGoster();
 
 $('#ara-btn').addEventListener('click', ara);
 $('#ara-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') ara(); });
-$('#bolum-geri').addEventListener('click', ara);
+$('#bolum-geri').addEventListener('click', () => (history.state?.dizi ? history.back() : ara()));
+window.addEventListener('popstate', (e) => {
+  if (e.state?.dizi) bolumleriAc(e.state.dizi, { gecmiseEkle: false });
+  else ara();
+});
+// Kaynak listesinden geri gelindi ya da sayfa yenilendi: son arama ve açık dizi geri gelsin.
+try { $('#ara-input').value = sessionStorage.getItem('araQ') || ''; } catch { /* yok */ }
+if (history.state?.dizi) bolumleriAc(history.state.dizi, { gecmiseEkle: false });
+else if ($('#ara-input').value.trim()) ara();
