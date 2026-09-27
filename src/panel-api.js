@@ -279,6 +279,13 @@ export function createPanelApp({
     });
     log.info('Oda açıldı', { roomId: room.id, content: id });
     onRoomCreated(room);
+    // Seçim ekranında önceden açılan diğer torrent'ler hemen kapansın: seçilen videoyla hızı
+    // paylaşıp açılışını geciktiriyorlardı (temizlik ayarını ve 5 sn'lik turu beklemeden).
+    const secilen = streams.find((s) => s.streamId === streamId)?.infoHash;
+    const entry = streamCache.get(`${type}|${id}`);
+    for (const hash of entry?.isitildi || []) {
+      if (hash !== secilen) stremioLocal.removeTorrent({ infoHash: hash }).catch(() => {});
+    }
     res.json({
       roomId: room.id,
       creatorToken,

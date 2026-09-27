@@ -619,6 +619,7 @@ const subs = createSubs({
   onSwitchCompat: () => startCompat(),
   reencodeBlocked: () => qualityBlocked && Boolean(myStream()?.multiAudio),
   onForceCompat: () => startCompat({ allowReencode: true }),
+  streamKey: () => myStreamId(),
 });
 
 // Video host üzerinden (relay) geliyorsa başlığın yanında rozet; kendi Stremio'su olabilecek
@@ -2707,6 +2708,9 @@ $('#back-close').addEventListener('click', async () => {
   state.ended = true;
   goBack();
 });
+
+$('#set-auto-subs').checked = storage.get('otoAltyazi') !== '0';
+$('#set-auto-subs').addEventListener('change', (e) => storage.set('otoAltyazi', e.target.checked ? '1' : '0'));
 
 const dialog = $('#settings-dialog');
 $('#open-settings').addEventListener('click', () => {

@@ -12,6 +12,7 @@ export function createSubs({
   audioTracks = () => [], onSelectAudio = () => {},
   multiAudioLikely = () => false, compatActive = () => false, onSwitchCompat = () => {},
   reencodeBlocked = () => false, onForceCompat = () => {},
+  streamKey = () => null,
 }) {
   let list = [];
   let hostSel = null; // { subId, offset } | null, shared by the host
@@ -204,7 +205,41 @@ export function createSubs({
     choose(embeddedKey(track));
   }
 
-  async function choose(subId) {
+  // ---- Otomatik altyazı (host, Ayarlar'dan kapatılabilir): kaynak seçilince önce dosyanın
+  // içindeki (gömülü) Türkçe, yoksa listedeki (harici) Türkçe, o da yoksa hiçbiri seçilir.
+  // Gömülü parça listesi dosya açılınca geliyor; gelmezse 12 sn sonra harici Türkçeye bakılır.
+  // Kişi o kaynakta elle seçim yaptıysa dokunulmaz.
+  let autoDoneFor = null;
+  let autoWaitFrom = null;
+  let manualFor = null;
+  const isTurkishSub = (s) => langLabel(s.lang) === langLabel('tur');
+  function autoPick() {
+    const key = streamKey();
+    if (!key || !isHost() || storage.get('otoAltyazi') === '0') return;
+    if (autoDoneFor === key || manualFor === key) return;
+    if (autoWaitFrom?.key !== key) autoWaitFrom = { key, at: Date.now() };
+    const gomuluTr = embeddedTracks().find((t) => embeddedRank(t) === 0);
+    if (gomuluTr) {
+      autoDoneFor = key;
+      if (hostSel?.subId !== embeddedKey(gomuluTr)) choose(embeddedKey(gomuluTr), { auto: true });
+      return;
+    }
+    const embeddedKnown = embeddedTracks().length > 0;
+    if (!embeddedKnown && Date.now() - autoWaitFrom.at < 12_000) return;
+    const harici = list.find(isTurkishSub);
+    if (!harici && !list.length && Date.now() - autoWaitFrom.at < 20_000) return; // liste henüz gelmedi
+    autoDoneFor = key;
+    if (harici) {
+      if (hostSel?.subId !== harici.subId) choose(harici.subId, { auto: true });
+    } else if (hostSel?.subId?.startsWith('gomulu:')) {
+      // Önceki kaynağın gömülü altyazısı bu dosyada yok: kapat.
+      choose(null, { auto: true });
+    }
+  }
+  setInterval(autoPick, 1500);
+
+  async function choose(subId, { auto = false } = {}) {
+    if (!auto) manualFor = streamKey();
     const localOnly = localFiles.some((f) => f.subId === subId);
     if (isHost() && !localOnly) {
       personal = null;
