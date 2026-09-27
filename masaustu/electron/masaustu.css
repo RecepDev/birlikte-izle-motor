@@ -99,6 +99,6 @@ html, body { overflow: hidden !important; }
 }
 @keyframes mpv-don { to { transform: rotate(360deg); } }
 
-/* Tam ekran Altyazı/Dil kutusu: HTML mpv'nin üstüne çıkamadığı için video kutunun
-   solunda kalan alana sığıyor; kutu sağ altta, Stremio'daki boyutta. */
-.player.subs-panel-open { padding-right: calc(var(--subs-panel-w) + 24px) !important; }
+/* Tam ekran Altyazı/Dil kutusu videonun üstünde durur: mpv penceresinde kutu kadar
+   delik açılıyor (bkz. ana.cjs delikAc), video küçülmüyor. */
+.player.subs-panel-open > .tab-body[data-tab="subs"] { z-index: 5; }

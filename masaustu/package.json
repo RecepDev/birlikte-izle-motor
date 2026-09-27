@@ -1,9 +1,9 @@
-{
+﻿{
   "name": "birlikte-izle-masaustu",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "private": true,
   "type": "module",
-  "description": "Birlikte İzle masaüstü istemcisi: Electron kabuğu + gömülü mpv",
+  "description": "Birlikte Ä°zle masaÃ¼stÃ¼ istemcisi: Electron kabuÄŸu + gÃ¶mÃ¼lÃ¼ mpv",
   "main": "electron/baslat.cjs",
   "scripts": {
     "start": "electron .",

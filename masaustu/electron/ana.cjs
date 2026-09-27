@@ -200,8 +200,41 @@ function hizala(rect) {
   };
   // Aynı sınırları tekrar yazmak pencereyi boşuna taşıyor ve oynatmayı takıltıyor.
   const simdiki = videoPenceresi.getBounds();
-  if (simdiki.x === yeni.x && simdiki.y === yeni.y && simdiki.width === yeni.width && simdiki.height === yeni.height) return;
-  videoPenceresi.setBounds(yeni);
+  if (!(simdiki.x === yeni.x && simdiki.y === yeni.y && simdiki.width === yeni.width && simdiki.height === yeni.height)) {
+    videoPenceresi.setBounds(yeni);
+  }
+  delikAc(yeni, rect.delik ? { ...rect.delik, x: b.x + rect.delik.x - yeni.x, y: b.y + rect.delik.y - yeni.y } : null);
+}
+
+// Altyazı kutusu mpv'nin üstünde görünsün diye mpv penceresinin o kısmını kesiyoruz
+// (pencere biçimi). Video küçülmediği için altyazının yeri kutu açık/kapalı aynı.
+let sonBicim = '';
+function delikAc(boyut, d) {
+  const w = boyut.width;
+  const h = boyut.height;
+  let parcalar = [{ x: 0, y: 0, width: w, height: h }];
+  if (d) {
+    const sol = Math.max(0, Math.round(d.x));
+    const ust = Math.max(0, Math.round(d.y));
+    const sag = Math.min(w, Math.round(d.x + d.width));
+    const alt = Math.min(h, Math.round(d.y + d.height));
+    if (sag > sol && alt > ust) {
+      parcalar = [
+        { x: 0, y: 0, width: w, height: ust },
+        { x: 0, y: alt, width: w, height: h - alt },
+        { x: 0, y: ust, width: sol, height: alt - ust },
+        { x: sag, y: ust, width: w - sag, height: alt - ust },
+      ].filter((p) => p.width > 0 && p.height > 0);
+    }
+  }
+  const anahtar = JSON.stringify(parcalar);
+  if (anahtar === sonBicim) return;
+  sonBicim = anahtar;
+  try {
+    videoPenceresi.setShape(parcalar);
+  } catch (e) {
+    console.error('setShape:', e.message);
+  }
 }
 
 // mpv'den okunan değerleri sayfaya iter. Sayfa bunları <video> gibi görür.

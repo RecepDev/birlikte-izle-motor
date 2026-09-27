@@ -37,13 +37,21 @@ function olcumKur() {
       bekleyen = false;
       const r = alan.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return;
-      const olcu = `${Math.round(r.x)}|${Math.round(r.y)}|${Math.round(r.width)}|${Math.round(r.height)}`;
+      // Tam ekran Altyazı/Dil kutusu açıksa mpv penceresinde o kutu kadar delik açılıyor:
+      // video küçülmüyor, altyazının yeri kutu kapanınca da aynı kalıyor.
+      const k = document.querySelector('.player.subs-panel-open > .tab-body[data-tab="subs"]')?.getBoundingClientRect();
+      const delik = k && k.width > 0 && k.height > 0 ? { x: k.x, y: k.y, width: k.width, height: k.height } : null;
+      const olcu = [r.x, r.y, r.width, r.height, delik?.x, delik?.y, delik?.width, delik?.height].map((n) => Math.round(n ?? -1)).join('|');
       if (olcu === son) return;
       son = olcu;
-      ipcRenderer.send('kabuk:video-alani', { x: r.x, y: r.y, width: r.width, height: r.height });
+      ipcRenderer.send('kabuk:video-alani', { x: r.x, y: r.y, width: r.width, height: r.height, delik });
     });
   };
   new ResizeObserver(bildir).observe(alan);
+  const altyaziKutusu = document.querySelector('.tab-body[data-tab="subs"]');
+  if (altyaziKutusu) new ResizeObserver(bildir).observe(altyaziKutusu);
+  const oynatici = alan.closest('.player');
+  if (oynatici) new MutationObserver(bildir).observe(oynatici, { attributes: true, attributeFilter: ['class'] });
   ipcRenderer.on('kabuk:olcum-iste', bildir);
   window.addEventListener('scroll', bildir, true);
   bildir();
