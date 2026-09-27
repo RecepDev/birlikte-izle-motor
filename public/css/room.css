@@ -513,3 +513,5 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 @media (max-width: 900px) and (orientation: portrait) {
   html:not(.mobil-tam) .player:not(:fullscreen) :is(#btn-subs-panel, #btn-chat, #btn-info, #btn-more, #btn-compat, #btn-aspect) { display: none !important; }
 }
+.search-results li.ep-item { display: flex; gap: 12px; align-items: center; }
+.search-results .ep-resim { width: 104px; height: 58px; object-fit: cover; border-radius: 6px; flex: none; background: #0d0e12; }

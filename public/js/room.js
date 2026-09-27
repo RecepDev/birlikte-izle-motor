@@ -2112,12 +2112,15 @@ async function openEpisodePicker(series, { current = null } = {}) {
     list.replaceChildren(...bySeason.get(currentSeason).map((ep) => {
       const playing = current && ep.season === current.season && ep.episode === current.episode;
       const seen = watched.has(`${ep.season}:${ep.episode}`);
+      // Solda bölüm resmi; altta yalnızca tarih ve durum (sezon zaten üstteki sekmede seçili).
+      const date = ep.released ? new Date(ep.released).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
       const item = el(
         'li',
-        { class: playing ? 'current' : '' },
+        { class: `ep-item${playing ? ' current' : ''}` },
+        ep.thumbnail ? el('img', { class: 'ep-resim', src: ep.thumbnail, alt: '', loading: 'lazy' }) : el('div', { class: 'ep-resim' }),
         el('div', { class: 'info' },
           el('div', { class: 'name', text: `${ep.episode}. ${ep.name}` }),
-          el('div', { class: 'year', text: [currentSeason === 0 ? 'Özel' : `Sezon ${currentSeason}`, playing ? '▶ şu an' : seen ? '✓ izlendi' : ''].filter(Boolean).join(' · ') })),
+          el('div', { class: 'year', text: [date, playing ? '▶ şu an' : seen ? '✓ izlendi' : ''].filter(Boolean).join(' · ') })),
       );
       item.addEventListener('click', () => pickContent('series', `${series.id}:${ep.season}:${ep.episode}`, item));
       return item;
