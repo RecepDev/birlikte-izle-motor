@@ -331,9 +331,15 @@ async function altyaziKonumUygula() {
     const videoBoy = d.h - (d.mt || 0) - (d.mb || 0);
     pos = (((d.mt || 0) + (konum / 100) * videoBoy) / d.h) * 100;
   }
+  // sub-pos 100'de bile altyazı alt kenardan 34 birim (720p ölçeğinde) yukarıda duruyor.
+  // Daha aşağısı istenirse bu boşluğu azaltıyoruz: altyazı en fazla pencerenin dibine
+  // iniyor, dışarı taşıp kaybolmuyor.
+  const bosluk = pos > 100 ? Math.max(0, Math.round(34 - ((pos - 100) / 100) * 720)) : 34;
   pos = Math.round(Math.max(0, Math.min(100, pos)) * 10) / 10;
-  if (pos === sonSubPos) return;
-  sonSubPos = pos;
+  const anahtar = `${pos}|${bosluk}`;
+  if (anahtar === sonSubPos) return;
+  sonSubPos = anahtar;
+  mpv?.set('sub-margin-y', bosluk).catch(() => {});
   mpv?.set('sub-pos', pos).catch((e) => console.error('altyazi-stil sub-pos', e.message));
 }
 
