@@ -3,6 +3,7 @@
 // Stremio server stays unreachable.
 
 import http from 'node:http';
+import { ACIK_ARALIK, dosyaYolu, ilkIstekMi, parcaliAkit } from './stremio-parca.js';
 import express from 'express';
 import {
   STREMIO_BASE,
@@ -110,6 +111,19 @@ export function createRelay({ rooms, stremioBase = STREMIO_BASE, log }) {
   }
 
   function proxy(req, res, { room, user, target, rewrite = null }) {
+    // Torrent dosyası, ucu açık aralık: Stremio'ya kapalı parçalarla sor (birikme olmasın).
+    const yol = new URL(target).pathname;
+    const aralik = req.headers.range;
+    const acik = aralik && ACIK_ARALIK.exec(aralik);
+    if (req.method !== 'HEAD' && dosyaYolu(yol) && (!aralik || acik) && !ilkIstekMi(yol)) {
+      parcaliAkit(target, acik ? Number(acik[1]) : 0, Boolean(acik), res, { onBytes: (n) => count(room, user, n) })
+        .catch((err) => {
+          log.warn('Relay isteği başarısız', { roomId: room.id, error: err.message });
+          if (!res.headersSent) res.status(502).end();
+          else res.destroy();
+        });
+      return;
+    }
     const headers = {};
     if (req.headers.range) headers.range = req.headers.range;
     if (req.headers.accept) headers.accept = req.headers.accept;

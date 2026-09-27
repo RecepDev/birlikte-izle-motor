@@ -9,6 +9,7 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
+const { vekilAdres } = require('./stremio-vekil.cjs');
 
 // mpv kurulum yeri kişiden kişiye değişiyor; bilinen yerlere ve PATH'e bakıyoruz.
 const MPV_ADAYLARI = [
@@ -219,7 +220,8 @@ function onizlemeTekSefer(url, saniye) {
 }
 let kaliciBozuk = false;
 let sonOnbellekSn = 0;
-async function onizleme(url, saniye) {
+async function onizleme(gelenUrl, saniye) {
+  const url = await vekilAdres(gelenUrl).catch(() => gelenUrl);
   if (!/^https?:\/\//.test(url)) return null;
   // Asıl videonun önünde 30 sn'den az hazır veri varken önizleme torrent'ten parça
   // istemesin: Stremio o parçalara da hız ayırıyor, oynatma takılıyordu.
@@ -781,7 +783,10 @@ app.whenReady().then(() => {
     yukleniyor = deger;
     videoGorunurluk();
   });
-  ipcMain.on('mpv:yukle', (_e, url) => {
+  ipcMain.on('mpv:yukle', async (_e, gelen) => {
+    // Stremio adresleri ara katmandan geçiyor: ileri-geri sarmalar Stremio'da birikme yapmasın
+    // (bkz. stremio-vekil.cjs).
+    const url = gelen ? await vekilAdres(gelen).catch(() => gelen) : gelen;
     sonYuklenen = url || null;
     yenidenDeneme = 0;
     if (!mpv) bekleyenYukleme = url;

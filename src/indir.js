@@ -18,6 +18,7 @@ export const MASAUSTU_DOSYALARI = [
   'mpv.js',
   'karar.js',
   'electron/ana.cjs',
+  'electron/stremio-vekil.cjs',
   'electron/onyukleme-kabuk.cjs',
   'electron/video-koprusu.cjs',
   'electron/masaustu.css',

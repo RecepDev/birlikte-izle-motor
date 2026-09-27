@@ -1302,9 +1302,8 @@ seek.addEventListener('input', () => {
 // Çubuğun üstünde gezinince (telefonda sürüklerken) o anın dakikası/saniyesi ve küçük
 // önizleme resmi. Önizleme ayrı, sessiz bir <video> ile o saniyeye atlayarak çiziliyor;
 // torrentte o dakikanın parçası da indiriliyor, bu yüzden Ayarlar'dan kapatılabiliyor.
-// Varsayılan kapalı: torrentte her önizleme karesi Stremio'ya yeni bir istek, Stremio bunları
-// kapatmayıp biriktiriyor ve zamanla indirmeyi yavaşlatıyordu. İsteyen Ayarlar'dan açar.
-let seekPreviewOn = storage.get('seekPreview2') === '1';
+// Önizleme istekleri masaüstünde ara katmandan geçtiği için Stremio'da birikme yapmıyor.
+let seekPreviewOn = storage.get('seekPreview2') !== '0';
 const previewVideo = el('video', { class: 'seek-onizleme', muted: true, playsinline: true, preload: 'metadata', hidden: true });
 previewVideo.muted = true;
 const seekTipTime = el('span');
