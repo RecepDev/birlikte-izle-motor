@@ -72,7 +72,14 @@ class OdaActivity : AppCompatActivity() {
 
         // Kısıtlı donanım çözücüsü olan telefonlarda yazılım çözücüye düşebilsin.
         val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
-        oynatici = ExoPlayer.Builder(this, renderers).build()
+        // Telefondaki Stremio'dan parça parça oku (bkz. ParcaliKaynak); diğer adresler aynen.
+        val http = androidx.media3.datasource.DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)
+        val kaynak = androidx.media3.datasource.DataSource.Factory { ParcaliKaynak(http.createDataSource()) }
+        oynatici = ExoPlayer.Builder(this, renderers)
+            .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(kaynak))
+            .build()
+        // Ekran kapanınca da ses sürsün: işlemci ve Wi-Fi uyanık kalıyor.
+        oynatici.setWakeMode(C.WAKE_MODE_NETWORK)
         oynatici.addListener(dinleyici)
         // Gömülü altyazılar kapalı başlasın: odanın altyazısını sayfa çiziyor, gömülüyü
         // ancak kişi seçerse açıyoruz.
