@@ -220,6 +220,21 @@ function onizlemeTekSefer(url, saniye) {
 }
 let kaliciBozuk = false;
 let sonOnbellekSn = 0;
+// İzlenen torrent'in Stremio'daki gerçek indirme hızı (Mbps), 2 sn'de bir.
+let torrentHizi = null;
+setInterval(async () => {
+  const hash = /\/([0-9a-f]{40})\//i.exec(sonYuklenen || '')?.[1];
+  if (!hash) {
+    torrentHizi = null;
+    return;
+  }
+  try {
+    const t = await (await fetch(`http://127.0.0.1:11470/${hash}/stats.json`, { signal: AbortSignal.timeout(1500) })).json();
+    torrentHizi = Number.isFinite(t?.downloadSpeed) ? Math.round((t.downloadSpeed * 8) / 1e5) / 10 : null;
+  } catch {
+    torrentHizi = null;
+  }
+}, 2000).unref?.();
 async function onizleme(gelenUrl, saniye) {
   const url = await vekilAdres(gelenUrl).catch(() => gelenUrl);
   if (!/^https?:\/\//.test(url)) return null;
@@ -484,7 +499,10 @@ async function durumDongusu() {
       droppedFrames: (Number(drops) || 0) + (Number(decDrops) || 0),
       totalFrames: Number(frames) || 0,
       // mpv'nin gerçek indirme hızı (bayt/sn): sayfadaki "↓ Mbps" bundan.
-      netMbps: Number.isFinite(netSpeed) ? (netSpeed * 8) / 1e6 : null,
+      // Kendi Stremio'sundan izlerken mpv'nin okuma hızı internet değil disk hızı (zaten inmiş
+      // kısmı 1000+ Mbps okuyor); o zaman Stremio'nun gerçek torrent indirme hızı.
+      netMbps: torrentHizi !== null && /:\/\/127\.0\.0\.1:\d+\/[0-9a-f]{40}\//i.test(sonYuklenen || '')
+        ? torrentHizi : Number.isFinite(netSpeed) ? (netSpeed * 8) / 1e6 : null,
       cacheStalled: Boolean(stalled),
       loaded: Number.isFinite(duration),
     });
