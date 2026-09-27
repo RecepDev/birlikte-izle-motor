@@ -38,6 +38,7 @@ export function createSubs({
     if (/(eng|en|english|ingilizce|İngilizce)/.test(key)) return 1;
     return 2;
   };
+  const groupRank = (name) => (name === 'Senin dosyaların' ? 0 : name === langLabel('tur') ? 1 : name === langLabel('eng') ? 2 : 3);
   const embeddedTracks = () => (window.masaustuGomulu?.liste() || [])
     .map((t, i) => ({ t, i }))
     .sort((a, b) => embeddedRank(a.t) - embeddedRank(b.t) || a.i - b.i)
@@ -382,7 +383,11 @@ export function createSubs({
       el('div', { class: 'row' },
         el('span', { class: 'muted small', text: list.length ? `${list.length} altyazı` : 'Altyazı listesi boş ya da yükleniyor.' }),
         el('button', { type: 'button', text: '↻ Listeyi yenile', title: "Altyazıları addon'lardan yeniden çek", onclick: refreshList })),
-      ...[...groups].flatMap(([name, subs]) => {
+      // Dil grupları her platformda aynı sırada: kendi dosyaların, Türkçe, İngilizce, diğerleri.
+      ...[...groups].map((g, i) => ({ g, i }))
+        .sort((a, b) => groupRank(a.g[0]) - groupRank(b.g[0]) || a.i - b.i)
+        .map(({ g }) => g)
+        .flatMap(([name, subs]) => {
         const emb = embeddedLangs.has(name);
         return [
           el('h3', {}, name, emb ? el('span', { class: 'tag-embedded', text: 'gömülü' }) : ''),
