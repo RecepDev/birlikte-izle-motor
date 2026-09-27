@@ -55,7 +55,7 @@ export function createStremioRestarter({ stremioLocal, log, platform = process.p
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       if (await stremioLocal.isUp().catch(() => false)) return true;
-      await new Promise((r) => setTimeout(r, 700));
+      await new Promise((r) => setTimeout(r, 300));
     }
     return false;
   }
@@ -72,7 +72,7 @@ export function createStremioRestarter({ stremioLocal, log, platform = process.p
       const script = serverScript(proc.CommandLine);
       log.warn('Stremio yayın sunucusu yeniden başlatılıyor', { reason, pid: proc.ProcessId });
       await run('taskkill', ['/PID', String(proc.ProcessId), '/F'], { windowsHide: true }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 600));
       // Stremio penceresi sunucuyu kendisi geri açabiliyor; açmadıysa biz açıyoruz.
       if (!(await stremioLocal.isUp().catch(() => false)) && exe && script) {
         const child = spawn(exe, [script], { detached: true, stdio: 'ignore', windowsHide: true });

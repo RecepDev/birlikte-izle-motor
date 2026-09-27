@@ -1231,6 +1231,13 @@ socket.on('relayRevoked', () => {
   if (player.status().source === 'relay') loadMyStream(true);
 });
 
+// Host Stremio'yu yeniden başlattı: onun Stremio'sundan gelen video (host'un kendisi ve relay
+// ile izleyenler) kopmuş bağlantıda takılı kalmasın, aynı kaynağı yeniden aç. Konumu sync
+// yüklenince odanın konumuna getiriyor.
+socket.on('stremioRestarted', () => {
+  if (!isHost() && player.status().source !== 'relay') return;
+  loadMyStream(true);
+});
 socket.on('kicked', () => end('Odadan çıkarıldın.'));
 socket.on('replaced', () => end('Bu oda başka bir sekmede açıldı.'));
 socket.on('roomClosed', () => {

@@ -155,7 +155,12 @@ socketCtl = attachSocket(io, {
       restartStremio: (room, uid) => {
         if (uid !== room.hostUserId) return { error: 'notHost' };
         stremioRestarter.restart('host').then((res) => {
-          dispatch(room, [room.systemChat(res.ok ? 'Stremio yeniden başladı.' : 'Stremio yeniden başlatılamadı; elle kapatıp açmayı dene.')]);
+          // Açık video bağlantıları kopmuş durumda: host'un Stremio'sundan izleyenler (host ve
+          // relay) videoyu kaldıkları yerden yeniden açsın; Stremio torrent'i de yeniden başlatır.
+          dispatch(room, [
+            room.systemChat(res.ok ? 'Stremio yeniden başladı, video yeniden açılıyor.' : 'Stremio yeniden başlatılamadı; elle kapatıp açmayı dene.'),
+            ...(res.ok ? [{ to: 'room', event: 'stremioRestarted', data: {}, urgent: true }] : []),
+          ]);
         });
         return { msgs: [room.systemChat('Stremio yayın sunucusu yeniden başlatılıyor…')] };
       },
@@ -324,7 +329,10 @@ function watchStall(room, stats) {
   room.stallSince = null;
   dispatch(room, [room.systemChat('Stremio takıldı gibi görünüyor, yayın sunucusu yeniden başlatılıyor…')]);
   stremioRestarter.restart('takılma').then((res) => {
-    dispatch(room, [room.systemChat(res.ok ? 'Stremio yeniden başladı.' : 'Stremio yeniden başlatılamadı; elle kapatıp açmayı dene.')]);
+    dispatch(room, [
+      room.systemChat(res.ok ? 'Stremio yeniden başladı, video yeniden açılıyor.' : 'Stremio yeniden başlatılamadı; elle kapatıp açmayı dene.'),
+      ...(res.ok ? [{ to: 'room', event: 'stremioRestarted', data: {}, urgent: true }] : []),
+    ]);
   });
 }
 statsTimer.unref();
