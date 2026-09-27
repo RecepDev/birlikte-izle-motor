@@ -293,6 +293,18 @@
         <legend>Altyazı</legend>
         <label class="check"><input type="checkbox" id="set-auto-subs"> <span>Kaynak seçilince altyazıyı otomatik seç (önce gömülü Türkçe, yoksa harici Türkçe, o da yoksa kapalı)</span></label>
       </fieldset>
+      <fieldset id="onbellek-wrap" hidden>
+        <legend>Önünü hazırla</legend>
+        <label class="field inline"><span>Videonun ne kadar ilerisi önceden indirilsin</span>
+          <select id="set-onbellek">
+            <option value="60">1 dakika</option>
+            <option value="180">3 dakika</option>
+            <option value="300">5 dakika</option>
+            <option value="600">10 dakika</option>
+            <option value="1200">20 dakika</option>
+          </select></label>
+        <p class="muted small">Fazlası diskte geçici yer kaplar (4K'da 10 dk ≈ 2 GB). Stremio'nun o kadar ilerisini indirmesi için internetin videodan hızlı olmalı.</p>
+      </fieldset>
       <fieldset>
         <legend>Görüntü kalitesi</legend>
         <label class="field inline"><span>Tercih ettiğin kalite (listede en üstte)</span> <select id="set-pref-quality"></select></label>

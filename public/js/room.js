@@ -2729,6 +2729,12 @@ $('#back-close').addEventListener('click', async () => {
   goBack();
 });
 
+// Masaüstü uygulamasında: videonun ne kadar ilerisi önceden indirilsin (mpv önbelleği).
+if (window.kabuk?.onbellekYaz) {
+  $('#onbellek-wrap').hidden = false;
+  $('#set-onbellek').value = String(window.kabuk.onbellek?.() || 180);
+  $('#set-onbellek').addEventListener('change', (e) => window.kabuk.onbellekYaz(Number(e.target.value)));
+}
 $('#set-auto-subs').checked = storage.get('otoAltyazi') !== '0';
 $('#set-auto-subs').addEventListener('change', (e) => storage.set('otoAltyazi', e.target.checked ? '1' : '0'));
 

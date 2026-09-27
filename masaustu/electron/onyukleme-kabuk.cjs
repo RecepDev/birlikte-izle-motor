@@ -11,6 +11,8 @@ window.kabuk = {
   guncelle: () => ipcRenderer.invoke('kabuk:guncelle'),
   kalite: () => ipcRenderer.sendSync('kabuk:kalite'),
   kaliteYaz: (q) => ipcRenderer.send('kabuk:kalite-yaz', q),
+  onbellek: () => ipcRenderer.sendSync('kabuk:onbellek'),
+  onbellekYaz: (sn) => ipcRenderer.send('kabuk:onbellek-yaz', sn),
 };
 
 // Masaüstüne özel düzen: kontroller/bildirimler videonun dışına alınır (mpv üstlerini örter).

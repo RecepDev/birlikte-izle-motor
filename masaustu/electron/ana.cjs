@@ -526,7 +526,10 @@ async function mpvBaslat() {
       // Windows HDR açıksa HDR görüntüyü ekrana olduğu gibi ver (kapalıysa etkisi yok).
       '--target-colorspace-hint=yes',
       // Torrent akışı dalgalı: önden daha çok tamponla, kısa kesintiler görünmesin.
-      '--cache=yes', '--demuxer-max-bytes=1GiB', '--demuxer-readahead-secs=180',
+      // Önü ne kadar hazırlansın: Ayarlar'dan (varsayılan 3 dk). Önbellek diskte tutuluyor:
+      // 4K'da 10-20 dakika birkaç GB ediyor, bellekte tutulamaz.
+      '--cache=yes', '--cache-on-disk=yes', `--demuxer-cache-dir=${path.join(os.tmpdir(), 'birlikte-izle-onbellek')}`,
+      '--demuxer-max-bytes=6GiB', `--demuxer-readahead-secs=${onbellekSn()}`,
       // Önbellek biterse saniyelik kesik kesik oynamak yerine 6 sn doldurup öyle devam et.
       '--cache-pause-wait=6',
       // Açılışta ve her sarmadan sonra da önce 6 sn hazırla, sonra oynat: sarınca hemen
@@ -716,6 +719,14 @@ async function sunucular() {
 ipcMain.handle('kabuk:sunucular', () => sunucular());
 ipcMain.on('kabuk:son-sunucu', (e) => { e.returnValue = ayarOku().sonSunucu || null; });
 ipcMain.on('kabuk:surum', (e) => { e.returnValue = kabuk.surum; });
+// Önü hazırlama süresi (sn): odadaki Ayarlar'dan. Çalışan mpv'ye de hemen uygulanıyor.
+const onbellekSn = () => [60, 180, 300, 600, 1200].includes(ayarOku().onbellekSn) ? ayarOku().onbellekSn : 180;
+ipcMain.on('kabuk:onbellek', (e) => { e.returnValue = onbellekSn(); });
+ipcMain.on('kabuk:onbellek-yaz', (_e, sn) => {
+  if (![60, 180, 300, 600, 1200].includes(sn)) return;
+  ayarYaz({ onbellekSn: sn });
+  mpv?.set('demuxer-readahead-secs', sn).catch(() => {});
+});
 // Tercih edilen görüntü kalitesi: açılış ekranında bir kez soruluyor, oda sayfası da okuyor.
 ipcMain.on('kabuk:kalite', (e) => { e.returnValue = ayarOku().kalite || null; });
 ipcMain.on('kabuk:kalite-yaz', (_e, q) => {
