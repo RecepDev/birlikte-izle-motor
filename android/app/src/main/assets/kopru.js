@@ -459,15 +459,15 @@
     .mobil-ipucu[hidden] { display: none; }
     .mobil-ses-kutu {
       position: absolute; z-index: 20; transform: translateX(-50%);
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-      background: rgba(20, 22, 29, .95); border: 1px solid #2a2e39; border-radius: 14px; padding: 12px 8px;
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      background: rgba(20, 22, 29, .92); border: 1px solid #2a2e39; border-radius: 10px; padding: 6px 2px 2px;
     }
     .mobil-ses-kutu[hidden] { display: none !important; }
     .mobil-ses-kutu .volume {
-      display: block !important; width: 32px !important; height: 140px;
+      display: block !important; width: 22px !important; height: 72px; margin: 0;
       writing-mode: vertical-lr; direction: rtl; accent-color: #7b5cff;
     }
-    .mobil-ses-sessiz { background: none; border: 0; font-size: 20px; padding: 2px; }
+    .mobil-ses-sessiz { background: none; border: 0; font-size: 13px; padding: 0 2px; line-height: 1.4; }
     .mobil-sohbet {
       position: absolute; left: 12px; bottom: 64px; z-index: 5; max-width: 70%;
       display: flex; flex-direction: column; gap: 4px; pointer-events: none;

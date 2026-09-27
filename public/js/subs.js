@@ -34,8 +34,8 @@ export function createSubs({
   // Sıra her platformda aynı: önce Türkçe, sonra İngilizce, sonra diğerleri (kendi sırasıyla).
   const embeddedRank = (t) => {
     const key = `${t.lang || ''} ${t.title || ''}`.toLowerCase();
-    if (/(tur|tr|turkish|türkçe|turkce)/.test(key)) return 0;
-    if (/(eng|en|english|ingilizce|İngilizce)/.test(key)) return 1;
+    if (/(^|[^a-zçğıöşü])(tur|tr|turkish|türkçe|turkce)([^a-zçğıöşü]|$)/.test(key)) return 0;
+    if (/(^|[^a-zçğıöşü])(eng|en|english|ingilizce|i̇ngilizce)([^a-zçğıöşü]|$)/.test(key)) return 1;
     return 2;
   };
   const groupRank = (name) => (name === 'Senin dosyaların' ? 0 : name === langLabel('tur') ? 1 : name === langLabel('eng') ? 2 : 3);
