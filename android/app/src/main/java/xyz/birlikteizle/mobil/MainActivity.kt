@@ -255,44 +255,48 @@ class MainActivity : AppCompatActivity() {
         kart.addView(guncelle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
             topMargin = dp(10)
         })
-        isimDugmesi = Button(this).apply {
-            text = isimYazisi()
-            setTextColor(yazi)
+        // Ayarlar: tek kutuda satırlar (masaüstü açılış ekranı gibi).
+        val ayarlar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(0xFF232633.toInt())
-            }
-            setOnClickListener { isimSor(ilk = false) }
-        }
-        kart.addView(isimDugmesi, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
-            topMargin = dp(10)
-        })
-        otoDugmesi = Button(this).apply {
-            text = otoYazisi()
-            setTextColor(yazi)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(0xFF232633.toInt())
-            }
-            setOnClickListener {
-                kayit.edit().putBoolean("oto", !kayit.getBoolean("oto", true)).apply()
-                text = otoYazisi()
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), 0xFF2A2E39.toInt())
             }
         }
-        kart.addView(otoDugmesi, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
-            topMargin = dp(10)
-        })
-        kaliteDugmesi = Button(this).apply {
-            text = kaliteYazisi()
-            setTextColor(yazi)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(0xFF232633.toInt())
+        fun satir(baslik: String, aciklama: String, sag: android.view.View, tik: (() -> Unit)?): LinearLayout {
+            val metin = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(context).apply { text = baslik; textSize = 15f; setTextColor(yazi) })
+                addView(TextView(context).apply { text = aciklama; textSize = 12f; setTextColor(soluk) })
             }
-            setOnClickListener { kaliteSor() }
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                addView(metin, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addView(sag)
+                if (tik != null) {
+                    isClickable = true
+                    setOnClickListener { tik() }
+                }
+            }
         }
-        kart.addView(kaliteDugmesi, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
-            topMargin = dp(10)
+        fun ayrac() = android.view.View(this).apply { setBackgroundColor(0xFF2A2E39.toInt()) }
+        val degerYazisi = { TextView(this).apply { textSize = 14f; setTextColor(ContextCompat.getColor(context, R.color.vurgu)) } }
+
+        isimDugmesi = degerYazisi().apply { text = isimYazisi() }
+        ayarlar.addView(satir("👤 Adın", "Odalarda bu adla görünürsün", isimDugmesi!!) { isimSor(ilk = false) })
+        ayarlar.addView(ayrac(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
+        val otoAnahtar = android.widget.Switch(this).apply {
+            isChecked = kayit.getBoolean("oto", true)
+            setOnCheckedChangeListener { _, acik -> kayit.edit().putBoolean("oto", acik).apply() }
+        }
+        ayarlar.addView(satir("🤖 Otomatik kaynak", "Seçtiğin kaliteye en uygun kaynağı test edip açar", otoAnahtar) { otoAnahtar.toggle() })
+        ayarlar.addView(ayrac(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
+        kaliteDugmesi = degerYazisi().apply { text = kaliteYazisi() }
+        ayarlar.addView(satir("Görüntü kalitesi", "Önce bu kalitenin kaynakları aranır", kaliteDugmesi!!) { kaliteSor() })
+        kart.addView(ayarlar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(16)
         })
         // Hangi sürümün kurulu olduğu görünsün (güncelleme geldi mi diye bakmak için).
         kart.addView(TextView(this).apply {
@@ -312,12 +316,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- otomatik kaynak: odada seçilen kaliteye en uygun kaynak açılır ------------------
-    private var otoDugmesi: Button? = null
-    private fun otoYazisi() = "🤖 Otomatik kaynak: ${if (kayit.getBoolean("oto", true)) "Açık" else "Kapalı"}"
 
     // ---- ad ------------------------------------------------------------------------------
-    private var isimDugmesi: Button? = null
-    private fun isimYazisi() = "Adın: ${kayit.getString("isim", null)?.takeIf { it.isNotBlank() } ?: "girilmedi"}"
+    private var isimDugmesi: TextView? = null
+    private fun isimYazisi() = kayit.getString("isim", null)?.takeIf { it.isNotBlank() } ?: "girilmedi"
     private fun isimSor(ilk: Boolean) {
         val kutu = EditText(this).apply {
             setText(kayit.getString("isim", "") ?: "")
@@ -346,13 +348,13 @@ class MainActivity : AppCompatActivity() {
 
     // ---- tercih edilen görüntü kalitesi -------------------------------------------------
     // Odada kalite listesinde bu kalite en üstte olur, önce onun kaynakları aranır.
-    private var kaliteDugmesi: Button? = null
+    private var kaliteDugmesi: TextView? = null
     private val kaliteler = arrayOf("2160p", "1080p", "720p")
     private val kaliteAdlari = arrayOf("4K (2160p)", "1080p", "720p")
     private fun kaliteYazisi(): String {
         val k = kayit.getString("kalite", null)
         val ad = kaliteler.indexOf(k).takeIf { it >= 0 }?.let { kaliteAdlari[it] } ?: "seçilmedi"
-        return "Görüntü kalitesi: $ad"
+        return ad
     }
     private fun kaliteSor() {
         android.app.AlertDialog.Builder(this)
