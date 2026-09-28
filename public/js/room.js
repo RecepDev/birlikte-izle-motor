@@ -4,6 +4,7 @@ import { io } from '/socket.io/socket.io.esm.min.js';
 import { $, el, toast, formatTime, formatSize, storage, randomToken, copyText, errorText } from './ui.js';
 import { createSync } from './sync.js';
 import { createTani, taniMetni } from './tani.js';
+import { otomatikSec } from './shared/kaynak-sec.js';
 import { createPlayer, isStremioUp } from './player.js';
 import { createChat } from './chat.js';
 import { renderUsers, durationMismatch } from './users.js';
@@ -656,6 +657,26 @@ setInterval(() => {
   }
 }, 1000);
 let lastSeekAt = 0;
+
+// Telefonda otomatik kaynak: telefonun tercih ettiği kalite host'unkinden farklıysa, o kalitede
+// en çok seed'li kaynak telefonun kendi kaynağı olarak açılır (oda aynı yerde devam eder).
+// Her film/bölümde ve host kaynak değiştirince bir kez; elle seçim yapılırsa dokunulmaz.
+let otoTelefonAnahtar = null;
+setInterval(async () => {
+  const cihaz = window.mobilCihaz;
+  if (!cihaz?.kalite || cihaz.oto === false || !state.room || isHost()) return;
+  const anahtar = `${state.room.contentId}|${state.room.hostStreamId}`;
+  if (anahtar === otoTelefonAnahtar) return;
+  otoTelefonAnahtar = anahtar;
+  if (me()?.ownStreamId) return;
+  const host = streamById(state.room.hostStreamId);
+  if (host?.quality === cihaz.kalite) return; // host'unki zaten uygun: aynı torrent
+  const pick = otomatikSec(state.room.streams, cihaz.kalite);
+  if (!pick || pick.streamId === state.room.hostStreamId || pick.quality === host?.quality) return;
+  const res = await request('setOwnStream', { streamId: pick.streamId });
+  tani.kaydet('oto-kaynak', { kalite: pick.quality, seed: pick.seeders, hata: res?.error || null });
+  if (!res?.error) toast(`Otomatik: ${pick.quality} kaynak açıldı (${pick.seeders ?? '?'} seed).`, 5000);
+}, 3000);
 video.addEventListener('seeking', () => { lastSeekAt = Date.now(); });
 
 // Tanı kaydı için 5 sn'de bir oynatıcının hali.

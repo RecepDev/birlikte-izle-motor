@@ -267,6 +267,21 @@ class MainActivity : AppCompatActivity() {
         kart.addView(isimDugmesi, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
             topMargin = dp(10)
         })
+        otoDugmesi = Button(this).apply {
+            text = otoYazisi()
+            setTextColor(yazi)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(0xFF232633.toInt())
+            }
+            setOnClickListener {
+                kayit.edit().putBoolean("oto", !kayit.getBoolean("oto", true)).apply()
+                text = otoYazisi()
+            }
+        }
+        kart.addView(otoDugmesi, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
+            topMargin = dp(10)
+        })
         kaliteDugmesi = Button(this).apply {
             text = kaliteYazisi()
             setTextColor(yazi)
@@ -295,6 +310,10 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(kok)
     }
+
+    // ---- otomatik kaynak: odada seçilen kaliteye en uygun kaynak açılır ------------------
+    private var otoDugmesi: Button? = null
+    private fun otoYazisi() = "🤖 Otomatik kaynak: ${if (kayit.getBoolean("oto", true)) "Açık" else "Kapalı"}"
 
     // ---- ad ------------------------------------------------------------------------------
     private var isimDugmesi: Button? = null
