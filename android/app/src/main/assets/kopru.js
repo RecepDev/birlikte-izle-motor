@@ -88,6 +88,7 @@
     tanim('readyState', readyState);
     tanim('videoWidth', () => durum.width);
     tanim('videoHeight', () => durum.height);
+    video.getVideoPlaybackQuality = () => ({ totalVideoFrames: 0, droppedVideoFrames: durum.droppedFrames || 0 });
     tanim('buffered', () => ({ length: durum.cacheEnd > 0 ? 1 : 0, start: () => 0, end: () => durum.cacheEnd }));
     tanim('ended', () => false);
     tanim('error', () => hata);

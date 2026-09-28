@@ -309,6 +309,23 @@ function delikAc(boyut, delikler) {
   }
 }
 
+// Donma bekçisi: sarmadan sonra bazen süre (ses) ilerliyor ama görüntü donuk kalıyor; mpv o
+// sırada kareleri atıyor (kare kaybı saniyede onlarca). 3 sn böyle sürerse aynı yere tam sarma
+// yapılıyor: çözücü sıfırlanıyor, görüntü geri geliyor. En fazla 20 sn'de bir.
+let donmaSayac = 0;
+let sonKayip = null;
+let sonDonmaDuzeltme = 0;
+function donmaBekcisi(konum, beklemede, kayip) {
+  const artis = sonKayip === null ? 0 : kayip - sonKayip;
+  sonKayip = kayip;
+  // Durum 200 ms'de bir geliyor: 200 ms'de 3+ kare kaybı = saniyede ~15+.
+  donmaSayac = !beklemede && artis >= 3 ? donmaSayac + 1 : 0;
+  if (donmaSayac < 15 || Date.now() - sonDonmaDuzeltme < 20_000 || !Number.isFinite(konum)) return;
+  donmaSayac = 0;
+  sonDonmaDuzeltme = Date.now();
+  console.warn('Görüntü donuk (kare kaybı), çözücü sıfırlanıyor', konum);
+  mpv?.command('seek', String(konum), 'absolute+exact').catch(() => {});
+}
 // Ara katmanın parça boyu için video süresi (bkz. stremio-vekil.cjs).
 let sonVekilSure = null;
 // mpv'den okunan değerleri sayfaya iter. Sayfa bunları <video> gibi görür.
@@ -324,6 +341,7 @@ async function durumDongusu() {
       mpv.get('estimated-frame-number'), mpv.get('cache-speed'),
     ].map((p) => p.catch(() => null)));
     if (Number.isFinite(position) && position > 0) sonKonum = position;
+    donmaBekcisi(position, paused || seeking || stalled, (Number(drops) || 0) + (Number(decDrops) || 0));
     if (Number.isFinite(duration) && duration !== sonVekilSure) {
       sonVekilSure = duration;
       vekilAyarla({ sure: duration, onbellek: onbellekSn() });

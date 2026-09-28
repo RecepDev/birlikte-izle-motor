@@ -14,7 +14,7 @@ test('tani keeps per-user entries in memory and appends them to the room log', (
   assert.equal(tani.oku('ABC123', 'u1').length, 2);
   const lines = fs.readFileSync(path.join(dir, 'ABC123.log'), 'utf8').trim().split('\n');
   assert.equal(lines.length, 2);
-  assert.match(lines[0], /Nnje durum \{"s":"buffering"\}/);
+  assert.match(lines[0], /Nnje#u1 durum \{"s":"buffering"\}/);
   tani.odaKapandi('ABC123');
   assert.deepEqual(tani.oku('ABC123', 'u1'), []);
   fs.rmSync(dir, { recursive: true, force: true });

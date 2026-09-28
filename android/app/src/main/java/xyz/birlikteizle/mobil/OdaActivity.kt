@@ -90,6 +90,21 @@ class OdaActivity : AppCompatActivity() {
         // Ekran kapanınca da ses sürsün: işlemci ve Wi-Fi uyanık kalıyor.
         oynatici.setWakeMode(C.WAKE_MODE_NETWORK)
         oynatici.addListener(dinleyici)
+        // Donma bekçisi: sarmadan sonra bazen ses/süre ilerliyor ama görüntü donuk kalıyor (çözücü
+        // geride kalıp kareleri atıyor). Kısa sürede çok kare atılırsa aynı yere sarılıp çözücü
+        // sıfırlanıyor (en fazla 20 sn'de bir). Atılan kare sayısı sayfanın kaydına da gidiyor.
+        oynatici.addAnalyticsListener(object : androidx.media3.exoplayer.analytics.AnalyticsListener {
+            override fun onDroppedVideoFrames(
+                olay: androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime, sayi: Int, sureMs: Long,
+            ) {
+                atilanKare += sayi
+                if (sayi >= 30 && sureMs < 3000 && oynatici.playWhenReady &&
+                    android.os.SystemClock.elapsedRealtime() - sonDonmaDuzeltme > 20_000) {
+                    sonDonmaDuzeltme = android.os.SystemClock.elapsedRealtime()
+                    oynatici.seekTo(oynatici.currentPosition)
+                }
+            }
+        })
         // Gömülü altyazılar kapalı başlasın: odanın altyazısını sayfa çiziyor, gömülüyü
         // ancak kişi seçerse açıyoruz.
         oynatici.trackSelectionParameters = oynatici.trackSelectionParameters.buildUpon()
@@ -222,6 +237,9 @@ class OdaActivity : AppCompatActivity() {
         }
     }
 
+    private var atilanKare = 0L
+    private var sonDonmaDuzeltme = 0L
+
     private fun durumYolla() {
         if (!yuklendi) return
         val sure = oynatici.duration
@@ -238,6 +256,7 @@ class OdaActivity : AppCompatActivity() {
             .put("idle", oynatici.playbackState == Player.STATE_IDLE)
             .put("cacheStalled", oynatici.playbackState == Player.STATE_BUFFERING)
             .put("loaded", sure != C.TIME_UNSET)
+            .put("droppedFrames", atilanKare)
         js("window.__kopru && window.__kopru.durum($durum)")
     }
 

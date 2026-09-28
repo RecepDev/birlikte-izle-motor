@@ -695,6 +695,7 @@ setInterval(() => {
   tani.kaydet('n', {
     s: player.status().state, pos: video.currentTime, drift: sync.drift(), ahead: d.ahead, mbps: d.downMbps,
     rs: video.readyState, seeking: video.seeking, paused: video.paused, rate: video.playbackRate,
+    kayip: video.getVideoPlaybackQuality?.().droppedVideoFrames ?? null,
   });
 }, 5000);
 document.addEventListener('visibilitychange', () => tani.kaydet('gorunur', { hidden: document.hidden }));

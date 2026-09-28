@@ -43,7 +43,7 @@ export function createTani({ dir, log }) {
       if (fs.existsSync(dosya) && fs.statSync(dosya).size > DOSYA_EN_FAZLA) return;
       const satirlar = temiz.map((e) => {
         const { t, k, ...veri } = e;
-        return `${new Date(t).toISOString()} ${user.name} ${k} ${JSON.stringify(veri)}`;
+        return `${new Date(t).toISOString()} ${user.name}#${String(user.id).slice(0, 4)} ${k} ${JSON.stringify(veri)}`;
       });
       fs.appendFileSync(dosya, `${satirlar.join('\n')}\n`);
     } catch { /* disk sorunu: bellekte yine var */ }

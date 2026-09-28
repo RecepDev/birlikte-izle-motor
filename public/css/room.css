@@ -75,6 +75,13 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 }
 .connect-stremio { flex: none; font-size: 12px; padding: 2px 8px; }
 .top-actions { display: flex; gap: 8px; flex-shrink: 0; }
+/* Dar ekranda (telefon) başlık düğmelerin altına girmesin: başlık kutusu küçülebilsin,
+   uzun ad "…" ile kesilsin, Relay/Stremio etiketleri alt satıra geçsin. */
+.room-title { flex: 1 1 auto; }
+.room-title > div { min-width: 0; flex: 1 1 auto; }
+.title-line { flex-wrap: wrap; row-gap: 2px; }
+.title-text { min-width: 0; max-width: 100%; }
+#subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .layout {
   flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--side-w);
