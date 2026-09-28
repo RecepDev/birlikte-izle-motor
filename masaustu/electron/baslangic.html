@@ -45,6 +45,7 @@
     <button id="panel" type="button" class="ikincil" hidden>Film ara ve oda aç</button>
     <p id="panel-ipucu" class="ipucu" hidden>Sunucu bu bilgisayarda çalışıyor: Stremio'ya girmeden ara, seç, oda aç.</p>
     <button id="guncelle" type="button" class="ikincil">Güncellemeleri denetle</button>
+    <label class="kalite"><input type="checkbox" id="oto"> 🤖 Otomatik kaynak seçimi (bölümü seçince en iyi kaynak bulunup açılır)</label>
     <label class="kalite">Görüntü kalitesi
       <select id="kalite"><option value="2160p">4K (2160p)</option><option value="1080p">1080p</option><option value="720p">720p</option></select>
     </label>
@@ -82,6 +83,9 @@
       sor.close();
     });
   }
+  const oto = document.getElementById('oto');
+  oto.checked = window.kabuk.otoKaynak ? window.kabuk.otoKaynak() : true;
+  oto.addEventListener('change', () => window.kabuk.otoKaynakYaz?.(oto.checked));
   // Ad: ilk açılışta sorulur (kapatılamaz), sonra kalite.
   const isimSor = document.getElementById('isim-sor');
   const isimKutu = document.getElementById('isim');

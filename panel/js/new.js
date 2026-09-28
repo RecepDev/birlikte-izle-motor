@@ -105,7 +105,7 @@ function renderRefresh() {
 
 async function createRoom(stream, button, { oto = false } = {}) {
   otoDurdur();
-  otoIptal = true; // elle ya da otomatik: bir kez
+  if (!oto) otoIptal = true; // elle seçildi: otomatik devre dışı
   if (stream.kind === 'http' && !confirm(DEBRID_WARNING)) return;
   button.disabled = true;
   olusturuluyor = true;
@@ -126,6 +126,8 @@ async function createRoom(stream, button, { oto = false } = {}) {
     location.href = res.roomUrl;
   } catch (err) {
     olusturuluyor = false;
+    otoHata = true;
+    otoModGoster();
     alert(`Oda açılamadı: ${err.message}`);
     button.disabled = false;
     button.textContent = 'Bununla oda aç';
@@ -290,10 +292,23 @@ masaustuKutu.addEventListener('change', () => localStorage.setItem('masaustuAc',
 // ---- Otomatik kaynak seçimi: addon'lar cevap verince (en geç 12 sn) tercih edilen kalitede en çok
 // seed'li torrent seçilip (bkz. shared/kaynak-sec.js) 3 sn sonra oda açılıyor; bu arada iptal
 // edilebilir. Altyazıyı oda sayfası kendisi seçiyor (Ayarlar > Altyazı).
+// Açık/kapalı: masaüstü uygulamasında ana ekrandan (kabuk), tarayıcıda bu sayfadaki kutudan.
+// Açıkken liste gizli, yalnızca botun ne yaptığı yazıyor; "İptal" listeyi gösterir.
 const otoKutu = $('#oto-kaynak');
-otoKutu.checked = localStorage.getItem('otoKaynak') !== '0';
+otoKutu.checked = window.kabuk?.otoKaynak ? window.kabuk.otoKaynak() : localStorage.getItem('otoKaynak') !== '0';
+let otoHata = false;
+function otoModGoster() {
+  const acik = otoKutu.checked && !otoIptal && !otoHata;
+  document.body.classList.toggle('oto-mod', acik);
+  if (acik) $('#oto-bar').hidden = false;
+}
+function otoYaz(metin) {
+  $('#oto-text').textContent = metin;
+  $('#oto-simdi').hidden = !otoSayac;
+}
 otoKutu.addEventListener('change', () => {
   localStorage.setItem('otoKaynak', otoKutu.checked ? '1' : '0');
+  window.kabuk?.otoKaynakYaz?.(otoKutu.checked);
   if (otoKutu.checked) {
     otoIptal = false;
     otoDene();
@@ -324,16 +339,27 @@ const olcum = (s) => sonuclar.get(s.infoHash) || enIyi.get(s.infoHash) || null;
 function otoDurdur() {
   clearInterval(otoSayac);
   otoSayac = null;
-  $('#oto-bar').hidden = true;
+  $('#oto-bar').hidden = !document.body.classList.contains('oto-mod');
+  otoModGoster();
 }
 function otoDene() {
-  if (!otoKutu.checked || otoIptal || olusturuluyor || otoSayac) return;
-  if (!tercihKalite && $('#kalite-sor').open) return; // önce kalite sorusu
+  otoModGoster();
+  if (!otoKutu.checked || otoIptal || otoHata || otoSayac) return;
+  if (olusturuluyor) return otoYaz('🤖 Oda açılıyor…');
+  if (!tercihKalite && $('#kalite-sor').open) return otoYaz('🤖 Önce tercih ettiğin kaliteyi seç.');
   const beklendi = otoIlkCevap && Date.now() - otoIlkCevap > 12_000;
-  if (!loadDone && !beklendi) return;
+  if (!loadDone && !beklendi) return otoYaz(`🤖 Otomatik mod: kaynaklar aranıyor… (${addonsReplied} eklenti cevap verdi)`);
   if (!otoAdaylar.length) {
     otoAdaylar = otoAdayBul();
-    if (!otoAdaylar.length) return;
+    if (!otoAdaylar.length) {
+      // Hiç torrent yok: listeyi (ve hata mesajını) göster.
+      if (loadDone) {
+        otoHata = true;
+        otoModGoster();
+        $('#oto-bar').hidden = true;
+      }
+      return;
+    }
     otoOlcumBasi = Date.now();
     const olcumsuz = otoAdaylar.filter((s) => !durum[s.infoHash] && !sonuclar.has(s.infoHash)).map((s) => s.streamId);
     if (olcumsuz.length) api('/api/torrent-denetle', { method: 'POST', body: { type, id, streamIds: olcumsuz } }).catch(() => {});
@@ -344,9 +370,8 @@ function otoDene() {
   const bitti = otoAdaylar.every((s) => sonuclar.has(s.infoHash));
   if (!hizli && !bitti && Date.now() - otoOlcumBasi < OTO_OLCUM_MS) {
     const olculen = sonuc.filter((x) => x.o?.peers).length;
-    $('#oto-text').textContent = `⚡ En iyi kaynak ölçülüyor… (${otoAdaylar.length} aday, ${olculen} tanesi bağlandı, `
-      + `${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`;
-    $('#oto-bar').hidden = false;
+    otoYaz(`🤖 En iyi kaynak ölçülüyor… (${otoAdaylar.length} aday, ${olculen} tanesi bağlandı, `
+      + `${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
     return;
   }
   const sirali = sonuc.sort((a, b) => (b.o?.downMbps || 0) - (a.o?.downMbps || 0)
@@ -361,6 +386,7 @@ function otoDene() {
   };
   yaz();
   $('#oto-bar').hidden = false;
+  $('#oto-simdi').hidden = false;
   otoSayac = setInterval(() => {
     kalan -= 1;
     if (kalan > 0) return yaz();
@@ -374,8 +400,9 @@ function otoAc() {
   createRoom(otoSecim, button, { oto: true });
 }
 $('#oto-simdi').addEventListener('click', () => { otoDurdur(); otoAc(); });
-$('#oto-iptal').addEventListener('click', () => { otoIptal = true; otoDurdur(); });
+$('#oto-iptal').addEventListener('click', () => { otoIptal = true; otoDurdur(); $('#oto-bar').hidden = true; });
 setInterval(otoDene, 1000);
+otoDene();
 
 // Bu sayfa açık ve görünürken torrent'ler açık kalıyor; kapanınca/arka plana geçince (sekme
 // değişti, pencere küçüldü) sunucu hepsini hemen kapatıyor. Geri gelince görünenler yeniden denetleniyor.

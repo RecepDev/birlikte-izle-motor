@@ -127,3 +127,9 @@ dialog.kalite-sor h2 { margin: 0 0 8px; font-size: 18px; }
 }
 .oto-bar[hidden] { display: none; }
 .oto-bar span { flex: 1 1 240px; }
+
+/* Otomatik mod: kaynak listesi gizli, yalnızca botun durumu */
+body.oto-mod .card > .row,
+body.oto-mod #errors,
+body.oto-mod #streams { display: none; }
+body.oto-mod .oto-bar { font-size: 17px; padding: 22px 18px; justify-content: center; text-align: center; }

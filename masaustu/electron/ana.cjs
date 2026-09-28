@@ -571,6 +571,9 @@ ipcMain.on('kabuk:onbellek-yaz', (_e, sn) => {
   vekilAyarla({ onbellek: sn });
   mpv?.set('demuxer-readahead-secs', sn).catch(() => {});
 });
+// Otomatik kaynak seçimi (Oda aç): ana ekrandan açılıp kapatılıyor, varsayılan açık.
+ipcMain.on('kabuk:oto', (e) => { e.returnValue = ayarOku().otoKaynak !== false; });
+ipcMain.on('kabuk:oto-yaz', (_e, acik) => ayarYaz({ otoKaynak: Boolean(acik) }));
 // Ad: ilk açılışta soruluyor, odalara bu adla sorulmadan giriliyor.
 ipcMain.on('kabuk:isim', (e) => { e.returnValue = ayarOku().isim || null; });
 ipcMain.on('kabuk:isim-yaz', (_e, ad) => {
