@@ -536,3 +536,11 @@ button.danger { background: #3a1d24; border-color: #a33b4d; color: #ffb3bf; }
   background: rgba(0, 0, 0, .35); font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all;
 }
 .tani-btn { margin-right: 6px; }
+
+/* Telefonda otomatik kaynak aranırken tam ekran */
+.oto-ekran { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 24px; background: var(--bg, #0e0f13); text-align: center; }
+.oto-ekran[hidden] { display: none; }
+.oto-ekran p { max-width: 420px; color: var(--text, #e8e9ee); font-size: 16px; line-height: 1.5; margin: 0; }
+.oto-donen { width: 48px; height: 48px; border-radius: 50%; border: 4px solid rgba(255,255,255,.12); border-top-color: #7b5cff; animation: oto-don 0.9s linear infinite; }
+@keyframes oto-don { to { transform: rotate(360deg); } }

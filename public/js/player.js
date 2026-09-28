@@ -152,6 +152,14 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
       else if (!on && status.state === 'buffering' && video.readyState >= 3) markReady();
     },
     held: () => held,
+    // Kaynak henüz seçilmedi (telefonda otomatik kaynak aranıyor): "yükleniyor" say, oda beklesin.
+    beklet() {
+      generation += 1;
+      stream = null;
+      clearTimers();
+      detach();
+      set('loading', 'none');
+    },
     reload: (opts) => load(stream, opts),
     status: () => ({ ...status }),
     stream: () => stream,

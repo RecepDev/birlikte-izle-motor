@@ -323,6 +323,13 @@ function audioNeedsReencode(s) {
 
 let loaded = { streamId: undefined, compat: false };
 function loadMyStream(force = false) {
+  // Telefon otomatik kaynak arıyor: video, kaynak seçilince açılacak (oda bu sırada bekliyor).
+  if (otoTelefonBekliyor()) {
+    if (loaded.streamId !== 'oto') player.beklet();
+    loaded = { streamId: 'oto', compat: false };
+    otoTelefonCalistir();
+    return;
+  }
   const s = myStream();
   const id = s?.streamId ?? null;
   if (!force && id === loaded.streamId) return;
@@ -658,37 +665,51 @@ setInterval(() => {
 }, 1000);
 let lastSeekAt = 0;
 
-// Telefonda otomatik kaynak: telefonun tercih ettiği kalite host'unkinden farklıysa, o kalitede
-// en çok seed'li kaynak telefonun kendi kaynağı olarak açılır (oda aynı yerde devam eder).
-// Her film/bölümde ve host kaynak değiştirince bir kez; elle seçim yapılırsa dokunulmaz.
-let otoTelefonAnahtar = null;
-setInterval(async () => {
+// Telefonda otomatik kaynak: her film/bölümde video açılmadan önce telefonun kalitesindeki
+// kaynaklar host'un Stremio'sunda ölçülüyor (bkz. server.js kaynakTest); o sürede tam ekran
+// "kaynak aranıyor" ekranı var ve oda telefonu bekliyor. Veri veren en hızlı kaynak seçilince
+// player açılıyor. Elle kaynak seçildiyse dokunulmaz.
+let otoTelefonBitti = null;
+let otoTelefonCalisiyor = null;
+const otoTelefonAnahtar = () => `${state.room?.contentId}|${state.room?.hostStreamId}`;
+function otoTelefonBekliyor() {
   const cihaz = window.mobilCihaz;
-  if (!cihaz?.kalite || cihaz.oto === false || !state.room || isHost()) return;
-  const anahtar = `${state.room.contentId}|${state.room.hostStreamId}`;
-  if (anahtar === otoTelefonAnahtar) return;
-  otoTelefonAnahtar = anahtar;
-  if (me()?.ownStreamId) return;
-  // Host'un kaynağı aynı kalitede olsa da o kalitenin kaynakları test ediliyor: host'unki
-  // en iyisiyse ona dokunulmuyor (aynı torrent, host'un Stremio'su zaten açık).
-  // Adaylar host'un Stremio'sunda gerçekten açılıp ölçülüyor (~20 sn); veri veren en hızlısı.
-  toast(`Otomatik: ${cihaz.kalite} kaynaklar test ediliyor…`, 5000);
-  const test = await request('kaynakTest', { quality: cihaz.kalite }, 70_000);
-  if (anahtar !== `${state.room.contentId}|${state.room.hostStreamId}` || me()?.ownStreamId) return;
+  return Boolean(cihaz?.kalite && cihaz.oto !== false && state.room && !isHost()
+    && !me()?.ownStreamId && otoTelefonBitti !== otoTelefonAnahtar());
+}
+function otoEkran(metin) {
+  $('#oto-ekran').hidden = !metin;
+  if (metin) $('#oto-ekran-metin').textContent = metin;
+}
+async function otoTelefonCalistir() {
+  const anahtar = otoTelefonAnahtar();
+  if (otoTelefonCalisiyor === anahtar) return;
+  otoTelefonCalisiyor = anahtar;
+  const kalite = window.mobilCihaz.kalite;
+  otoEkran(`🤖 ${kalite} kaynaklar test ediliyor… En çok veri veren kaynak bulununca video açılacak.`);
+  const t0 = Date.now();
+  const sayac = setInterval(() => otoEkran(`🤖 ${kalite} kaynaklar test ediliyor… (${Math.round((Date.now() - t0) / 1000)} sn)`), 1000);
+  const test = await request('kaynakTest', { quality: kalite }, 70_000);
+  clearInterval(sayac);
+  otoTelefonCalisiyor = null;
+  if (anahtar !== otoTelefonAnahtar()) return; // bu arada bölüm değişti: yenisi için tekrar
+  otoTelefonBitti = anahtar;
   const canli = (test?.sonuclar || []).filter((r) => r.alive)
     .sort((a, b) => (b.downMbps || 0) - (a.downMbps || 0) || (b.peers || 0) - (a.peers || 0));
   const olcum = canli[0] || null;
-  const pick = olcum ? streamById(olcum.streamId) : otomatikSec(state.room.streams, cihaz.kalite);
+  const pick = olcum ? streamById(olcum.streamId) : otomatikSec(state.room.streams, kalite);
   tani.kaydet('oto-kaynak', { test: test?.sonuclar?.length ?? null, canli: canli.length, secilen: pick?.quality, mbps: olcum?.downMbps });
-  if (!pick || pick.streamId === state.room.hostStreamId) {
-    if (pick) toast(`Otomatik: en iyi ${pick.quality} kaynak zaten açık${olcum ? ` (↓ ${Math.round(olcum.downMbps)} Mbps)` : ''}.`, 4000);
-    return;
-  }
-  const res = await request('setOwnStream', { streamId: pick.streamId });
-  if (!res?.error) {
-    toast(`Otomatik: ${pick.quality} kaynak açıldı${olcum ? ` (${olcum.peers} kişi, ↓ ${Math.round(olcum.downMbps)} Mbps)` : ` (${pick.seeders ?? '?'} seed)`}.`, 5000);
-  }
-}, 3000);
+  otoEkran(null);
+  const bilgi = olcum ? ` (${olcum.peers} kişi, ↓ ${Math.round(olcum.downMbps)} Mbps)` : ` (${pick?.seeders ?? '?'} seed)`;
+  if (pick && pick.streamId !== state.room.hostStreamId) {
+    const res = await request('setOwnStream', { streamId: pick.streamId });
+    if (!res?.error) {
+      toast(`Otomatik: ${pick.quality} kaynak açıldı${bilgi}.`, 5000);
+      return; // 'users' güncellemesi kaynağı yükler
+    }
+  } else if (pick) toast(`Otomatik: en iyi ${pick.quality} kaynak${bilgi}.`, 4000);
+  loadMyStream(true);
+}
 video.addEventListener('seeking', () => { lastSeekAt = Date.now(); });
 
 // Tanı kaydı için 5 sn'de bir oynatıcının hali.
@@ -1368,6 +1389,7 @@ socket.on('connect', async () => {
   socket.disconnect();
   $('#join-error').textContent = message;
   $('#join-error').hidden = false;
+  $('#join').hidden = false;
 });
 
 socket.on('playback', (d) => {
@@ -2945,4 +2967,8 @@ $('#join-form').addEventListener('submit', (e) => {
   video.play().catch(() => {}); // unlocks media playback on this gesture (iOS)
   socket.connect();
 });
-if (appName && /^[A-Z0-9]{6}$/.test(roomId)) $('#join-form').requestSubmit();
+// Ad uygulamada kayıtlıysa katılma ekranı hiç görünmesin.
+if (appName && /^[A-Z0-9]{6}$/.test(roomId)) {
+  $('#join').hidden = true;
+  $('#join-form').requestSubmit();
+}
