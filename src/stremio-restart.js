@@ -74,7 +74,7 @@ export function createStremioRestarter({ stremioLocal, log, platform = process.p
       for (const ad of ['stremio-shell-ng.exe', 'stremio.exe', 'stremio-runtime.exe']) {
         await run('taskkill', ['/IM', ad, '/T', '/F'], { windowsHide: true }).catch(() => {});
       }
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, 2500));
       if (exe) {
         // Simge durumunda açılsın: izlerken Stremio penceresi öne fırlamasın.
         spawn('powershell', ['-NoProfile', '-Command', `Start-Process -FilePath '${exe.replace(/'/g, "''")}' -WindowStyle Minimized`],
@@ -85,7 +85,13 @@ export function createStremioRestarter({ stremioLocal, log, platform = process.p
       } else {
         return { error: 'notRunning' };
       }
-      const up = await waitUntilUp(30_000);
+      let up = await waitUntilUp(30_000);
+      // Bazen ilk açılış tutmuyor (eski süreç henüz tam kapanmamış): bir kez daha aç.
+      if (!up && exe) {
+        log.warn('Stremio açılmadı, tekrar deneniyor');
+        spawn(exe, [], { detached: true, stdio: 'ignore' }).unref();
+        up = await waitUntilUp(30_000);
+      }
       log.info('Stremio yayın sunucusu', { up });
       return up ? { ok: true } : { error: 'notUp' };
     })().finally(() => {

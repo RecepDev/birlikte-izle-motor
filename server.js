@@ -59,7 +59,7 @@ stremioAcikDegilseAc({ stremioLocal, log });
 // Otomatik yeniden başlatmalar arası en az süre: takılma sürerse döngüye girmesin.
 const AUTO_RESTART_COOLDOWN_MS = 5 * 60_000;
 // Birisi bekliyorken host'un torrent'i bu kadar süre hiç veri indirmezse Stremio takılmış sayılır.
-const STALL_MS = 45_000;
+const STALL_MS = 90_000;
 let lastAutoRestart = 0;
 // infoHash -> tests running right now. Several files of one torrent share a Stremio torrent,
 // so it may only be closed once the last of them has finished.
@@ -465,11 +465,15 @@ const statsTimer = setInterval(async () => {
 }, 3000);
 
 // Stremio bazen takılıp hiçbir torrent için hız vermiyor; elle kapatıp açmak düzeltiyordu.
-// Biri beklerken host'un torrent'i uzun süre hiç indirmiyorsa yayın sunucusunu kendimiz
-// yeniden başlatıyoruz (seyrek: arada en az 5 dakika).
+// Yalnızca gerçekten takıldıysa yeniden başlatıyoruz: torrent daha önce indiriyordu, bağlı
+// kişi (peer) var ama 90 sn'dir hiç veri gelmiyor ve biri video ortasında bekliyor. Yeni
+// açılan (henüz veri bulamamış) torrent takılma sayılmıyor: bekçi yeni bölümün ilk dakikasında
+// Stremio'yu kapatıyordu, Stremio da bazen geri açılmıyordu. Kaynağı ölü torrent'te yeniden
+// başlatmak işe yaramıyor (bkz. room.js zayıf kaynak önerisi).
 function watchStall(room, stats) {
-  const waiting = room.connectedUsers().some((u) => ['loading', 'buffering'].includes(u.status?.state));
-  const dead = !stats || (stats.downMbps < 0.05 && !(stats.progress >= 0.99));
+  if (stats && stats.downMbps >= 1) room.hadSpeedFor = room.hostStreamId;
+  const waiting = room.connectedUsers().some((u) => u.status?.state === 'buffering');
+  const dead = Boolean(room.hadSpeedFor === room.hostStreamId && stats && stats.peers > 0 && stats.downMbps < 0.05 && !(stats.progress >= 0.99));
   if (!waiting || !dead) {
     room.stallSince = null;
     return;
