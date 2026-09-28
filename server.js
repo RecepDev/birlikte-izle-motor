@@ -333,15 +333,20 @@ socketCtl = attachSocket(io, {
         const adaylar = [
           ...torrents.filter((s) => s.quality === kalite).sort((a, b) => puan(b) - puan(a)),
           ...torrents.filter((s) => s.quality !== kalite && (Number(s.seeders) || 0) >= 3).sort((a, b) => puan(b) - puan(a)),
-        ].slice(0, 4);
+        ].slice(0, 8);
         room.testSonuc ||= new Map();
-        const sonuclar = await Promise.all(adaylar.map(async (s) => {
+        const olc = (s) => (async () => {
           const eski = room.testSonuc.get(s.infoHash);
           if (eski && Date.now() - eski.at < 5 * 60_000) return { streamId: s.streamId, ...eski };
           const r = await torrentDenetle(room, s, { kapat: false });
           room.testSonuc.set(s.infoHash, { ...r, at: Date.now() });
           return { streamId: s.streamId, ...r };
-        }));
+        })();
+        // 4'erli iki dalga: ilk 4'te hızlı (15+ Mbps) kaynak yoksa sonraki 4 de ölçülür.
+        const sonuclar = await Promise.all(adaylar.slice(0, 4).map(olc));
+        if (!sonuclar.some((r) => r.alive && r.downMbps >= 15) && adaylar.length > 4) {
+          sonuclar.push(...await Promise.all(adaylar.slice(4).map(olc)));
+        }
         return { reply: { ok: true, sonuclar }, msgs: [] };
       },
       // Host pastes a magnet link: it becomes a stream of the current room and is picked for everyone.

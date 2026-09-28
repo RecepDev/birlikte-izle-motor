@@ -155,7 +155,7 @@ async function durumYenile() {
     if ((d.peers > 0 && sure > 12_000) || sure > 25_000) {
       sonuclar.set(h, enIyi.get(h));
       // Otomatik seçimin adayları kapatılmasın: seçilen hemen oda açılınca kullanılacak.
-      if (otoAdaylar.some((s) => s.infoHash === h)) continue;
+      if (otoAdaylar.some((s) => s.infoHash === h) && sonuclar.get(h)?.peers) continue;
       api('/api/torrent-kapat', { method: 'POST', body: { infoHash: h } }).catch(() => {});
     }
   }
@@ -340,11 +340,22 @@ function otoAdayBul() {
   const torrents = streams.filter((s) => s.kind === 'torrent');
   const secilen = otomatikSec(streams, tercihKalite);
   if (!secilen) return [];
-  // Seçilen kalitedeki en iyi 4; azsa başka kalitelerden sırayla tamamla.
+  // Seçilen kalitedeki adaylar (çok seed'liden aza), sonra başka kaliteler; en fazla 12.
+  // 4'erli dalgalarla ölçülüyor: ilk 4'te hızlı kaynak yoksa sıradaki 4 (bağlantı sayısı
+  // bir anda patlamasın: 12 torrent aynı anda modemi boğuyordu).
   const ayni = torrents.filter((s) => s.quality === secilen.quality).sort((a, b) => otoPuan(b) - otoPuan(a));
   const diger = torrents.filter((s) => s.quality !== secilen.quality && (Number(s.seeders) || 0) >= 3)
     .sort((a, b) => otoPuan(b) - otoPuan(a));
-  return [...ayni, ...diger].slice(0, 4);
+  return [...ayni, ...diger].slice(0, 12);
+}
+const OTO_DALGA = 4;
+let otoTumAdaylar = [];
+function otoDalgaBaslat() {
+  const yeni = otoTumAdaylar.slice(otoAdaylar.length, otoAdaylar.length + OTO_DALGA);
+  otoAdaylar = [...otoAdaylar, ...yeni];
+  otoOlcumBasi = Date.now();
+  const olcumsuz = yeni.filter((s) => !durum[s.infoHash] && !sonuclar.has(s.infoHash)).map((s) => s.streamId);
+  if (olcumsuz.length) api('/api/torrent-denetle', { method: 'POST', body: { type, id, streamIds: olcumsuz } }).catch(() => {});
 }
 const olcum = (s) => sonuclar.get(s.infoHash) || enIyi.get(s.infoHash) || null;
 function otoDurdur() {
@@ -361,8 +372,8 @@ function otoDene() {
   const beklendi = otoIlkCevap && Date.now() - otoIlkCevap > 12_000;
   if (!loadDone && !beklendi) return otoYaz(`🤖 Otomatik mod: kaynaklar aranıyor… (${addonsReplied} eklenti cevap verdi)`);
   if (!otoAdaylar.length) {
-    otoAdaylar = otoAdayBul();
-    if (!otoAdaylar.length) {
+    otoTumAdaylar = otoAdayBul();
+    if (!otoTumAdaylar.length) {
       // Hiç torrent yok: listeyi (ve hata mesajını) göster.
       if (loadDone) {
         otoHata = true;
@@ -371,17 +382,20 @@ function otoDene() {
       }
       return;
     }
-    otoOlcumBasi = Date.now();
-    const olcumsuz = otoAdaylar.filter((s) => !durum[s.infoHash] && !sonuclar.has(s.infoHash)).map((s) => s.streamId);
-    if (olcumsuz.length) api('/api/torrent-denetle', { method: 'POST', body: { type, id, streamIds: olcumsuz } }).catch(() => {});
+    otoDalgaBaslat();
   }
   // Ölçüm: biri çok hızlıysa hemen, yoksa hepsi bitince ya da 20 sn dolunca karar.
   const sonuc = otoAdaylar.map((s) => ({ s, o: olcum(s) }));
   const hizli = sonuc.some((x) => (x.o?.downMbps || 0) >= OTO_IYI_MBPS);
   const bitti = otoAdaylar.every((s) => sonuclar.has(s.infoHash));
+  // Bu dalga bitti, hızlı kaynak yok ve sırada aday var: sonraki 4'ü ölç.
+  if (!hizli && (bitti || Date.now() - otoOlcumBasi >= OTO_OLCUM_MS) && otoAdaylar.length < otoTumAdaylar.length) {
+    otoDalgaBaslat();
+    return;
+  }
   if (!hizli && !bitti && Date.now() - otoOlcumBasi < OTO_OLCUM_MS) {
     const olculen = sonuc.filter((x) => x.o?.peers).length;
-    otoYaz(`🤖 En iyi kaynak ölçülüyor… (${otoAdaylar.length} aday, ${olculen} tanesi bağlandı, `
+    otoYaz(`🤖 En iyi kaynak ölçülüyor… (${otoAdaylar.length}/${otoTumAdaylar.length} aday, ${olculen} tanesi bağlandı, `
       + `${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
     return;
   }

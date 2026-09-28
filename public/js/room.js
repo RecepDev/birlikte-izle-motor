@@ -673,7 +673,7 @@ setInterval(async () => {
   if (host?.quality === cihaz.kalite) return; // host'unki zaten uygun: aynı torrent
   // Adaylar host'un Stremio'sunda gerçekten açılıp ölçülüyor (~20 sn); veri veren en hızlısı.
   toast(`Otomatik: ${cihaz.kalite} kaynaklar test ediliyor…`, 5000);
-  const test = await request('kaynakTest', { quality: cihaz.kalite }, 45_000);
+  const test = await request('kaynakTest', { quality: cihaz.kalite }, 70_000);
   if (anahtar !== `${state.room.contentId}|${state.room.hostStreamId}` || me()?.ownStreamId) return;
   const canli = (test?.sonuclar || []).filter((r) => r.alive)
     .sort((a, b) => (b.downMbps || 0) - (a.downMbps || 0) || (b.peers || 0) - (a.peers || 0));
@@ -1991,9 +1991,13 @@ async function checkWeakSource() {
   const candidates = state.room.streams
     .filter((x) => x.kind === 'torrent' && x.streamId !== s.streamId && x.infoHash !== s.infoHash)
     .sort((a, b) => score(b) - score(a))
-    .slice(0, 4);
+    .slice(0, 8);
   if (!candidates.length) return;
-  await Promise.all(candidates.map((x) => checkStream(x.streamId)));
+  // 4'erli dalgalar: ilk 4'te belirgin daha hızlısı yoksa sonraki 4.
+  const cur0 = Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0;
+  await Promise.all(candidates.slice(0, 4).map((x) => checkStream(x.streamId)));
+  const iyiVar = candidates.slice(0, 4).some((x) => (streamChecks.get(x.streamId)?.result?.downMbps || 0) >= Math.max(cur0 * 1.5, cur0 + 5));
+  if (!iyiVar && candidates.length > 4) await Promise.all(candidates.slice(4).map((x) => checkStream(x.streamId)));
   const tested = candidates
     .map((x) => ({ s: x, r: streamChecks.get(x.streamId)?.result }))
     .filter((x) => x.r?.alive && Number.isFinite(x.r.downMbps))
