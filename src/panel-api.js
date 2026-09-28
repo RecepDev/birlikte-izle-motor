@@ -15,6 +15,7 @@ const STREAM_CACHE_MS = 10 * 60 * 1000;
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 export function createPanelApp({
+  kaynakHafiza = null,
   panelKey,
   panelDir,
   publicBase,
@@ -259,6 +260,9 @@ export function createPanelApp({
     }
     res.json({ ok: true });
   }));
+
+  // Otomatik seçim: dizide daha önce iyi indiren kaynağın grubu (bkz. kaynak-hafiza.js).
+  app.get('/api/kaynak-hafiza', (req, res) => res.json(kaynakHafiza?.oku(String(req.query.id || '')) || null));
 
   // Oda aç ekranı: Stremio'da açık (denetlenen) torrent'lerin canlı durumu: bağlı kişi, hız.
   app.get('/api/torrent-durum', wrap(async (req, res) => {

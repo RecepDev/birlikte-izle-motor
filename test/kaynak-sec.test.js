@@ -22,3 +22,11 @@ test('otomatikSec: http only when allowed', () => {
   assert.equal(otomatikSec(list, '1080p', { httpOk: true }).streamId, 'h');
   assert.equal(otomatikSec([], '1080p'), null);
 });
+
+test('grupAdi and hafiza: remembered release group wins within the preferred quality', async () => {
+  const { grupAdi } = await import('../public/js/shared/kaynak-sec.js');
+  assert.equal(grupAdi({ title: 'Silo.S02E04.2160p.WEB-DL.DV.H.265-FLUX\n💾 5 GB' }), 'FLUX');
+  const list = [t('a', '2160p', 300, { title: 'X.2160p-NTb' }), t('b', '2160p', 40, { title: 'X.2160p-FLUX', addonName: 'T' })];
+  assert.equal(otomatikSec(list, '2160p').streamId, 'a');
+  assert.equal(otomatikSec(list, '2160p', { hafiza: { grup: 'FLUX', addon: 'T' } }).streamId, 'b');
+});

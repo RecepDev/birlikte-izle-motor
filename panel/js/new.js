@@ -1,6 +1,6 @@
 import { api, apiStream, el, $, formatSize } from './api.js';
 import { browserCodecs } from './codecs.js';
-import { otomatikSec } from './kaynak-sec.js';
+import { otomatikSec, hafizaOnce } from './kaynak-sec.js';
 
 // Can this browser show the picture without re-encoding (original quality)?
 const caps = browserCodecs(document.createElement('video'));
@@ -338,18 +338,21 @@ const OTO_OLCUM_MS = 20_000;
 const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1);
 function otoAdayBul() {
   const torrents = streams.filter((s) => s.kind === 'torrent');
-  const secilen = otomatikSec(streams, tercihKalite);
+  const secilen = otomatikSec(streams, tercihKalite, { hafiza: kaynakHafiza });
   if (!secilen) return [];
   // Seçilen kalitedeki adaylar (çok seed'liden aza), sonra başka kaliteler; en fazla 12.
   // 4'erli dalgalarla ölçülüyor: ilk 4'te hızlı kaynak yoksa sıradaki 4 (bağlantı sayısı
   // bir anda patlamasın: 12 torrent aynı anda modemi boğuyordu).
-  const ayni = torrents.filter((s) => s.quality === secilen.quality).sort((a, b) => otoPuan(b) - otoPuan(a));
+  const ayni = hafizaOnce(torrents.filter((s) => s.quality === secilen.quality).sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
   const diger = torrents.filter((s) => s.quality !== secilen.quality && (Number(s.seeders) || 0) >= 3)
     .sort((a, b) => otoPuan(b) - otoPuan(a));
   return [...ayni, ...diger].slice(0, 12);
 }
 const OTO_DALGA = 4;
 let otoTumAdaylar = [];
+// Dizide önceki bölümlerde iyi indiren kaynağın grubu: önce onlar ölçülüyor.
+let kaynakHafiza = null;
+if (type === 'series') api(`/api/kaynak-hafiza?${new URLSearchParams({ id })}`).then((h) => { kaynakHafiza = h; }).catch(() => {});
 function otoDalgaBaslat() {
   const yeni = otoTumAdaylar.slice(otoAdaylar.length, otoAdaylar.length + OTO_DALGA);
   otoAdaylar = [...otoAdaylar, ...yeni];

@@ -698,6 +698,7 @@ async function otoTelefonCalistir() {
     .sort((a, b) => (b.downMbps || 0) - (a.downMbps || 0) || (b.peers || 0) - (a.peers || 0));
   const olcum = canli[0] || null;
   const pick = olcum ? streamById(olcum.streamId) : otomatikSec(state.room.streams, kalite);
+  if (pick && olcum?.downMbps >= 8) request('kaynakIyi', { streamId: pick.streamId }).catch(() => {});
   tani.kaydet('oto-kaynak', { test: test?.sonuclar?.length ?? null, canli: canli.length, secilen: pick?.quality, mbps: olcum?.downMbps });
   otoEkran(null);
   const bilgi = olcum ? ` (${olcum.peers} kişi, ↓ ${Math.round(olcum.downMbps)} Mbps)` : ` (${pick?.seeders ?? '?'} seed)`;
@@ -2036,11 +2037,12 @@ async function checkWeakSource() {
     return;
   }
   weakSuggestion = { streamId: best.s.streamId, own: false };
-  // Video hiç başlayamadıysa sormadan geç (kaybedilecek bir şey yok).
-  if (player.status().state === 'loading' && (video.currentTime || 0) < 2) {
+  // Video hiç başlayamadıysa ya da otomatik mod açıksa sormadan geç (oda aynı yerden devam eder).
+  if (otoModAcik() || (player.status().state === 'loading' && (video.currentTime || 0) < 2)) {
     const res = await request('setHostStream', { streamId: best.s.streamId });
     if (!res?.error) {
-      toast(`Seçilen kaynak açılamadı; daha hızlısına geçildi (${best.s.quality || '?'} · ${best.r.downMbps.toFixed(0)} Mbps).`, 6000);
+      tani.kaydet('oto-gecis', { from: s.quality, to: best.s.quality, mbps: best.r.downMbps, cur });
+      toast(`Kaynak zayıftı; daha hızlısına geçildi (${best.s.quality || '?'} · ${best.r.downMbps.toFixed(0)} Mbps).`, 6000);
       playAfterSwitch();
       return;
     }
@@ -2070,7 +2072,7 @@ const guestSamples = []; // { t, mbps, waiting }
 const guestStalls = []; // takılma anları
 let guestSuggestedFor = null;
 let lastGuestState = null;
-setInterval(() => {
+setInterval(async () => {
   const s = myStream();
   const st = player.status();
   if (!state.room || isHost() || s?.kind !== 'torrent' || st.source === 'http') return;
@@ -2112,6 +2114,15 @@ setInterval(() => {
   if (!pick) return;
   guestSuggestedFor = s.streamId;
   weakSuggestion = { streamId: pick.streamId, own: true };
+  // Otomatik modda sormadan geç.
+  if (otoModAcik()) {
+    tani.kaydet('oto-gecis', { olu, from: s.quality, to: pick.quality, seed: pick.seeders });
+    const res = await request('setOwnStream', { streamId: pick.streamId });
+    if (!res?.error) {
+      toast(`${olu ? 'Kaynaktan veri gelmiyordu' : 'İnternetin bu kaliteye yetmiyordu'}; ${pick.quality} kaynağa geçildi.`, 6000);
+      return;
+    }
+  }
   tani.kaydet('kaynak-oneri', { olu, from: s.quality, to: pick.quality, seed: pick.seeders });
   $('#weak-src-text').textContent = `${text}${pick.quality || '?'}${pick.hdr ? ` ${pick.hdr}` : ''}`
     + `${pick.sizeBytes ? ` · ${formatSize(pick.sizeBytes)}` : ''} · ${pick.seeders ?? '?'} seed. Oda aynı yerden devam eder.`;
@@ -2863,6 +2874,13 @@ function otoBaslat(contentId = null) {
     clearInterval(timer);
     playAfterSwitch();
   }, 500);
+}
+
+// Otomatik kaynak modu: masaüstünde ana ekrandaki anahtar, telefonda ana ekrandaki anahtar.
+function otoModAcik() {
+  if (window.kabuk?.otoKaynak) return window.kabuk.otoKaynak();
+  if (window.mobilCihaz) return window.mobilCihaz.oto !== false;
+  return false;
 }
 
 function playAfterSwitch() {

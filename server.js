@@ -16,7 +16,8 @@ import { createConfigStore } from './src/config.js';
 import { createAddonsClient } from './src/addons-client.js';
 import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
 import { normalizeStreams, normalizeAddonStreams, bestStream } from './src/streams.js';
-import { otomatikSec } from './public/js/shared/kaynak-sec.js';
+import { otomatikSec, hafizaOnce } from './public/js/shared/kaynak-sec.js';
+import { createKaynakHafiza } from './src/kaynak-hafiza.js';
 import { isit as isitStremio } from './src/stremio-isit.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
@@ -69,6 +70,7 @@ const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
 const kesif = createKesif({ file: path.join(DATA, 'kesif.json'), log });
 const giris = createGiris({ file: path.join(DATA, 'giris.json'), log });
 const tani = createTani({ dir: path.join(DATA, 'tani'), log });
+const kaynakHafiza = createKaynakHafiza({ file: path.join(DATA, 'kaynak-hafiza.json'), log });
 const tercih = createTercih({ file: path.join(DATA, 'tercih.json'), log });
 const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), log });
 // Ek tracker'lar yeni açılan torrent'lere ekleniyor; Stremio'nun peer arama sınırı yükseltiliyor.
@@ -175,6 +177,12 @@ socketCtl = attachSocket(io, {
         log.info('Stremio yükleme sınırı', { mbps: res.mbps });
         return { reply: { ok: true, mbps: res.mbps }, msgs: [] };
       },
+      // Telefonun ölçüp seçtiği iyi kaynak da dizinin hafızasına.
+      kaynakIyi: (room, uid, p) => {
+        const s = room.streams.find((x) => x.streamId === p?.streamId);
+        if (s && room.type === 'series') kaynakHafiza.iyi(room.contentId, s);
+        return { msgs: [] };
+      },
       // Tanı kaydı (bkz. src/tani.js): cihaz yolluyor, host kişinin kaydını açabiliyor.
       tani: (room, uid, p) => {
         const user = room.users.get(uid);
@@ -207,7 +215,7 @@ socketCtl = attachSocket(io, {
         const [meta, { results }] = await Promise.all([addons.meta('series', nextId), addons.streams(config.get().addons, 'series', nextId)]);
         const streams = normalizeStreams(results);
         const onceki = room.streams.find((s) => s.streamId === room.hostStreamId);
-        const pick = otomatikSec(streams, tercih.kalite() || onceki?.quality, { httpOk: true }) || bestStream(streams, onceki?.quality);
+        const pick = otomatikSec(streams, tercih.kalite() || onceki?.quality, { httpOk: true, hafiza: kaynakHafiza.oku(nextId) }) || bestStream(streams, onceki?.quality);
         if (!pick) return { reply: { ok: false }, msgs: [] };
         room.prefetch = { contentId: nextId, meta, streams, pickId: pick.streamId, infoHash: pick.infoHash, at: Date.now() };
         // Torrent önceden açılmıyor: ekranda görünmeyen hiçbir torrent arkada indirmesin.
@@ -330,8 +338,9 @@ socketCtl = attachSocket(io, {
         const kalite = String(p?.quality || '');
         const puan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1);
         const torrents = room.guestStreams().filter((s) => s.kind === 'torrent');
+        const hafiza = kaynakHafiza.oku(room.contentId);
         const adaylar = [
-          ...torrents.filter((s) => s.quality === kalite).sort((a, b) => puan(b) - puan(a)),
+          ...hafizaOnce(torrents.filter((s) => s.quality === kalite).sort((a, b) => puan(b) - puan(a)), hafiza),
           ...torrents.filter((s) => s.quality !== kalite && (Number(s.seeders) || 0) >= 3).sort((a, b) => puan(b) - puan(a)),
         ].slice(0, 8);
         room.testSonuc ||= new Map();
@@ -424,7 +433,7 @@ socketCtl = attachSocket(io, {
         // Otomatik kaynak: host'un tercih ettiği kalite (yoksa önceki kalite) içinde en çok seed'li
         // tek bölüm; o kalitede yoksa yakın kalite (bkz. kaynak-sec.js). Altyazıyı sayfa seçiyor.
         const secilen = hazir ? streams.find((s) => s.streamId === hazir.pickId)
-          : otomatikSec(streams, tercih.kalite() || onceki?.quality, { httpOk: true }) || bestStream(streams, onceki?.quality);
+          : otomatikSec(streams, tercih.kalite() || onceki?.quality, { httpOk: true, hafiza: kaynakHafiza.oku(id) }) || bestStream(streams, onceki?.quality);
         room.prefetch = null;
         const res = room.setContent(uid, { type, contentId: id, meta, streams, hostStreamId: (secilen || streams[0]).streamId });
         if (!res.error) {
@@ -482,6 +491,11 @@ const statsTimer = setInterval(async () => {
 // başlatmak işe yaramıyor (bkz. room.js zayıf kaynak önerisi).
 function watchStall(room, stats) {
   if (stats && stats.downMbps >= 1) room.hadSpeedFor = room.hostStreamId;
+  // İyi indiren kaynak dizinin hafızasına (sonraki bölümlerde önce bu grup denenir).
+  if (stats && stats.downMbps >= 8 && room.type === 'series') {
+    const s = room.streams.find((x) => x.streamId === room.hostStreamId);
+    if (s) kaynakHafiza.iyi(room.contentId, s);
+  }
   const waiting = room.connectedUsers().some((u) => u.status?.state === 'buffering');
   const dead = Boolean(room.hadSpeedFor === room.hostStreamId && stats && stats.peers > 0 && stats.downMbps < 0.05 && !(stats.progress >= 0.99));
   if (!waiting || !dead) {
@@ -658,6 +672,7 @@ cleanupTimer.unref();
 
 const panelServer = http.createServer(
   createPanelApp({
+    kaynakHafiza,
     panelKey: crypto.randomBytes(24).toString('hex'),
     panelDir: path.join(ROOT, 'panel'),
     publicBase: PUBLIC_BASE,
