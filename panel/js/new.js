@@ -278,6 +278,17 @@ $('#geri').addEventListener('click', () => {
 // Bölüm seçmeden dizinin kendisiyle gelindiyse (tüm sezonların kaynakları karışık listelenirdi):
 // önce bölüm seçilsin.
 if (type === 'series' && id && !String(id).includes(':')) location.replace(diziAdresi());
+// Odadan "Geri" ile bu sayfaya dönülünce kaynak listesi (otomatik modda yeni oda!) değil,
+// bölüm seçme/arama ekranı açılsın.
+const geriGelindi = () => performance.getEntriesByType('navigation')[0]?.type === 'back_forward';
+function aramayaDon() {
+  const ad = sessionStorage.getItem(`ad:${String(id).split(':')[0]}`) || '';
+  location.replace(type === 'series'
+    ? `/ara?${new URLSearchParams({ dizi: String(id).split(':')[0], ad })}`
+    : '/ara');
+}
+if (geriGelindi()) aramayaDon();
+window.addEventListener('pageshow', (e) => { if (e.persisted) aramayaDon(); });
 $('#filter').addEventListener('input', render);
 $('#refresh-addons').addEventListener('click', refreshAll);
 $('#check-visible').addEventListener('click', gorunenleriDenetle);
@@ -430,6 +441,7 @@ try {
     if (line.type === 'meta') {
       document.title = `${line.meta.name} · Oda aç`;
       $('#title').textContent = line.meta.name;
+      sessionStorage.setItem(`ad:${String(id).split(':')[0]}`, line.meta.name.replace(/\s+S\d+E\d+.*$/, '').trim());
       if (line.meta.poster) {
         $('#poster').src = line.meta.poster;
         $('#poster').hidden = false;
