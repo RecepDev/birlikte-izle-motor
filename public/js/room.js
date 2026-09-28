@@ -2894,7 +2894,9 @@ if (!/^[A-Z0-9]{6}$/.test(roomId)) {
   $('#join-form button').disabled = true;
 }
 const nameInput = $('#join-name');
-nameInput.value = storage.get('name') || hashParams.get('name') || '';
+// Uygulamada (masaüstü/telefon) ad açılışta bir kez soruluyor: odaya sormadan o adla gir.
+const appName = window.kabuk?.isim?.() || window.mobilCihaz?.isim || null;
+nameInput.value = appName || storage.get('name') || hashParams.get('name') || '';
 $('#join-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const name = nameInput.value.trim();
@@ -2905,3 +2907,4 @@ $('#join-form').addEventListener('submit', (e) => {
   video.play().catch(() => {}); // unlocks media playback on this gesture (iOS)
   socket.connect();
 });
+if (appName && /^[A-Z0-9]{6}$/.test(roomId)) $('#join-form').requestSubmit();

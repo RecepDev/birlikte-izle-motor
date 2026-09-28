@@ -571,6 +571,12 @@ ipcMain.on('kabuk:onbellek-yaz', (_e, sn) => {
   vekilAyarla({ onbellek: sn });
   mpv?.set('demuxer-readahead-secs', sn).catch(() => {});
 });
+// Ad: ilk açılışta soruluyor, odalara bu adla sorulmadan giriliyor.
+ipcMain.on('kabuk:isim', (e) => { e.returnValue = ayarOku().isim || null; });
+ipcMain.on('kabuk:isim-yaz', (_e, ad) => {
+  const temiz = String(ad || '').trim().slice(0, 30);
+  if (temiz) ayarYaz({ isim: temiz });
+});
 // Tercih edilen görüntü kalitesi: açılış ekranında bir kez soruluyor, oda sayfası da okuyor.
 ipcMain.on('kabuk:kalite', (e) => { e.returnValue = ayarOku().kalite || null; });
 ipcMain.on('kabuk:kalite-yaz', (_e, q) => {

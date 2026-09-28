@@ -152,6 +152,8 @@ async function durumYenile() {
     const sure = Date.now() - denetleniyor.get(h);
     if ((d.peers > 0 && sure > 12_000) || sure > 25_000) {
       sonuclar.set(h, enIyi.get(h));
+      // Otomatik seçimin adayları kapatılmasın: seçilen hemen oda açılınca kullanılacak.
+      if (otoAdaylar.some((s) => s.infoHash === h)) continue;
       api('/api/torrent-kapat', { method: 'POST', body: { infoHash: h } }).catch(() => {});
     }
   }
@@ -301,6 +303,24 @@ let otoIptal = false;
 let otoSayac = null;
 let otoIlkCevap = null;
 let otoSecim = null;
+// Seed sayısı addon'un eski bilgisi: en umut verici 4 aday Stremio'da gerçekten açılıp
+// ölçülüyor (bağlanılan kişi, gerçek hız); en hızlı olan seçiliyor.
+let otoAdaylar = [];
+let otoOlcumBasi = 0;
+const OTO_IYI_MBPS = 15;
+const OTO_OLCUM_MS = 20_000;
+const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1);
+function otoAdayBul() {
+  const torrents = streams.filter((s) => s.kind === 'torrent');
+  const secilen = otomatikSec(streams, tercihKalite);
+  if (!secilen) return [];
+  // Seçilen kalitedeki en iyi 4; azsa başka kalitelerden sırayla tamamla.
+  const ayni = torrents.filter((s) => s.quality === secilen.quality).sort((a, b) => otoPuan(b) - otoPuan(a));
+  const diger = torrents.filter((s) => s.quality !== secilen.quality && (Number(s.seeders) || 0) >= 3)
+    .sort((a, b) => otoPuan(b) - otoPuan(a));
+  return [...ayni, ...diger].slice(0, 4);
+}
+const olcum = (s) => sonuclar.get(s.infoHash) || enIyi.get(s.infoHash) || null;
 function otoDurdur() {
   clearInterval(otoSayac);
   otoSayac = null;
@@ -311,12 +331,33 @@ function otoDene() {
   if (!tercihKalite && $('#kalite-sor').open) return; // önce kalite sorusu
   const beklendi = otoIlkCevap && Date.now() - otoIlkCevap > 12_000;
   if (!loadDone && !beklendi) return;
-  otoSecim = otomatikSec(streams, tercihKalite);
-  if (!otoSecim) return;
+  if (!otoAdaylar.length) {
+    otoAdaylar = otoAdayBul();
+    if (!otoAdaylar.length) return;
+    otoOlcumBasi = Date.now();
+    const olcumsuz = otoAdaylar.filter((s) => !durum[s.infoHash] && !sonuclar.has(s.infoHash)).map((s) => s.streamId);
+    if (olcumsuz.length) api('/api/torrent-denetle', { method: 'POST', body: { type, id, streamIds: olcumsuz } }).catch(() => {});
+  }
+  // Ölçüm: biri çok hızlıysa hemen, yoksa hepsi bitince ya da 20 sn dolunca karar.
+  const sonuc = otoAdaylar.map((s) => ({ s, o: olcum(s) }));
+  const hizli = sonuc.some((x) => (x.o?.downMbps || 0) >= OTO_IYI_MBPS);
+  const bitti = otoAdaylar.every((s) => sonuclar.has(s.infoHash));
+  if (!hizli && !bitti && Date.now() - otoOlcumBasi < OTO_OLCUM_MS) {
+    const olculen = sonuc.filter((x) => x.o?.peers).length;
+    $('#oto-text').textContent = `⚡ En iyi kaynak ölçülüyor… (${otoAdaylar.length} aday, ${olculen} tanesi bağlandı, `
+      + `${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`;
+    $('#oto-bar').hidden = false;
+    return;
+  }
+  const sirali = sonuc.sort((a, b) => (b.o?.downMbps || 0) - (a.o?.downMbps || 0)
+    || (b.o?.peers || 0) - (a.o?.peers || 0) || otoPuan(b.s) - otoPuan(a.s));
+  otoSecim = sirali[0].s;
+  const secOlcum = sirali[0].o;
   let kalan = 3;
   const yaz = () => {
     const s = otoSecim;
-    $('#oto-text').textContent = `⚡ ${s.quality || '?'}${s.hdr ? ` ${s.hdr}` : ''} · ${formatSize(s.sizeBytes)} · ${s.seeders ?? '?'} seed ile oda ${kalan} sn içinde açılıyor…`;
+    const olc = secOlcum?.peers ? ` · ${secOlcum.peers} kişiye bağlandı${secOlcum.downMbps ? `, ↓ ${secOlcum.downMbps} Mbps` : ''}` : '';
+    $('#oto-text').textContent = `⚡ ${s.quality || '?'}${s.hdr ? ` ${s.hdr}` : ''} · ${formatSize(s.sizeBytes)} · ${s.seeders ?? '?'} seed${olc} ile oda ${kalan} sn içinde açılıyor…`;
   };
   yaz();
   $('#oto-bar').hidden = false;

@@ -202,6 +202,7 @@ class OdaActivity : AppCompatActivity() {
         val bilgi = JSONObject()
             .put("ses", ses)
             .put("kalite", getSharedPreferences("ayar", MODE_PRIVATE).getString("kalite", null) ?: JSONObject.NULL)
+            .put("isim", getSharedPreferences("ayar", MODE_PRIVATE).getString("isim", null)?.takeIf { it.isNotBlank() } ?: JSONObject.NULL)
             .put("hevc", enBuyuk(MimeTypes.VIDEO_H265))
             .put("h264", enBuyuk(MimeTypes.VIDEO_H264))
             .put("av1", enBuyuk(MimeTypes.VIDEO_AV1))

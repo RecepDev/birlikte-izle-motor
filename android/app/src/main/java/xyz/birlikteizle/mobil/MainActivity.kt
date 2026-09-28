@@ -30,8 +30,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         linktenAc(intent)?.let { return odayaGit(it) }
         ekraniKur()
-        // Tercih edilen görüntü kalitesi ilk açılışta bir kez soruluyor.
-        if (kayit.getString("kalite", null) == null) kaliteSor()
+        // İlk açılışta ad (odalarda bu adla girilir, bir daha sorulmaz), sonra kalite.
+        if (kayit.getString("isim", null).isNullOrBlank()) isimSor(ilk = true)
+        else if (kayit.getString("kalite", null) == null) kaliteSor()
         // Açılışta da güncellemeye bak (odaya girince de ayrıca bakılıyor).
         thread { Guncelleme.apkDenetle(this, sunucuBul()) }
     }
@@ -254,6 +255,18 @@ class MainActivity : AppCompatActivity() {
         kart.addView(guncelle, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
             topMargin = dp(10)
         })
+        isimDugmesi = Button(this).apply {
+            text = isimYazisi()
+            setTextColor(yazi)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(0xFF232633.toInt())
+            }
+            setOnClickListener { isimSor(ilk = false) }
+        }
+        kart.addView(isimDugmesi, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
+            topMargin = dp(10)
+        })
         kaliteDugmesi = Button(this).apply {
             text = kaliteYazisi()
             setTextColor(yazi)
@@ -281,6 +294,35 @@ class MainActivity : AppCompatActivity() {
             addView(kart, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
         setContentView(kok)
+    }
+
+    // ---- ad ------------------------------------------------------------------------------
+    private var isimDugmesi: Button? = null
+    private fun isimYazisi() = "Adın: ${kayit.getString("isim", null)?.takeIf { it.isNotBlank() } ?: "girilmedi"}"
+    private fun isimSor(ilk: Boolean) {
+        val kutu = EditText(this).apply {
+            setText(kayit.getString("isim", "") ?: "")
+            hint = "Adın"
+            setSingleLine()
+        }
+        val pencere = android.app.AlertDialog.Builder(this)
+            .setTitle("Adın ne?")
+            .setMessage("Odalarda bu adla görünürsün.")
+            .setView(kutu)
+            .setCancelable(!ilk)
+            .setPositiveButton("Kaydet", null)
+            .create()
+        pencere.setOnShowListener {
+            pencere.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val ad = kutu.text.toString().trim().take(30)
+                if (ad.isEmpty()) return@setOnClickListener
+                kayit.edit().putString("isim", ad).apply()
+                isimDugmesi?.text = isimYazisi()
+                pencere.dismiss()
+                if (ilk && kayit.getString("kalite", null) == null) kaliteSor()
+            }
+        }
+        pencere.show()
     }
 
     // ---- tercih edilen görüntü kalitesi -------------------------------------------------

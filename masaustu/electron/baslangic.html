@@ -37,6 +37,7 @@
 <body>
   <form class="kart" id="form">
     <h1>Birlikte İzle</h1>
+    <p class="ipucu" style="text-align:center">Adın: <b id="isim-yazi">—</b> · <a href="#" id="isim-degis">değiştir</a></p>
     <div id="odalar" class="odalar" hidden></div>
     <p>Oda linkini yapıştır. Video, tarayıcı yerine mpv ile oynatılır: gerçek HDR, tüm ses dilleri, donanım çözme.</p>
     <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
@@ -49,6 +50,14 @@
     </label>
     <p id="surum" class="ipucu" style="text-align:center"></p>
   </form>
+  <dialog id="isim-sor">
+    <h2>Adın ne?</h2>
+    <p>Odalarda bu adla görünürsün. Bir daha sorulmaz, buradan değiştirebilirsin.</p>
+    <form id="isim-form" method="dialog">
+      <input id="isim" maxlength="30" autocomplete="off" placeholder="Adın" required>
+      <div class="secenekler"><button type="submit">Kaydet</button></div>
+    </form>
+  </dialog>
   <dialog id="kalite-sor">
     <h2>Hangi görüntü kalitesini tercih edersin?</h2>
     <p>Kalite listesinde bu kalite en üstte olur ve önce onun kaynakları aranır. Sonra buradan değiştirebilirsin.</p>
@@ -73,7 +82,28 @@
       sor.close();
     });
   }
-  if (!kayitliKalite && window.kabuk.kalite) sor.showModal();
+  // Ad: ilk açılışta sorulur (kapatılamaz), sonra kalite.
+  const isimSor = document.getElementById('isim-sor');
+  const isimKutu = document.getElementById('isim');
+  const isimGoster = () => { document.getElementById('isim-yazi').textContent = window.kabuk.isim?.() || '—'; };
+  isimGoster();
+  isimSor.addEventListener('cancel', (e) => { if (!window.kabuk.isim?.()) e.preventDefault(); });
+  document.getElementById('isim-form').addEventListener('submit', (e) => {
+    const ad = isimKutu.value.trim();
+    if (!ad) { e.preventDefault(); return; }
+    window.kabuk.isimYaz?.(ad);
+    setTimeout(() => {
+      isimGoster();
+      if (!window.kabuk.kalite?.() && window.kabuk.kalite) sor.showModal();
+    }, 50);
+  });
+  document.getElementById('isim-degis').addEventListener('click', (e) => {
+    e.preventDefault();
+    isimKutu.value = window.kabuk.isim?.() || '';
+    isimSor.showModal();
+  });
+  if (window.kabuk.isim && !window.kabuk.isim()) isimSor.showModal();
+  else if (!kayitliKalite && window.kabuk.kalite) sor.showModal();
   document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = document.getElementById('link').value.trim();
