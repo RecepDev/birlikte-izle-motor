@@ -669,8 +669,8 @@ setInterval(async () => {
   if (anahtar === otoTelefonAnahtar) return;
   otoTelefonAnahtar = anahtar;
   if (me()?.ownStreamId) return;
-  const host = streamById(state.room.hostStreamId);
-  if (host?.quality === cihaz.kalite) return; // host'unki zaten uygun: aynı torrent
+  // Host'un kaynağı aynı kalitede olsa da o kalitenin kaynakları test ediliyor: host'unki
+  // en iyisiyse ona dokunulmuyor (aynı torrent, host'un Stremio'su zaten açık).
   // Adaylar host'un Stremio'sunda gerçekten açılıp ölçülüyor (~20 sn); veri veren en hızlısı.
   toast(`Otomatik: ${cihaz.kalite} kaynaklar test ediliyor…`, 5000);
   const test = await request('kaynakTest', { quality: cihaz.kalite }, 70_000);
@@ -680,7 +680,10 @@ setInterval(async () => {
   const olcum = canli[0] || null;
   const pick = olcum ? streamById(olcum.streamId) : otomatikSec(state.room.streams, cihaz.kalite);
   tani.kaydet('oto-kaynak', { test: test?.sonuclar?.length ?? null, canli: canli.length, secilen: pick?.quality, mbps: olcum?.downMbps });
-  if (!pick || pick.streamId === state.room.hostStreamId) return;
+  if (!pick || pick.streamId === state.room.hostStreamId) {
+    if (pick) toast(`Otomatik: en iyi ${pick.quality} kaynak zaten açık${olcum ? ` (↓ ${Math.round(olcum.downMbps)} Mbps)` : ''}.`, 4000);
+    return;
+  }
   const res = await request('setOwnStream', { streamId: pick.streamId });
   if (!res?.error) {
     toast(`Otomatik: ${pick.quality} kaynak açıldı${olcum ? ` (${olcum.peers} kişi, ↓ ${Math.round(olcum.downMbps)} Mbps)` : ` (${pick.seeders ?? '?'} seed)`}.`, 5000);
