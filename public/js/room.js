@@ -671,11 +671,20 @@ setInterval(async () => {
   if (me()?.ownStreamId) return;
   const host = streamById(state.room.hostStreamId);
   if (host?.quality === cihaz.kalite) return; // host'unki zaten uygun: aynı torrent
-  const pick = otomatikSec(state.room.streams, cihaz.kalite);
-  if (!pick || pick.streamId === state.room.hostStreamId || pick.quality === host?.quality) return;
+  // Adaylar host'un Stremio'sunda gerçekten açılıp ölçülüyor (~20 sn); veri veren en hızlısı.
+  toast(`Otomatik: ${cihaz.kalite} kaynaklar test ediliyor…`, 5000);
+  const test = await request('kaynakTest', { quality: cihaz.kalite }, 45_000);
+  if (anahtar !== `${state.room.contentId}|${state.room.hostStreamId}` || me()?.ownStreamId) return;
+  const canli = (test?.sonuclar || []).filter((r) => r.alive)
+    .sort((a, b) => (b.downMbps || 0) - (a.downMbps || 0) || (b.peers || 0) - (a.peers || 0));
+  const olcum = canli[0] || null;
+  const pick = olcum ? streamById(olcum.streamId) : otomatikSec(state.room.streams, cihaz.kalite);
+  tani.kaydet('oto-kaynak', { test: test?.sonuclar?.length ?? null, canli: canli.length, secilen: pick?.quality, mbps: olcum?.downMbps });
+  if (!pick || pick.streamId === state.room.hostStreamId) return;
   const res = await request('setOwnStream', { streamId: pick.streamId });
-  tani.kaydet('oto-kaynak', { kalite: pick.quality, seed: pick.seeders, hata: res?.error || null });
-  if (!res?.error) toast(`Otomatik: ${pick.quality} kaynak açıldı (${pick.seeders ?? '?'} seed).`, 5000);
+  if (!res?.error) {
+    toast(`Otomatik: ${pick.quality} kaynak açıldı${olcum ? ` (${olcum.peers} kişi, ↓ ${Math.round(olcum.downMbps)} Mbps)` : ` (${pick.seeders ?? '?'} seed)`}.`, 5000);
+  }
 }, 3000);
 video.addEventListener('seeking', () => { lastSeekAt = Date.now(); });
 

@@ -321,23 +321,28 @@ socketCtl = attachSocket(io, {
         if (denied) return denied;
         const stream = room.streams.find((s) => s.streamId === p?.streamId && s.kind === 'torrent');
         if (!stream) return { error: 'badStream' };
-        activeChecks.set(stream.infoHash, (activeChecks.get(stream.infoHash) || 0) + 1);
-        torrentDokun(stream.infoHash);
-        let result;
-        try {
-          result = await stremioLocal.checkTorrent(stream);
-        } finally {
-          const left = (activeChecks.get(stream.infoHash) || 1) - 1;
-          if (left > 0) activeChecks.set(stream.infoHash, left);
-          else activeChecks.delete(stream.infoHash);
-          // The test opened this torrent in Stremio, which keeps downloading it forever.
-          // Close it again unless someone in the room is actually watching it.
-          const inUse = room.statsStreamIds().some(
-            (id) => room.streams.find((s) => s.streamId === id)?.infoHash === stream.infoHash,
-          );
-          if (left === 0 && !inUse) await stremioLocal.removeTorrent(stream);
-        }
-        return { reply: { ok: true, ...result }, msgs: [] };
+        return { reply: { ok: true, ...(await torrentDenetle(room, stream)) }, msgs: [] };
+      },
+      // Telefonun otomatik kaynağı: seçtiği kalitenin en umut verici 4 kaynağı host'un Stremio'sunda
+      // ~20 sn açılıp ölçülüyor (bağlanılan kişi, gerçek hız); telefon en hızlısına geçiyor.
+      // Sonuçlar 5 dk saklanıyor (aynı odada ikinci telefon beklemesin).
+      kaynakTest: async (room, uid, p) => {
+        const kalite = String(p?.quality || '');
+        const puan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1);
+        const torrents = room.guestStreams().filter((s) => s.kind === 'torrent');
+        const adaylar = [
+          ...torrents.filter((s) => s.quality === kalite).sort((a, b) => puan(b) - puan(a)),
+          ...torrents.filter((s) => s.quality !== kalite && (Number(s.seeders) || 0) >= 3).sort((a, b) => puan(b) - puan(a)),
+        ].slice(0, 4);
+        room.testSonuc ||= new Map();
+        const sonuclar = await Promise.all(adaylar.map(async (s) => {
+          const eski = room.testSonuc.get(s.infoHash);
+          if (eski && Date.now() - eski.at < 5 * 60_000) return { streamId: s.streamId, ...eski };
+          const r = await torrentDenetle(room, s, { kapat: false });
+          room.testSonuc.set(s.infoHash, { ...r, at: Date.now() });
+          return { streamId: s.streamId, ...r };
+        }));
+        return { reply: { ok: true, sonuclar }, msgs: [] };
       },
       // Host pastes a magnet link: it becomes a stream of the current room and is picked for everyone.
       addMagnet: async (room, uid, p) => {
@@ -524,6 +529,25 @@ const birikmeTimer = setInterval(async () => {
   ]);
 }, 60_000);
 birikmeTimer.unref();
+
+// Torrent'i host'un Stremio'sunda ~20 sn açıp ölçer (bağlanılan kişi, gerçek hız).
+// kapat: sonra kapatılsın mı (odada izlenmiyorsa). Kapatılmazsa sahipsiz temizliği kapatır.
+async function torrentDenetle(room, stream, { kapat = true } = {}) {
+  activeChecks.set(stream.infoHash, (activeChecks.get(stream.infoHash) || 0) + 1);
+  torrentDokun(stream.infoHash);
+  try {
+    return await stremioLocal.checkTorrent(stream);
+  } finally {
+    const left = (activeChecks.get(stream.infoHash) || 1) - 1;
+    if (left > 0) activeChecks.set(stream.infoHash, left);
+    else activeChecks.delete(stream.infoHash);
+    const inUse = room.statsStreamIds().some(
+      (id) => room.streams.find((s) => s.streamId === id)?.infoHash === stream.infoHash,
+    );
+    if (kapat && left === 0 && !inUse) await stremioLocal.removeTorrent(stream);
+    else torrentDokun(stream.infoHash);
+  }
+}
 
 // Stremio'nun uploadSpeed alanı indirme hızının aynısını gösteriyor (hatalı); gerçek yükleme
 // hızı "uploaded" sayacının iki okuma arasındaki farkından.
