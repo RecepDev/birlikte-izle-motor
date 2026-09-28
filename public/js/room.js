@@ -1298,6 +1298,7 @@ function applySnapshot(snap, publicUrl) {
   sync.calibrate().then(() => sync.setPlayback(state.room.playback, state.room.autoPaused));
   loadMyStream(hadRelay);
   state.joinedOnce = true;
+  if (firstJoin && hashParams.get('oto') === '1') otoBaslat();
   if (firstJoin) {
     // Otomatik kalite taraması yok: ekranda görünmeyen torrent'ler arkada açılmasın. Kalite
     // sekmesindeki "Tümünü test et" ile elle yapılıyor.
@@ -1839,8 +1840,10 @@ async function renderEpisodesPop(refresh = false) {
 }
 async function changeEpisode(id, ep) {
   toast(`${ep.season}. sezon ${ep.episode}. bölüm açılıyor…`);
-  const res = await request('changeContent', { type: 'series', id: `${id}:${ep.season}:${ep.episode}` });
+  const yeniId = `${id}:${ep.season}:${ep.episode}`;
+  const res = await request('changeContent', { type: 'series', id: yeniId });
   if (res?.error) toast(errorText(res.error));
+  else otoBaslat(yeniId);
 }
 // Oynat düğmesinin yanındaki ⏮ ⏭: dizinin önceki/sonraki bölümü (sezon geçişi dahil, özel bölümler hariç).
 async function stepEpisode(d) {
@@ -2150,6 +2153,7 @@ async function pickContent(type, id, item) {
   const prevText = item.querySelector('.name').textContent;
   item.querySelector('.name').textContent = `${prevText} — yükleniyor…`;
   const res = await request('changeContent', { type, id });
+  if (!res?.error) otoBaslat(id);
   if (res?.error) {
     toast(errorText(res.error));
     item.classList.remove('loading');
@@ -2788,6 +2792,19 @@ function renderShortcuts() {
 }
 
 // Host kalite listesinden kaynak seçince oda duraklatılmışsa da oynamaya başlasın.
+// "Oda aç"ta otomatik kaynakla açılan oda ve host'un seçtiği bölüm/film: kaynağı sunucu seçiyor
+// (tercih edilen kalitede en çok seed'li), video hazır olunca kendiliğinden oynasın.
+function otoBaslat(contentId = null) {
+  const t0 = Date.now();
+  const timer = setInterval(() => {
+    if (Date.now() - t0 > 120_000) return clearInterval(timer);
+    if (contentId && state.room?.contentId !== contentId) return; // yeni içerik henüz gelmedi
+    if (!isHost() || player.status().state !== 'ready' || player.stream()?.streamId !== myStreamId()) return;
+    clearInterval(timer);
+    playAfterSwitch();
+  }, 500);
+}
+
 function playAfterSwitch() {
   if (canControl() && !sync.intendsToPlay()) sync.toggle();
 }

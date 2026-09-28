@@ -16,6 +16,7 @@ import { createConfigStore } from './src/config.js';
 import { createAddonsClient } from './src/addons-client.js';
 import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
 import { normalizeStreams, normalizeAddonStreams, bestStream } from './src/streams.js';
+import { otomatikSec } from './public/js/shared/kaynak-sec.js';
 import { isit as isitStremio } from './src/stremio-isit.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
@@ -206,7 +207,7 @@ socketCtl = attachSocket(io, {
         const [meta, { results }] = await Promise.all([addons.meta('series', nextId), addons.streams(config.get().addons, 'series', nextId)]);
         const streams = normalizeStreams(results);
         const onceki = room.streams.find((s) => s.streamId === room.hostStreamId);
-        const pick = bestStream(streams, onceki?.quality);
+        const pick = otomatikSec(streams, tercih.kalite() || onceki?.quality, { httpOk: true }) || bestStream(streams, onceki?.quality);
         if (!pick) return { reply: { ok: false }, msgs: [] };
         room.prefetch = { contentId: nextId, meta, streams, pickId: pick.streamId, infoHash: pick.infoHash, at: Date.now() };
         // Torrent önceden açılmıyor: ekranda görünmeyen hiçbir torrent arkada indirmesin.
@@ -410,8 +411,10 @@ socketCtl = attachSocket(io, {
           streams = normalizeStreams(results);
         }
         if (!streams.length) return { error: 'noStreams' };
-        // En iyi kaynak: önceki kaliteyle aynı, tek bölüm (paket değil), çok kaynaklı.
-        const secilen = hazir ? streams.find((s) => s.streamId === hazir.pickId) : bestStream(streams, onceki?.quality);
+        // Otomatik kaynak: host'un tercih ettiği kalite (yoksa önceki kalite) içinde en çok seed'li
+        // tek bölüm; o kalitede yoksa yakın kalite (bkz. kaynak-sec.js). Altyazıyı sayfa seçiyor.
+        const secilen = hazir ? streams.find((s) => s.streamId === hazir.pickId)
+          : otomatikSec(streams, tercih.kalite() || onceki?.quality, { httpOk: true }) || bestStream(streams, onceki?.quality);
         room.prefetch = null;
         const res = room.setContent(uid, { type, contentId: id, meta, streams, hostStreamId: (secilen || streams[0]).streamId });
         if (!res.error) {

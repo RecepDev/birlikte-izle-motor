@@ -37,6 +37,15 @@
         <button id="refresh-addons" type="button" class="refresh-btn">↻ Addon'ları tekrar ara</button>
       </div>
       <div class="row">
+        <label><input id="oto-kaynak" type="checkbox"> ⚡ Otomatik kaynak seç</label>
+        <span class="muted small">Tercih ettiğin kalitede en çok seed'li kaynakla oda kendiliğinden açılır (3 sn içinde iptal edilebilir).</span>
+      </div>
+      <div id="oto-bar" class="oto-bar" hidden>
+        <span id="oto-text"></span>
+        <button id="oto-simdi" type="button" class="primary">Şimdi aç</button>
+        <button id="oto-iptal" type="button">İptal (listeden seçeceğim)</button>
+      </div>
+      <div class="row">
         <label><input id="masaustu" type="checkbox"> Odayı masaüstü uygulamasında aç</label>
         <span class="muted small">Gerçek HDR, tüm ses dilleri, donanım çözme. Uygulama kurulu değilse tarayıcıda açılır.</span>
       </div>

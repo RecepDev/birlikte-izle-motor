@@ -1,5 +1,6 @@
 import { api, apiStream, el, $, formatSize } from './api.js';
 import { browserCodecs } from './codecs.js';
+import { otomatikSec } from './kaynak-sec.js';
 
 // Can this browser show the picture without re-encoding (original quality)?
 const caps = browserCodecs(document.createElement('video'));
@@ -102,13 +103,17 @@ function renderRefresh() {
   $('#refresh-addons').textContent = refreshing ? '↻ Aranıyor… (tekrar basılabilir)' : "↻ Addon'ları tekrar ara";
 }
 
-async function createRoom(stream, button) {
+async function createRoom(stream, button, { oto = false } = {}) {
+  otoDurdur();
+  otoIptal = true; // elle ya da otomatik: bir kez
   if (stream.kind === 'http' && !confirm(DEBRID_WARNING)) return;
   button.disabled = true;
   olusturuluyor = true;
   button.textContent = 'Oda açılıyor…';
   try {
     const res = await api('/api/rooms', { method: 'POST', body: { type, id, streamId: stream.streamId } });
+    // Otomatik modda oda açılınca video da kendiliğinden başlasın (oda sayfası "oto=1"e bakıyor).
+    if (oto) res.roomUrl += '&oto=1';
     if ($('#masaustu').checked) {
       // Şemayı masaüstü uygulaması kendine kaydediyor. Kurulu değilse tarayıcı bir şey
       // yapmaz, o yüzden oda linkini de gösteriyoruz.
@@ -212,6 +217,7 @@ function render() {
     el('h3', { text: `${addon} (${list.length})` }),
     ...list.map((s) => {
       const button = el('button', { type: 'button', class: 'primary', text: 'Bununla oda aç' });
+      button.dataset.sid = s.streamId;
       button.addEventListener('click', () => createRoom(s, button));
       return el(
         'li',
@@ -279,6 +285,57 @@ if (kabuktayiz) masaustuKutu.closest('.row').hidden = true;
 masaustuKutu.checked = !kabuktayiz && localStorage.getItem('masaustuAc') === '1';
 masaustuKutu.addEventListener('change', () => localStorage.setItem('masaustuAc', masaustuKutu.checked ? '1' : '0'));
 
+// ---- Otomatik kaynak seçimi: addon'lar cevap verince (en geç 12 sn) tercih edilen kalitede en çok
+// seed'li torrent seçilip (bkz. shared/kaynak-sec.js) 3 sn sonra oda açılıyor; bu arada iptal
+// edilebilir. Altyazıyı oda sayfası kendisi seçiyor (Ayarlar > Altyazı).
+const otoKutu = $('#oto-kaynak');
+otoKutu.checked = localStorage.getItem('otoKaynak') !== '0';
+otoKutu.addEventListener('change', () => {
+  localStorage.setItem('otoKaynak', otoKutu.checked ? '1' : '0');
+  if (otoKutu.checked) {
+    otoIptal = false;
+    otoDene();
+  } else otoDurdur();
+});
+let otoIptal = false;
+let otoSayac = null;
+let otoIlkCevap = null;
+let otoSecim = null;
+function otoDurdur() {
+  clearInterval(otoSayac);
+  otoSayac = null;
+  $('#oto-bar').hidden = true;
+}
+function otoDene() {
+  if (!otoKutu.checked || otoIptal || olusturuluyor || otoSayac) return;
+  if (!tercihKalite && $('#kalite-sor').open) return; // önce kalite sorusu
+  const beklendi = otoIlkCevap && Date.now() - otoIlkCevap > 12_000;
+  if (!loadDone && !beklendi) return;
+  otoSecim = otomatikSec(streams, tercihKalite);
+  if (!otoSecim) return;
+  let kalan = 3;
+  const yaz = () => {
+    const s = otoSecim;
+    $('#oto-text').textContent = `⚡ ${s.quality || '?'}${s.hdr ? ` ${s.hdr}` : ''} · ${formatSize(s.sizeBytes)} · ${s.seeders ?? '?'} seed ile oda ${kalan} sn içinde açılıyor…`;
+  };
+  yaz();
+  $('#oto-bar').hidden = false;
+  otoSayac = setInterval(() => {
+    kalan -= 1;
+    if (kalan > 0) return yaz();
+    otoDurdur();
+    otoAc();
+  }, 1000);
+}
+function otoAc() {
+  const button = [...document.querySelectorAll('#streams button.primary')].find((b) => b.dataset.sid === otoSecim?.streamId)
+    || document.createElement('button');
+  createRoom(otoSecim, button, { oto: true });
+}
+$('#oto-simdi').addEventListener('click', () => { otoDurdur(); otoAc(); });
+$('#oto-iptal').addEventListener('click', () => { otoIptal = true; otoDurdur(); });
+setInterval(otoDene, 1000);
+
 // Bu sayfa açık ve görünürken torrent'ler açık kalıyor; kapanınca/arka plana geçince (sekme
 // değişti, pencere küçüldü) sunucu hepsini hemen kapatıyor. Geri gelince görünenler yeniden denetleniyor.
 const KEY = document.querySelector('meta[name="panel-key"]').content;
@@ -310,6 +367,7 @@ try {
         $('#poster').hidden = false;
       }
     } else if (line.type === 'addon') {
+      otoIlkCevap ||= Date.now();
       addonsReplied += 1;
       addonReplied(line);
       render();
@@ -330,7 +388,11 @@ try {
   const sunucuda = (await api('/api/tercih').catch(() => null))?.kalite;
   const uygulamada = window.kabuk?.kalite?.();
   if (sunucuda) return;
-  if (uygulamada) return api('/api/tercih', { method: 'POST', body: { kalite: uygulamada } }).catch(() => {});
+  if (uygulamada) {
+    tercihKalite = uygulamada;
+    otoDene();
+    return api('/api/tercih', { method: 'POST', body: { kalite: uygulamada } }).catch(() => {});
+  }
   const sor = $('#kalite-sor');
   for (const b of sor.querySelectorAll('button[data-q]')) {
     b.addEventListener('click', async () => {
@@ -339,6 +401,7 @@ try {
       sor.close();
       tercihKalite = b.dataset.q;
       render();
+      otoDene();
     });
   }
   sor.showModal();
