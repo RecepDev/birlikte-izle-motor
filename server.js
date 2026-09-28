@@ -44,7 +44,11 @@ import { createRelay } from './src/relay.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const DATA = path.join(ROOT, 'data');
+// TEST_INSTANCE=1 (uçtan uca testler): ayrı veri klasörü (DATA_DIR), Stremio'yu açma/ayarlama,
+// torrent temizlikleri, Stremio'yu yeniden başlatma ve kapanışta uygulamayı/paneli kapatma yok:
+// kullanıcının açık sunucusuna, izlediği torrent'lere ve uygulamasına dokunulmasın.
+const TEST = Boolean(process.env.TEST_INSTANCE);
+const DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
 const PUBLIC_PORT = Number(process.env.PUBLIC_PORT) || 7000;
 const PANEL_PORT = Number(process.env.PANEL_PORT) || 7001;
 const PUBLIC_BASE = `http://127.0.0.1:${PUBLIC_PORT}`;
@@ -56,7 +60,7 @@ const addons = createAddonsClient();
 const stremioLocal = createStremioLocal();
 const stremioRestarter = createStremioRestarter({ stremioLocal, log });
 // Sunucu açılınca Stremio kapalıysa kendiliğinden aç: oda açmak için onun yayın sunucusu lazım.
-stremioAcikDegilseAc({ stremioLocal, log });
+if (!TEST) stremioAcikDegilseAc({ stremioLocal, log });
 // Otomatik yeniden başlatmalar arası en az süre: takılma sürerse döngüye girmesin.
 const AUTO_RESTART_COOLDOWN_MS = 5 * 60_000;
 // Birisi bekliyorken host'un torrent'i bu kadar süre hiç veri indirmezse Stremio takılmış sayılır.
@@ -76,7 +80,7 @@ const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), 
 // Ek tracker'lar yeni açılan torrent'lere ekleniyor; Stremio'nun peer arama sınırı yükseltiliyor.
 setInterval(() => setExtraSources(torrentHiz.kaynaklar()), 60_000).unref();
 setExtraSources(torrentHiz.kaynaklar());
-setTimeout(() => torrentHiz.stremioAyarla(), 15_000).unref();
+if (!TEST) setTimeout(() => torrentHiz.stremioAyarla(), 15_000).unref();
 const subtitles = createSubtitleService({
   addons,
   getAddons: () => config.get().addons,
@@ -512,6 +516,7 @@ function watchStall(room, stats) {
     room.stallSince = null;
     return;
   }
+  if (TEST) return;
   room.stallSince ||= Date.now();
   if (Date.now() - room.stallSince < STALL_MS) return;
   if (Date.now() - lastAutoRestart < AUTO_RESTART_COOLDOWN_MS) return;
@@ -536,6 +541,7 @@ const BIRIKME_SINIRI = 60;
 const BIRIKME_ARALIK_MS = 20 * 60_000;
 let sonBirikmeTemizligi = 0;
 const birikmeTimer = setInterval(async () => {
+  if (TEST) return;
   if (Date.now() - sonBirikmeTemizligi < BIRIKME_ARALIK_MS) return;
   const room = rooms.list().find((r) => r.users && [...r.users.values()].some((u) => u.connected));
   if (!room) return;
@@ -638,6 +644,7 @@ const odaBosMu = (r) => {
   return r.now() - r.emptySince > (r.users.size ? 30_000 : 180_000);
 };
 const sahipsizTimer = setInterval(async () => {
+  if (TEST) return;
   const kullanilan = new Set(activeChecks.keys());
   for (const r of rooms.list()) {
     torrentKaydet(r.streams);
@@ -659,6 +666,7 @@ sahipsizTimer.unref();
 // Sunucu açılırken Stremio'da açık kalmış torrent'ler önceki oturumlardan artakalan: onlar
 // da temizliğe dahil (sunucu yeni açıldığı için kayıtlarımızda yoklar).
 setTimeout(async () => {
+  if (TEST) return;
   try {
     for (const h of await stremioLocal.openTorrents()) torrentKaydet([{ kind: 'torrent', infoHash: h }]);
   } catch { /* Stremio kapalı */ }
@@ -668,7 +676,7 @@ setTimeout(async () => {
 // being watched (in any room) or tested right now may stay open in the host's Stremio.
 let cleanupBusy = false;
 const cleanupTimer = setInterval(async () => {
-  if (cleanupBusy) return;
+  if (cleanupBusy || TEST) return;
   const all = rooms.list();
   if (!all.some((r) => r.settings.stopOtherDownloads && r.connectedUsers().length)) return;
   cleanupBusy = true;
@@ -756,8 +764,10 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('Sunucu kapatılıyor');
-  panelPenceresiniKapat();
-  uygulamayiKapat();
+  if (!TEST) {
+    panelPenceresiniKapat();
+    uygulamayiKapat();
+  }
   tunnel.stop();
   socketCtl.stop();
   relay.stop();
