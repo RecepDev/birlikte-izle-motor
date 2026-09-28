@@ -2019,17 +2019,26 @@ async function checkWeakSource() {
     .filter((x) => x.kind === 'torrent' && x.streamId !== s.streamId && x.infoHash !== s.infoHash)
     .sort((a, b) => score(b) - score(a))
     .slice(0, 8);
-  if (!candidates.length) return;
-  // 4'erli dalgalar: ilk 4'te belirgin daha hızlısı yoksa sonraki 4.
   const cur0 = Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0;
-  await Promise.all(candidates.slice(0, 4).map((x) => checkStream(x.streamId)));
-  const iyiVar = candidates.slice(0, 4).some((x) => (streamChecks.get(x.streamId)?.result?.downMbps || 0) >= Math.max(cur0 * 1.5, cur0 + 5));
-  if (!iyiVar && candidates.length > 4) await Promise.all(candidates.slice(4).map((x) => checkStream(x.streamId)));
-  const tested = candidates
-    .map((x) => ({ s: x, r: streamChecks.get(x.streamId)?.result }))
-    .filter((x) => x.r?.alive && Number.isFinite(x.r.downMbps))
-    .sort((a, b) => b.r.downMbps - a.r.downMbps);
-  const best = tested[0];
+  const esik = (c) => Math.max(c * 1.5, c + 5);
+  // Önce daha önce ölçülenler (oda açılırken, telefonun testi, kalite denetimi; son 15 dk):
+  // yeterince hızlısı varsa yeniden ölçmeden hemen ona.
+  const bilinen = await request('olcumler');
+  const hazir = (bilinen?.list || [])
+    .filter((x) => x.streamId !== s.streamId && x.alive && x.yasSn < 900 && x.downMbps >= esik(cur0) && streamById(x.streamId))
+    .sort((a, b) => b.downMbps - a.downMbps)[0];
+  let best = hazir ? { s: streamById(hazir.streamId), r: hazir } : null;
+  if (!best) {
+    if (!candidates.length) return;
+    // 4'erli dalgalar: ilk 4'te belirgin daha hızlısı yoksa sonraki 4.
+    await Promise.all(candidates.slice(0, 4).map((x) => checkStream(x.streamId)));
+    const iyiVar = candidates.slice(0, 4).some((x) => (streamChecks.get(x.streamId)?.result?.downMbps || 0) >= esik(cur0));
+    if (!iyiVar && candidates.length > 4) await Promise.all(candidates.slice(4).map((x) => checkStream(x.streamId)));
+    best = candidates
+      .map((x) => ({ s: x, r: streamChecks.get(x.streamId)?.result }))
+      .filter((x) => x.r?.alive && Number.isFinite(x.r.downMbps))
+      .sort((a, b) => b.r.downMbps - a.r.downMbps)[0];
+  }
   const cur = Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0;
   if (!best || best.r.downMbps < Math.max(cur * 1.5, cur + 5)) {
     // Daha iyisi yok: bir süre sonra tekrar bakılabilsin.
@@ -2094,8 +2103,12 @@ setInterval(async () => {
   const seedScore = (x) => (Number(x.seeders) || 0) * (x.pack ? 0.35 : 1);
   let pick = null;
   let text = '';
+  // Daha önce ölçülüp veri verenler (son 15 dk) seed sayısından önce gelir.
+  const bilinen = (olu || guestStalls.length >= 2) ? ((await request('olcumler'))?.list || []) : [];
+  const olculmus = (x) => bilinen.find((b) => b.streamId === x.streamId && b.alive && b.yasSn < 900)?.downMbps || 0;
   if (olu) {
-    pick = others.filter((x) => x.quality === s.quality).sort((a, b) => seedScore(b) - seedScore(a))[0]
+    pick = others.filter((x) => x.quality === s.quality && olculmus(x) > 0).sort((a, b) => olculmus(b) - olculmus(a))[0]
+      || others.filter((x) => x.quality === s.quality).sort((a, b) => seedScore(b) - seedScore(a))[0]
       || others.sort((a, b) => seedScore(b) - seedScore(a))[0];
     if (pick) text = 'Bu kaynaktan 1 dakikadır veri gelmiyor. Başka kaynak: ';
   } else if (guestStalls.length >= 2) {
@@ -2107,7 +2120,7 @@ setInterval(async () => {
       const rank = (q) => { const i = QUALITY_ORDER.indexOf(q); return i < 0 ? 9 : i; };
       pick = others
         .filter((x) => rank(x.quality) > rank(s.quality) && (requiredMbps(x.sizeBytes, dur) || Infinity) < gelen * 0.8)
-        .sort((a, b) => rank(a.quality) - rank(b.quality) || seedScore(b) - seedScore(a))[0];
+        .sort((a, b) => rank(a.quality) - rank(b.quality) || olculmus(b) - olculmus(a) || seedScore(b) - seedScore(a))[0];
       if (pick) text = `İnternetin bu kaliteye yetmiyor (gelen ~${formatMbps(gelen)} Mbps, gereken ~${formatMbps(need)}). Sana uygun: `;
     }
   }

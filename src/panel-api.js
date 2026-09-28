@@ -306,7 +306,7 @@ export function createPanelApp({
   }));
 
   app.post('/api/rooms', wrap(async (req, res) => {
-    const { type, id, streamId } = req.body || {};
+    const { type, id, streamId, olcumler } = req.body || {};
     if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
     const { meta, streams } = await loadStreams(type, id);
     if (!streams.some((s) => s.streamId === streamId)) return res.status(400).json({ error: 'Stream bulunamadı' });
@@ -314,6 +314,16 @@ export function createPanelApp({
       type, contentId: id, meta, streams, hostStreamId: streamId, settings: config.get().defaults,
     });
     log.info('Oda açıldı', { roomId: room.id, content: id });
+    // "Oda aç" ekranında ölçülen kaynaklar odaya (kaynak zayıflarsa yeniden ölçmeden geçiş için).
+    if (Array.isArray(olcumler)) {
+      room.olcumler = new Map();
+      for (const o of olcumler.slice(0, 40)) {
+        if (!/^[0-9a-f]{40}$/.test(String(o?.infoHash || ''))) continue;
+        room.olcumler.set(o.infoHash, {
+          downMbps: Number(o.downMbps) || 0, peers: Number(o.peers) || 0, alive: (Number(o.downMbps) || 0) > 0.1, at: Date.now(),
+        });
+      }
+    }
     onRoomCreated(room);
     // Seçim ekranında önceden açılan diğer torrent'ler hemen kapansın: seçilen videoyla hızı
     // paylaşıp açılışını geciktiriyorlardı (temizlik ayarını ve 5 sn'lik turu beklemeden).

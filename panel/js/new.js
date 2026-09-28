@@ -111,7 +111,9 @@ async function createRoom(stream, button, { oto = false } = {}) {
   olusturuluyor = true;
   button.textContent = 'Oda açılıyor…';
   try {
-    const res = await api('/api/rooms', { method: 'POST', body: { type, id, streamId: stream.streamId } });
+    const olcumler = [...new Set([...sonuclar.keys(), ...enIyi.keys()])]
+      .map((h) => ({ infoHash: h, ...(sonuclar.get(h) || enIyi.get(h)) }));
+    const res = await api('/api/rooms', { method: 'POST', body: { type, id, streamId: stream.streamId, olcumler } });
     // Otomatik modda oda açılınca video da kendiliğinden başlasın (oda sayfası "oto=1"e bakıyor).
     if (oto) res.roomUrl += '&oto=1';
     if ($('#masaustu').checked) {

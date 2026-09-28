@@ -177,6 +177,14 @@ socketCtl = attachSocket(io, {
         log.info('Stremio yükleme sınırı', { mbps: res.mbps });
         return { reply: { ok: true, mbps: res.mbps }, msgs: [] };
       },
+      olcumler: (room) => {
+        const list = [];
+        for (const s of room.streams) {
+          const o = s.kind === 'torrent' && room.olcumler?.get(s.infoHash);
+          if (o) list.push({ streamId: s.streamId, downMbps: o.downMbps, peers: o.peers, alive: o.alive, yasSn: Math.round((Date.now() - o.at) / 1000) });
+        }
+        return { reply: { ok: true, list }, msgs: [] };
+      },
       // Telefonun ölçüp seçtiği iyi kaynak da dizinin hafızasına.
       kaynakIyi: (room, uid, p) => {
         const s = room.streams.find((x) => x.streamId === p?.streamId);
@@ -347,6 +355,8 @@ socketCtl = attachSocket(io, {
         const olc = (s) => (async () => {
           const eski = room.testSonuc.get(s.infoHash);
           if (eski && Date.now() - eski.at < 5 * 60_000) return { streamId: s.streamId, ...eski };
+          const bilinen = room.olcumler?.get(s.infoHash);
+          if (bilinen && Date.now() - bilinen.at < 5 * 60_000) return { streamId: s.streamId, ...bilinen };
           const r = await torrentDenetle(room, s, { kapat: false });
           room.testSonuc.set(s.infoHash, { ...r, at: Date.now() });
           return { streamId: s.streamId, ...r };
@@ -549,13 +559,25 @@ const birikmeTimer = setInterval(async () => {
 }, 60_000);
 birikmeTimer.unref();
 
+// Odada ölçülen kaynaklar ("Oda aç" ekranı, telefonun testi, kalite denetimi): kaynak zayıflayınca
+// yeniden ölçmeden en iyisine geçilebilsin (bkz. room.js checkWeakSource).
+function olcumKaydet(room, infoHash, r) {
+  if (!infoHash || !r) return;
+  room.olcumler ||= new Map();
+  room.olcumler.set(infoHash, {
+    downMbps: Number(r.downMbps) || 0, peers: Number(r.peers) || 0, alive: Boolean(r.alive), at: Date.now(),
+  });
+}
+
 // Torrent'i host'un Stremio'sunda ~20 sn açıp ölçer (bağlanılan kişi, gerçek hız).
 // kapat: sonra kapatılsın mı (odada izlenmiyorsa). Kapatılmazsa sahipsiz temizliği kapatır.
 async function torrentDenetle(room, stream, { kapat = true } = {}) {
   activeChecks.set(stream.infoHash, (activeChecks.get(stream.infoHash) || 0) + 1);
   torrentDokun(stream.infoHash);
   try {
-    return await stremioLocal.checkTorrent(stream);
+    const r = await stremioLocal.checkTorrent(stream);
+    olcumKaydet(room, stream.infoHash, r);
+    return r;
   } finally {
     const left = (activeChecks.get(stream.infoHash) || 1) - 1;
     if (left > 0) activeChecks.set(stream.infoHash, left);
