@@ -40,6 +40,8 @@ html, body { overflow: hidden !important; }
   order: -1;
   align-self: center !important;
   margin: 6px auto !important;
+  /* Tarayıcı düzenindeki ortalama kaydırması (translateX(-50%)) burada şeridi sola taşırıyordu. */
+  transform: none !important;
 }
 /* Bildirim kartı (ör. "Kalite sekmesinden başka bir stream seçebilirsin") videonun ortasında;
    mpv penceresinde kart kadar delik açılıyor (bkz. onyukleme-kabuk.cjs). Eskiden videonun

@@ -178,6 +178,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   background: rgba(20, 20, 28, .92); border: 1px solid var(--line); border-radius: 999px;
   padding: 8px 14px; display: flex; gap: 10px; align-items: center; z-index: 3; max-width: calc(100% - 24px);
+  flex-wrap: wrap; justify-content: center; text-align: center; box-sizing: border-box;
 }
 .banner button { padding: 4px 10px; font-size: 13px; }
 /* Our own subtitle layer: above the (filtered) video, never affected by it. */
