@@ -27,9 +27,10 @@ import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
 import { createGiris } from './src/giris.js';
 import { createTercih } from './src/tercih.js';
-import { kaydet as torrentKaydet, dokun as torrentDokun, bizimMi, yeniMi } from './src/bizim-torrentler.js';
+import { kaydet as torrentKaydet, dokun as torrentDokun, kapatilacaklar } from './src/bizim-torrentler.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
 import { createTani } from './src/tani.js';
+import { stremioTakildiMi } from './src/takilma.js';
 import { sinirOku as yuklemeSiniriOku, sinirKoy as yuklemeSiniriKoy } from './src/yukleme-siniri.js';
 import { setExtraSources } from './src/streams.js';
 import { createRoomManager } from './src/rooms.js';
@@ -504,15 +505,13 @@ const statsTimer = setInterval(async () => {
 // Stremio'yu kapatıyordu, Stremio da bazen geri açılmıyordu. Kaynağı ölü torrent'te yeniden
 // başlatmak işe yaramıyor (bkz. room.js zayıf kaynak önerisi).
 function watchStall(room, stats) {
-  if (stats && stats.downMbps >= 1) room.hadSpeedFor = room.hostStreamId;
+  const takildi = stremioTakildiMi(room, stats);
   // İyi indiren kaynak dizinin hafızasına (sonraki bölümlerde önce bu grup denenir).
   if (stats && stats.downMbps >= 8 && room.type === 'series') {
     const s = room.streams.find((x) => x.streamId === room.hostStreamId);
     if (s) kaynakHafiza.iyi(room.contentId, s);
   }
-  const waiting = room.connectedUsers().some((u) => u.status?.state === 'buffering');
-  const dead = Boolean(room.hadSpeedFor === room.hostStreamId && stats && stats.peers > 0 && stats.downMbps < 0.05 && !(stats.progress >= 0.99));
-  if (!waiting || !dead) {
+  if (!takildi) {
     room.stallSince = null;
     return;
   }
@@ -637,31 +636,16 @@ const isit = (stream) => isitStremio(stream, 8 * 1024 * 1024);
 // Sahipsiz torrent temizliği (her 30 sn): bu sunucunun açtırdığı torrent'lerden hiçbir odanın,
 // denetimin, sonraki bölüm hazırlığının kullanmadığı ve son 90 sn'de dokunulmayanlar kapatılır.
 // Oda yokken de çalışıyor: yoksa Stremio arkada indirmeye devam edip interneti yiyordu.
-// Herkes çıkmış oda da kullanmıyor sayılır (30 sn sonra; sayfa yenileme/kısa kopma için pay).
-// Hiç kimse girmemiş yeni oda: host panelden odaya geçiyor olabilir, 3 dk bekleniyor.
-const odaBosMu = (r) => {
-  if (r.connectedUsers().length || r.emptySince === null) return false;
-  return r.now() - r.emptySince > (r.users.size ? 30_000 : 180_000);
-};
+// Testte (TEST_INSTANCE) de çalışıyor: kayıtta yalnızca bu sunucunun açtırdıkları var (açılıştaki
+// toplu kayıt testte yapılmıyor), kullanıcının torrent'lerine dokunulmuyor.
 const sahipsizTimer = setInterval(async () => {
-  if (TEST) return;
-  const kullanilan = new Set(activeChecks.keys());
-  for (const r of rooms.list()) {
-    torrentKaydet(r.streams);
-    if (odaBosMu(r)) continue;
-    for (const id of r.statsStreamIds()) {
-      const h = r.streams.find((s) => s.streamId === id)?.infoHash;
-      if (h) kullanilan.add(h);
-    }
-  }
   let acik = [];
   try { acik = await stremioLocal.openTorrents(); } catch { return; }
-  for (const h of acik) {
-    if (!bizimMi(h) || kullanilan.has(h) || yeniMi(h)) continue;
+  for (const h of kapatilacaklar({ acik, rooms: rooms.list(), denetlenen: activeChecks.keys() })) {
     await stremioLocal.removeTorrent({ infoHash: h }).catch(() => {});
     log.info('Sahipsiz torrent kapatıldı', { infoHash: h });
   }
-}, 15_000);
+}, Number(process.env.SAHIPSIZ_MS) || 15_000);
 sahipsizTimer.unref();
 // Sunucu açılırken Stremio'da açık kalmış torrent'ler önceki oturumlardan artakalan: onlar
 // da temizliğe dahil (sunucu yeni açıldığı için kayıtlarımızda yoklar).

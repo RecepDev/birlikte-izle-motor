@@ -139,9 +139,10 @@ export function createPlayer({ video, onStatus, resolveFallback = async () => nu
   });
 
   // Safety net for missed media events.
-  setInterval(() => {
+  const safetyTimer = setInterval(() => {
     if ((status.state === 'buffering' || status.state === 'loading') && video.readyState >= 3) markReady();
   }, 1000);
+  safetyTimer.unref?.(); // Node testlerinde süreç beklemesin (tarayıcıda sayı döner, etkisiz)
 
   return {
     load,

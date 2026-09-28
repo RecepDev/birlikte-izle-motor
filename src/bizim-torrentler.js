@@ -26,6 +26,28 @@ export function bizimMi(infoHash) {
 
 // Açık kalma payı: "Oda aç" sayfası açıkken 8 sn'de bir dokunuyor; sayfa kapanınca/arka plana
 // geçince en geç bu kadar sonra kapanıyor.
+// Herkes çıkmış oda da kullanmıyor sayılır (30 sn sonra; sayfa yenileme/kısa kopma için pay).
+// Hiç kimse girmemiş yeni oda: host panelden odaya geçiyor olabilir, 3 dk bekleniyor.
+export function odaBosMu(r) {
+  if (r.connectedUsers().length || r.emptySince === null) return false;
+  return r.now() - r.emptySince > (r.users.size ? 30_000 : 180_000);
+}
+
+// Stremio'da açık olanlardan kapatılacaklar: bizim açtırdığımız, hiçbir dolu odanın izlemediği,
+// denetlenmeyen ve son 25 sn'de dokunulmamış torrent'ler.
+export function kapatilacaklar({ acik, rooms, denetlenen = [] }) {
+  const kullanilan = new Set(denetlenen);
+  for (const r of rooms) {
+    kaydet(r.streams);
+    if (odaBosMu(r)) continue;
+    for (const id of r.statsStreamIds()) {
+      const h = r.streams.find((s) => s.streamId === id)?.infoHash;
+      if (h) kullanilan.add(h);
+    }
+  }
+  return acik.filter((h) => bizimMi(h) && !kullanilan.has(h) && !yeniMi(h));
+}
+
 export function yeniMi(infoHash, ms = 25_000) {
   return Date.now() - (sonKullanim.get(infoHash) || 0) < ms;
 }

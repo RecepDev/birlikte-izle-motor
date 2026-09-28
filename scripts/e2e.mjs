@@ -39,7 +39,7 @@ for (const f of ['config.json', 'tercih.json', 'trackerlar.json']) {
 const onceki = new Set(await acikTorrentler());
 const sunucu = spawn(process.execPath, ['server.js'], {
   cwd: ROOT,
-  env: { ...process.env, PUBLIC_PORT: String(PUB), PANEL_PORT: String(PANEL), NO_TUNNEL: '1', TEST_INSTANCE: '1', DATA_DIR: veri },
+  env: { ...process.env, PUBLIC_PORT: String(PUB), PANEL_PORT: String(PANEL), NO_TUNNEL: '1', TEST_INSTANCE: '1', DATA_DIR: veri, SAHIPSIZ_MS: '3000' },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let sunucuCikti = '';
@@ -76,6 +76,17 @@ try {
   ok(secim?.quality === '1080p' || !torrents.some((s) => s.quality === '1080p'), 'otomatik seçim tercih kalitesinden', `${secim?.quality} · ${secim?.seeders} seed`);
   const hafiza = await fetch(`http://127.0.0.1:${PANEL}/api/kaynak-hafiza?id=${ICERIK.id}`, { headers: H });
   ok(hafiza.ok, 'kaynak hafızası ucu');
+
+  // ---- arka planda torrent kalmasın (sorun: "hiçbir şey açık değilken Stremio internet yiyor") ----
+  const icerikHash = new Set(torrents.map((s) => s.infoHash));
+  const icerikAcik = async () => (await acikTorrentler()).filter((h) => icerikHash.has(h) && !onceki.has(h));
+  await bekle(4000);
+  const isinan = await icerikAcik();
+  ok(isinan.length > 0, 'oda aç ekranında en iyi kaynaklar önceden açıldı', `${isinan.length} torrent`);
+  await fetch(`http://127.0.0.1:${PANEL}/api/sayfa-kapandi`, { method: 'POST', headers: H, body: JSON.stringify(ICERIK) });
+  await bekle(3000);
+  ok((await icerikAcik()).length === 0, 'oda aç sayfası kapanınca hepsi kapandı');
+  ok(await fetch(`${STREMIO}/settings`).then((r) => r.ok).catch(() => false), 'Stremio çökmedi (toplu kapatma)');
 
   // ---- oda ----
   const olcum = { infoHash: secim.infoHash, peers: 12, downMbps: 30 };
@@ -141,8 +152,18 @@ try {
   const ol2 = await iste(misafir, 'olcumler');
   ok((ol2.list?.length || 0) >= (test.sonuclar?.length || 0), 'test ölçümleri odada saklandı', `${ol2.list?.length} ölçüm`);
 
+  // ---- herkes çıkınca odanın torrent'leri kapanıyor (sorun: "odadan çıkınca kapatılsın") ----
+  ok((await icerikAcik()).length > 0, 'odada torrent açık');
   host.close();
   misafir.close();
+  const cikis = Date.now();
+  let kalan = await icerikAcik();
+  while (kalan.length && Date.now() - cikis < 90_000) {
+    await bekle(3000);
+    kalan = await icerikAcik();
+  }
+  ok(kalan.length === 0, "herkes çıkınca odanın torrent'leri kapandı", `${Math.round((Date.now() - cikis) / 1000)} sn`);
+  ok(await fetch(`${STREMIO}/settings`).then((r) => r.ok).catch(() => false), 'Stremio hâlâ ayakta');
 } catch (err) {
   ok(false, 'beklenmeyen hata', err.message);
   console.log(sunucuCikti.slice(-2000));

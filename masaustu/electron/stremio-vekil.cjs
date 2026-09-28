@@ -134,4 +134,4 @@ async function vekilAdres(url) {
   return url.replace(/^http:\/\/(127\.0\.0\.1|localhost):11470/, `http://127.0.0.1:${port}`);
 }
 
-module.exports = { vekilAdres, ayarla };
+module.exports = { vekilAdres, ayarla, parcaBoyu };
