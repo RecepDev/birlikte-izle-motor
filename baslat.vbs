@@ -41,7 +41,23 @@ If Not Ping() Then
   End If
 End If
 
+' Panel already open: bring it to the front instead of opening a second panel window.
+' The panel is the Edge browser process started with our own profile folder and --app
+' (its helper processes carry --type=, the window belongs to the main one).
+Dim wmi, proc, cmdLine
 On Error Resume Next
+Set wmi = GetObject("winmgmts:\\.\root\cimv2")
+If Err.Number = 0 Then
+  For Each proc In wmi.ExecQuery("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'msedge.exe'")
+    cmdLine = "" & proc.CommandLine
+    If InStr(1, cmdLine, "\data\edge-panel", vbTextCompare) > 0 And InStr(cmdLine, "--app=") > 0 And InStr(cmdLine, "--type=") = 0 Then
+      shell.AppActivate proc.ProcessId
+      WScript.Quit 0
+    End If
+  Next
+End If
+Err.Clear
+
 ' Separate, empty profile: no extensions, and Edge exits when the window closes.
 shell.Run "msedge --app=http://127.0.0.1:7001/ --window-size=1200,860 --user-data-dir=""" & dir & "\data\edge-panel"" --no-first-run --no-default-browser-check", 1, False
 If Err.Number <> 0 Then

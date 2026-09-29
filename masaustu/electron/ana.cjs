@@ -636,9 +636,12 @@ function semadanUrl(arglar) {
 }
 
 function odayaGit(url) {
-  if (!url || !ana) return;
-  ana.loadURL(url);
+  if (!ana) return;
+  // Bağlantısız ikinci açılış (kısayola tekrar tıklamak) da açık pencereyi öne getirsin;
+  // eskiden hiçbir şey olmuyordu ve uygulama açılmamış gibi görünüyordu.
+  if (url) ana.loadURL(url);
   if (ana.isMinimized()) ana.restore();
+  ana.show();
   ana.focus();
 }
 
