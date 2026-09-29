@@ -10,6 +10,8 @@
     "createStartMenuShortcut": true,
     "shortcutName": "Birlikte İzle",
     "runAfterFinish": true,
+    "installerIcon": "electron/simge.ico",
+    "uninstallerIcon": "electron/simge.ico",
     "artifactName": "Birlikte Izle Kurulum.exe"
   }
 }
