@@ -17,6 +17,8 @@ window.kabuk = {
   kaliteYaz: (q) => ipcRenderer.send('kabuk:kalite-yaz', q),
   onbellek: () => ipcRenderer.sendSync('kabuk:onbellek'),
   onbellekYaz: (sn) => ipcRenderer.send('kabuk:onbellek-yaz', sn),
+  // Canlı yayın: oynatıcı penceresi yakalanabilir durumda mı (bkz. ana.cjs)
+  yayinHazir: () => ipcRenderer.invoke('kabuk:yayin-hazir'),
 };
 
 // Masaüstüne özel düzen: kontroller/bildirimler videonun dışına alınır (mpv üstlerini örter).
@@ -76,7 +78,8 @@ function olcumKur() {
 
 // mpv yerel pencerede çizdiği için HTML katmanı onun üstüne gelemiyor: bir diyalog
 // ya da tam ekran kaplayan bir katman açıkken mpv penceresini gizliyoruz.
-const ORTU = 'dialog[open], .overlay:not([hidden]), .compat-screen:not([hidden])';
+// .yayin-katman: canli yayini izlerken (public/js/yayin.js) mpv onun ustunu ortmesin.
+const ORTU = 'dialog[open], .overlay:not([hidden]), .compat-screen:not([hidden]), .yayin-katman:not([hidden])';
 function ortuKur() {
   const bak = () => ipcRenderer.send('kabuk:ortu', Boolean(document.querySelector(ORTU)));
   new MutationObserver(bak).observe(document.body, {

@@ -366,8 +366,13 @@ NormalizedStream = {
 | `skipWaiting` | — | sadece host |
 | `kick` | `{userId}` | sadece host |
 | `requestRelay`, `releaseRelay` | — | ack: `{relayKey}` ya da hata |
+| `yayinBaslat` | `{kalite, sinir}` | sadece host (§26) |
+| `yayinBitir` | — | sadece host |
+| `yayinKatil`, `yayinAyril` | — | ack: `{iceServers}`; `yayinDolu`/`yayinYok` |
+| `yayinIce` | — | sadece host; ack: `{iceServers}` |
+| `yayinSinyal` | `{to, sinyal: {tur: "teklif"\|"cevap", sdp}}` | yalnız host ↔ yayına katılmış izleyici |
 
-Sunucu → istemci: `playback`, `users`, `waiting`, `chat`, `hostStream`, `subtitles`, `hostSubtitle`, `settings`, `hostChanged`, `publicUrl`, `kicked`, `roomClosed`.
+Sunucu → istemci: `playback`, `users`, `waiting`, `chat`, `hostStream`, `subtitles`, `hostSubtitle`, `settings`, `hostChanged`, `publicUrl`, `kicked`, `roomClosed`, `yayinDurum`, `yayinIzleyici` (host'a), `yayinAyrildi` (host'a), `yayinSinyal`.
 
 Genel sınırlar:
 - `status` olayları `users` yayınını tetikler. Bu yayın oda başına saniyede en fazla 1 kez gönderilir. `buffering`/`ready` geçişleri ve `waiting` bu sınıra takılmaz.
@@ -574,3 +579,24 @@ Uygulama sırasında spec'ten ayrılan ya da spec'i netleştiren noktalar:
 
 **Açık konular**
 - Dolby Vision profil 5 renkleri ve HDR→SDR'nin karanlık görünmesi tarayıcıda kökten çözülemiyor. Stremio uygulaması bunu mpv'nin ton eşlemesiyle yapıyor. Tam çözüm mpv tabanlı bir yardımcı oynatıcı olur, bu ayrı ve büyük bir iş.
+
+## 26. Canlı yayın (2026-09-29, `src/yayin.js`, `public/js/yayin.js`)
+
+Discord'daki "Yayın Aç" gibi: host oynattığı görüntüyü ve bilgisayar sesini bir kez sıkıştırıp WebRTC ile izleyicilere **doğrudan** gönderir. Relay'den (§13) farkı: dosya değil canlı görüntü gider; izleyicinin Stremio'ya, torrent'e ihtiyacı yoktur, her kaynak (http dahil) çalışır, kişi başı bit hızını host seçer. Bedeli: yeniden sıkıştırma (kalite dosyadan düşük) ve host'un upload'u (izleyici başına ayrı akış).
+
+**Sunucu** görüntüye dokunmaz; yalnız kimin yayında/izlediğini tutar ve SDP teklif/cevabını host ↔ o yayına katılmış izleyici arasında taşır (başkası araya mesaj sokamaz, başka yöne gidemez, en çok 64 KB). ICE adayları tek tek gönderilmez: istemci aday toplamayı bitirip (en çok 3 sn) tam SDP'yi tek mesajda yollar, izleyici başına 2 olay (bağlantı başına 20 olay/sn sınırı, §18). Host ayrılır/bağlantısı koparsa ya da host devredilirse yayın biter. Oda kapanınca silinir. Sonradan katılan açık yayını `yayinDurum` ile görür. Varsayılan izleyici sınırı 6, en çok 20.
+
+**ICE:** varsayılan ücretsiz Google STUN (ev bağlantılarının çoğu doğrudan bağlanır). Mobil veri / sıkı NAT için TURN gerekir: `data/yayin.json` → `{ "cloudflareTurn": { "keyId", "token" } }` (sunucu kısa ömürlü kimlik üretip 30 dk önbellekte tutar; anahtar izleyiciye gitmez) ya da `{ "iceServers": [...] }`. `config.json`'a konmadı: doğrulayıcısı bilinmeyen alanları siliyor. **Cloudflare TURN ucu (`/credentials/generate-ice-servers`) gerçek hesapla henüz denenmedi.**
+
+**Yakalama (host):**
+- Masaüstü uygulamasında `setDisplayMediaRequestHandler` sayfanın isteğine seçici göstermeden **mpv'nin penceresini** (`window:<hwnd>:0`) ve `loopback` sistem sesini verir. Bu pencere yakalanabilir pencere listesinde yok (sahipli, görev çubuğunda değil) ama kimliğiyle istenince yakalanıyor (ölçüldü). Ana pencereyi yakalamak işe yaramaz: mpv ayrı pencerede çiziyor, orada boş arka plan görünüyor.
+- **Gizli pencere yakalanamaz** ("Could not start video source"). Kabuk diyalog açıkken, video yüklenirken ya da mpv başlamamışken pencereyi gizliyor (§ORTU). Bu yüzden başlamadan önce `kabuk:yayin-hazir` 3 sn görünmesini bekler, olmazsa sebebi söyler (mpvYok / yukleniyor / ortu / kucuk). Yayın sırasında diyalog açılırsa o süre görüntü donar. İlk açılıştaki "Hangi görüntü kalitesini tercih edersin?" penceresi de mpv'yi gizler.
+- Görüntü, oynatıcının **ekrandaki boyutunu** geçemez (pencere yakalama): 1080p için tam ekran.
+- Ses: bilgisayarın **tüm** sesi (Chromium tek bir programın sesini veremiyor); Discord konuşması da gider. Konuşma filtreleri (yankı/gürültü/otomatik ses) kapalı, stereo; Opus `stereo=1;maxaveragebitrate=192000` (SDP'ye eklenir).
+- Tarayıcıdaki host'ta tarayıcının kendi seçicisi açılır (istenen pencere/sekme paylaşılabilir).
+
+**Kodlama:** codec tercihi H.264 (yüksek profil önce) → VP9 → AV1 → VP8. Chromium 130 tercih listesini **alıcı** yeteneklerinden istiyor; gönderici listesiyle verilince sessizce reddedip yazılım VP8 (libvpx) kullanıyordu (ölçüldü). Başlangıç bit hızı yavaş açılıyordu (ilk ~10 sn 0,5 Mbps, 9 fps): host izleyicinin cevabına `x-google-min/start/max-bitrate` (hedefin %50/%80/%100) ekler. `contentHint = 'motion'`, `degradationPreference = 'balanced'`. Kaliteler: 720p30 3,5 / 1080p30 6 / 1080p60 9 / 1440p60 14 Mbps.
+
+**İzleyici:** "📡 Yayını izle" → yayın katmanı (`#yayin-katman`, ayrı `<video>`; video köprüsü yalnız `#video`'yu mpv'ye bağlıyor). İzlerken kendi oynatıcısı `load(null)` ile boşaltılır: durum boşta/kaynak yok olur, oda onu beklemez (yalnız yükleniyor/tamponluyor bekletir), indirme durur. Masaüstü kabuğunda `.yayin-katman` ORTU listesinde: katman açıkken mpv penceresi çekilir. Bağlantı 20 sn'de kurulamazsa ya da koparsa normal izlemeye dönülür. Yeniden bağlanınca (socket kopması) yerel yayın/izleme de temizlenir.
+
+**Ölçümler (2026-09-29, tek bilgisayarda host+izleyici, `scripts/yayin-e2e/calistir.ps1`):** H.264 (OpenH264, yazılım), 880x678 (test oynatıcı penceresi), oturunca ~5,4 Mbps, izleyicide 27–29 fps, en uzun boşluk 70–600 ms, ses geliyor. Donanım kodlayıcı kullanılmıyor: Chromium önce `ExternalEncoder` deneyip yazılıma düşüyor, o geçişte ilk saniyeler 1 fps. Bilgisayardaki NVIDIA sürücüsü 595.97; donanım kodlama için 610+ gerekebilir (ffmpeg'in NVENC'i de aynı sebeple açılmıyor) — **doğrulanmadı**. Ayrı bilgisayarlar/gerçek internet, telefon (WebView) ve TURN henüz denenmedi.

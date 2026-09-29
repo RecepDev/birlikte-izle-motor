@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 import dns from 'node:dns';
+import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +40,7 @@ import { createTunnel, installCloudflared, readFixedTunnel } from './src/tunnel.
 import { createPanelApp } from './src/panel-api.js';
 import { createSubtitleService, createSubtitleRouter } from './src/subtitles.js';
 import { createRelay } from './src/relay.js';
+import { createYayin, createIceServers } from './src/yayin.js';
 
 // Addons like Torrentio resolve to IPv6 first; a flaky IPv6 route shows up as
 // "fetch failed", so try IPv4 first.
@@ -89,6 +91,24 @@ const subtitles = createSubtitleService({
   log,
 });
 const relay = createRelay({ rooms, log });
+// Canlı yayın (WebRTC): görüntü host'tan izleyiciye doğrudan gider, sunucu yalnız bağlantı
+// mesajlarını taşır. TURN ayarı isteğe bağlı: data/yayin.json
+// { "cloudflareTurn": { "keyId": "...", "token": "..." } } ya da { "iceServers": [...] }.
+// config.json'a konmuyor: doğrulayıcısı bilinmeyen alanları siliyor.
+const yayinAyarDosyasi = path.join(DATA, 'yayin.json');
+const yayin = createYayin({
+  iceServers: createIceServers({
+    getConfig: () => {
+      try {
+        return { yayin: JSON.parse(fs.readFileSync(yayinAyarDosyasi, 'utf8')) };
+      } catch {
+        return {};
+      }
+    },
+    log,
+  }),
+  log,
+});
 
 // Filled in once the socket layer exists; HTTP routes use it to push updates.
 let socketCtl = null;
@@ -164,8 +184,14 @@ socketCtl = attachSocket(io, {
   getPublicUrl: () => tunnel?.status().url ?? null,
   hooks: {
     onHostStream: refreshSubtitles,
-    onRoomClosed: (room) => tani.odaKapandi(room.id),
+    onRoomClosed: (room) => {
+      tani.odaKapandi(room.id);
+      yayin.kapat(room.id);
+    },
+    onJoin: (room, uid) => yayin.onJoin(room, uid),
+    onDisconnect: (room, uid) => yayin.onDisconnect(room, uid),
     roomEvents: {
+      ...yayin.events,
       setHostSubtitle: (room, uid, p) =>
         room.setHostSubtitle(uid, { subId: p.subId ?? null, offset: Number(p.offset ?? 0) }),
       // Stremio'nun yükleme sınırı (host bilgisayarı, Windows QoS; bkz. src/yukleme-siniri.js).

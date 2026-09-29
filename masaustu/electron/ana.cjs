@@ -5,7 +5,7 @@
 //
 // Not: ana süreç CommonJS olmalı - Electron 33'te ESM ana süreç 'electron' modülünü
 // çözemiyor. ESM modüllerimiz dinamik import() ile alınır.
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -681,6 +681,23 @@ app.whenReady().then(() => {
   });
   videoPenceresi.setIgnoreMouseEvents(true);
 
+  // Canlı yayın (public/js/yayin.js): oda sayfası getDisplayMedia isteyince seçici göstermeden
+  // oynatıcı penceresini (mpv burada çiziyor) ve sistem sesini ver. Bu pencere yakalanabilir
+  // pencereler listesinde görünmüyor (sahipli, görev çubuğunda yok) ama kimliğiyle istenince
+  // yakalanıyor - Faz 0'da ölçüldü: görüntü ve ses geliyor. Ana pencereyi yakalamak işe yaramaz:
+  // mpv ayrı pencerede çizdiği için orada yalnız boş arka plan görünüyor.
+  // Not: diyalog açıkken mpv penceresi gizleniyor (ORTU), o sırada yayın görüntüsü donar.
+  session.defaultSession.setDisplayMediaRequestHandler((istek, cevap) => {
+    const ust = ana && !ana.isDestroyed() ? ana.webContents.mainFrame : null;
+    const kendiSayfamiz = Boolean(istek.frame && ust
+      && istek.frame.processId === ust.processId && istek.frame.routingId === ust.routingId);
+    if (!kendiSayfamiz || !videoPenceresi || videoPenceresi.isDestroyed()) {
+      cevap({});
+      return;
+    }
+    cevap({ video: { id: `window:${hwndOf(videoPenceresi)}:0`, name: 'Birlikte İzle' }, audio: 'loopback' });
+  });
+
   ipcMain.on('kabuk:video-alani', async (_e, rect) => {
     sonAlan = rect;
     hizala(rect);
@@ -697,6 +714,16 @@ app.whenReady().then(() => {
   ipcMain.on('kabuk:yukleniyor', (_e, deger) => {
     yukleniyor = deger;
     videoGorunurluk();
+  });
+  // Canlı yayın başlamadan önce: gizli pencere yakalanamıyor ("Could not start video source").
+  // Diyalog yeni kapandıysa ya da görüntü yeni geldiyse pencere birazdan görünür; 3 sn bekle.
+  ipcMain.handle('kabuk:yayin-hazir', async () => {
+    for (let i = 0; i < 15; i++) {
+      if (videoPenceresi && !videoPenceresi.isDestroyed() && videoPenceresi.isVisible()) return { ok: true };
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    const sebep = !mpv ? 'mpvYok' : ortuluMu ? 'ortu' : yukleniyor ? 'yukleniyor' : ana?.isMinimized() ? 'kucuk' : 'gizli';
+    return { ok: false, sebep };
   });
   ipcMain.on('mpv:yukle', async (_e, gelen) => {
     // Stremio adresleri ara katmandan geçiyor: ileri-geri sarmalar Stremio'da birikme yapmasın

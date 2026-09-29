@@ -18,6 +18,7 @@ import { browserCodecs, isRealSafari } from './codecs.js';
 import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
 import { probeDevice, evaluate as evaluateCompat, autoScanTargets } from './compat.js';
 import { createCompatScreen } from './compat-view.js';
+import { createYayinIstemci, KALITELER } from './yayin.js';
 
 // ---- identity --------------------------------------------------------------
 
@@ -299,6 +300,12 @@ const player = createPlayer({
     renderRelayBadge();
   },
 });
+
+// Canlı yayın izlenirken kendi kaynağı açılmasın: video "boşta/kaynak yok" kalır, oda da bu
+// kişiyi beklemez (yalnız yükleniyor/tamponluyor bekletir). Yayından çıkınca loadMyStream(true).
+let yayinIzleniyor = false;
+const asilYukle = player.load;
+player.load = (s, o) => asilYukle(yayinIzleniyor ? null : s, o);
 
 // "Keep picture quality": never let Stremio re-encode the picture. Compat
 // mode then only repackages the file and converts audio.
@@ -1332,6 +1339,7 @@ function renderAll() {
   updateHostUi();
   renderUsersTab();
   renderQualityTab();
+  renderYayin();
 }
 
 // ---- socket events -------------------------------------------------------------------
@@ -1349,6 +1357,8 @@ function applySnapshot(snap, publicUrl) {
   chat.render(snap.chat);
   subs.setList(snap.subtitles);
   subs.setHost(snap.hostSubtitle);
+  // Bağlantı koptuysa sunucu yayını/izlemeyi bitirmiş sayar: yerelde de temizle.
+  if (!firstJoin) yayinYenidenBaglandi();
   renderAll();
   sync.setPlayback(snap.playback, snap.autoPaused);
   sync.calibrate().then(() => sync.setPlayback(state.room.playback, state.room.autoPaused));
@@ -1492,6 +1502,8 @@ socket.on('settings', (s) => {
 socket.on('hostChanged', ({ hostUserId }) => {
   state.room.hostUserId = hostUserId;
   state.room.users = state.room.users.map((u) => ({ ...u, isHost: u.id === hostUserId }));
+  // Host devredildiyse eski host'un yayını sunucuda bitti; yakalamayı da durdur.
+  if (yayin.yayinliyor() && !isHost()) yayin.bitir();
   renderAll();
   if (hostUserId === state.me) toast('Artık host sensin.');
 });
@@ -1515,6 +1527,173 @@ socket.on('stremioRestarted', () => {
   if (!isHost() && player.status().source !== 'relay') return;
   loadMyStream(true);
 });
+// ---- canlı yayın (public/js/yayin.js, src/yayin.js) --------------------------------
+
+const yayinDurumu = { aktif: false, hostUserId: null, kalite: null, izleyici: 0, sinir: 0 };
+let yayinDuyuruldu = false;
+let yayinIzleZamani = null;
+const yayinVideo = $('#yayin-video');
+const yayinMesaj = (metin) => {
+  $('#yayin-mesaj').textContent = metin || '';
+  $('#yayin-mesaj').hidden = !metin;
+};
+const YAYIN_HATALARI = {
+  yayinYok: 'Yayın şu an kapalı.',
+  yayinDolu: 'Yayın dolu: host izleyici sınırına ulaştı.',
+  notHost: 'Yayını yalnız host açabilir.',
+};
+const OYNATICI_HAZIR_DEGIL = {
+  mpvYok: 'Önce videoyu başlat: yayın, oynatıcıda görünen görüntüyü gönderir.',
+  yukleniyor: 'Video henüz yükleniyor; görüntü gelince tekrar dene.',
+  ortu: 'Açık bir pencere oynatıcıyı örtüyor; onu kapatıp tekrar dene.',
+  kucuk: 'Uygulama simge durumunda; pencereyi açıp tekrar dene.',
+  gizli: 'Oynatıcı şu an görünmüyor; video oynarken tekrar dene.',
+};
+
+function renderYayin() {
+  if (!state.room) return;
+  const host = isHost();
+  const ozet = yayin.hostOzet();
+  const ac = $('#yayin-ac');
+  ac.hidden = !host;
+  ac.classList.toggle('yayinda', yayin.yayinliyor());
+  $('#yayin-ac-yazi').textContent = yayin.yayinliyor()
+    ? `Yayında · ${ozet.izleyici} izleyici${ozet.mbps ? ` · ${ozet.mbps} Mbps` : ''}`
+    : 'Yayın Aç';
+  ac.title = yayin.yayinliyor()
+    ? `Tıkla: yayını durdur. Kodlayıcı: ${ozet.kodlayici || '?'}${ozet.fps ? `, ${ozet.fps} fps` : ''}`
+    : ac.title;
+  const izle = $('#yayin-izle');
+  izle.hidden = host || !yayinDurumu.aktif;
+  izle.classList.toggle('izliyor', yayin.izliyor());
+  $('#yayin-izle-yazi').textContent = yayin.izliyor() ? 'Yayından çık' : `Yayını izle · ${userName(yayinDurumu.hostUserId)}`;
+  $('#yayin-katman').hidden = !yayin.izliyor();
+}
+
+function yayinBirakildi() {
+  clearInterval(yayinIzleZamani);
+  yayinIzleZamani = null;
+  yayinMesaj('');
+  if (yayinIzleniyor) {
+    yayinIzleniyor = false;
+    loadMyStream(true);
+  }
+  renderYayin();
+}
+
+function yayinYenidenBaglandi() {
+  if (yayin.yayinliyor()) {
+    yayin.bitir();
+    toast('Bağlantı koptuğu için yayın durdu. Tekrar açmak için 📡 Yayın Aç.', 7000);
+  }
+  if (yayin.izliyor()) {
+    yayin.birak();
+    yayinBirakildi();
+  }
+}
+
+async function yayinIzle() {
+  yayinIzleniyor = true;
+  loadMyStream(true);
+  $('#yayin-katman').hidden = false;
+  yayinMesaj('Yayına bağlanılıyor…');
+  const res = await yayin.izle(yayinVideo);
+  if (res?.error) {
+    yayinBirakildi();
+    toast(YAYIN_HATALARI[res.error] || errorText(res.error), 6000);
+    return;
+  }
+  renderYayin();
+}
+
+function yayinOlay(o) {
+  switch (o.tur) {
+    case 'durum':
+      Object.assign(yayinDurumu, { aktif: Boolean(o.aktif), hostUserId: o.hostUserId ?? null, kalite: o.kalite ?? null, izleyici: o.izleyici ?? 0, sinir: o.sinir ?? 0 });
+      if (o.aktif && !isHost() && !yayin.izliyor() && !yayinDuyuruldu) {
+        yayinDuyuruldu = true;
+        toast(`📡 ${userName(o.hostUserId)} canlı yayın açtı. Üstteki "Yayını izle" ile izleyebilirsin.`, 7000);
+      }
+      if (!o.aktif) yayinDuyuruldu = false;
+      break;
+    case 'basladi':
+      toast(o.sesVar ? '📡 Yayın başladı.' : '📡 Yayın başladı, ama ses yakalanamadı: izleyiciler yalnız görüntüyü alır.', 6000);
+      break;
+    case 'baglandi':
+      yayinMesaj('');
+      clearInterval(yayinIzleZamani);
+      yayinIzleZamani = setInterval(async () => {
+        const st = await yayin.izleIstatistik();
+        if (st) $('#yayin-bilgi').textContent = `${userName(yayinDurumu.hostUserId)} · ${st.yukseklik ? `${st.yukseklik}p` : ''}${st.fps ? ` · ${Math.round(st.fps)} fps` : ''}`;
+      }, 2000);
+      break;
+    case 'baglanamadi':
+      yayinBirakildi();
+      toast('Yayına bağlanılamadı. Ağın doğrudan bağlantıya izin vermiyor olabilir (mobil veri gibi); host TURN ayarı ekleyebilir. Normal izlemeye devam ediliyor.', 9000);
+      return;
+    case 'birakti':
+      yayinBirakildi();
+      if (o.sebep === 'yayinBitti') toast('Host yayını kapattı.');
+      return;
+    default:
+      break;
+  }
+  renderYayin();
+}
+
+const yayin = createYayinIstemci({ socket, request, onDurum: yayinOlay, log: (tur, veri) => tani.kaydet(tur, veri) });
+
+function yayinUploadYaz() {
+  const k = KALITELER[$('#yayin-kalite').value];
+  const n = Math.max(1, Math.min(20, Number($('#yayin-sinir').value) || 1));
+  if (!k) return;
+  const mbps = (k.kbps + 192) / 1000;
+  $('#yayin-upload').textContent = `Gereken upload: izleyici başı ~${mbps.toFixed(1)} Mbps, ${n} izleyicide ~${(mbps * n).toFixed(0)} Mbps. Upload'un yetmezse görüntü herkes için bozulur; sınırı buna göre seç.`;
+}
+
+$('#yayin-kalite').append(...Object.entries(KALITELER).map(([k, v]) => el('option', { value: k }, v.ad)));
+$('#yayin-kalite').value = storage.get('yayinKalite') || '1080p30';
+$('#yayin-sinir').value = storage.get('yayinSinir') || '6';
+$('#yayin-kalite').addEventListener('change', yayinUploadYaz);
+$('#yayin-sinir').addEventListener('input', yayinUploadYaz);
+
+$('#yayin-ac').addEventListener('click', async () => {
+  if (yayin.yayinliyor()) {
+    if (!confirm('Yayın durdurulsun mu? İzleyiciler normal izlemeye döner.')) return;
+    await yayin.bitir();
+    renderYayin();
+    return;
+  }
+  yayinUploadYaz();
+  $('#yayin-dialog').showModal();
+});
+
+$('#yayin-basla').addEventListener('click', async () => {
+  const kalite = $('#yayin-kalite').value;
+  const sinir = Math.max(1, Math.min(20, Number($('#yayin-sinir').value) || 6));
+  storage.set('yayinKalite', kalite);
+  storage.set('yayinSinir', String(sinir));
+  $('#yayin-dialog').close();
+  // Masaüstünde diyalog açıkken oynatıcı penceresi gizli; kapanınca yeniden görünmesini bekle.
+  if (window.kabuk) await new Promise((r) => setTimeout(r, 400));
+  const res = await yayin.baslat(kalite, sinir);
+  if (res?.error === 'oynaticiHazirDegil') toast(OYNATICI_HAZIR_DEGIL[res.sebep] || OYNATICI_HAZIR_DEGIL.gizli, 8000);
+  else if (res?.error === 'yakalama') toast(`Görüntü yakalanamadı: ${res.detay || ''}`, 8000);
+  else if (res?.error && res.error !== 'iptal') toast(YAYIN_HATALARI[res.error] || errorText(res.error), 6000);
+  renderYayin();
+});
+
+$('#yayin-izle').addEventListener('click', async () => {
+  if (yayin.izliyor()) {
+    await yayin.birak();
+    yayinBirakildi();
+  } else await yayinIzle();
+});
+$('#yayin-cik').addEventListener('click', async () => {
+  await yayin.birak();
+  yayinBirakildi();
+});
+
 socket.on('kicked', () => end('Odadan çıkarıldın.'));
 socket.on('replaced', () => end('Bu oda başka bir sekmede açıldı.'));
 socket.on('roomClosed', () => {

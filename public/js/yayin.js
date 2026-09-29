@@ -1,0 +1,333 @@
+// Canlı yayın istemcisi (WebRTC). Sunucu tarafı: src/yayin.js.
+//
+// Host: getDisplayMedia ile görüntü + sistem sesi yakalanır. Masaüstü uygulamasında kabuk bu
+// isteğe mpv'nin penceresini ve sistem sesini kendisi verir (seçici çıkmaz); tarayıcıda
+// tarayıcının kendi pencere seçicisi açılır. Her izleyiciye ayrı RTCPeerConnection.
+// İzleyici: host'tan gelen teklife cevap verir, gelen akışı ayrı bir <video>'da gösterir.
+//
+// ICE adayları tek tek gönderilmez: aday toplama bitince (ya da süre dolunca) tam SDP tek
+// mesajda gider - sunucudaki "bağlantı başına saniyede 20 olay" sınırına takılmasın.
+
+export const KALITELER = {
+  '720p30': { ad: '720p · 30 fps', genislik: 1280, yukseklik: 720, fps: 30, kbps: 3500 },
+  '1080p30': { ad: '1080p · 30 fps', genislik: 1920, yukseklik: 1080, fps: 30, kbps: 6000 },
+  '1080p60': { ad: '1080p · 60 fps', genislik: 1920, yukseklik: 1080, fps: 60, kbps: 9000 },
+  '1440p60': { ad: '1440p · 60 fps', genislik: 2560, yukseklik: 1440, fps: 60, kbps: 14000 },
+};
+const SES_KBPS = 192;
+const ADAY_BEKLEME_MS = 3000;
+const BAGLANTI_ZAMAN_ASIMI_MS = 20_000;
+const ISTATISTIK_MS = 2000;
+
+// Aday toplama bitene kadar bekle (en çok ADAY_BEKLEME_MS).
+function adaylariBekle(pc) {
+  if (pc.iceGatheringState === 'complete') return Promise.resolve();
+  return new Promise((resolve) => {
+    const bitti = () => {
+      if (pc.iceGatheringState !== 'complete') return;
+      pc.removeEventListener('icegatheringstatechange', bitti);
+      clearTimeout(zaman);
+      resolve();
+    };
+    const zaman = setTimeout(() => {
+      pc.removeEventListener('icegatheringstatechange', bitti);
+      resolve();
+    }, ADAY_BEKLEME_MS);
+    pc.addEventListener('icegatheringstatechange', bitti);
+  });
+}
+
+// Opus'u stereo ve yüksek bit hızına al: varsayılan mono ~32 kbps konuşma için, film için değil.
+export function opusStereo(sdp, kbps = SES_KBPS) {
+  const m = sdp.match(/a=rtpmap:(\d+) opus\/48000\/2/i);
+  if (!m) return sdp;
+  const pt = m[1];
+  const ekler = { stereo: '1', 'sprop-stereo': '1', maxaveragebitrate: String(kbps * 1000) };
+  const satir = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`);
+  if (!satir.test(sdp)) return sdp.replace(m[0], `${m[0]}\r\na=fmtp:${pt} ${Object.entries(ekler).map(([k, v]) => `${k}=${v}`).join(';')}`);
+  return sdp.replace(satir, (_t, params) => {
+    const var_ = new Map(params.split(';').map((p) => p.trim()).filter(Boolean).map((p) => p.split('=')));
+    for (const [k, v] of Object.entries(ekler)) var_.set(k, v);
+    return `a=fmtp:${pt} ${[...var_].map(([k, v]) => `${k}=${v}`).join(';')}`;
+  });
+}
+
+// Video bit hızı ipuçları: WebRTC ~300 kbps'den başlayıp yavaşça artırıyor, ilk 10 saniye
+// görüntü bulanık ve 9-10 fps kalıyordu (ölçüldü). Chromium, gönderici tarafta uzak SDP'deki
+// (izleyicinin cevabı) x-google-*-bitrate değerlerini kullanır: host cevabı uygulamadan önce ekler.
+export function bitHiziIpucu(sdp, kbps) {
+  const videoPt = new Set();
+  let videoda = false;
+  for (const satir of sdp.split(/\r?\n/)) {
+    if (satir.startsWith('m=')) videoda = satir.startsWith('m=video');
+    const m = videoda && satir.match(/^a=rtpmap:(\d+) (H264|VP8|VP9|AV1)\//i);
+    if (m) videoPt.add(m[1]);
+  }
+  const ek = `x-google-min-bitrate=${Math.round(kbps * 0.5)};x-google-start-bitrate=${Math.round(kbps * 0.8)};x-google-max-bitrate=${kbps}`;
+  return sdp.replace(/a=fmtp:(\d+) ([^\r\n]*)/g, (t, pt, p) => (videoPt.has(pt) && !p.includes('x-google-') ? `a=fmtp:${pt} ${p};${ek}` : t));
+}
+
+// Donanım kodlayıcıya en uygun codec önce: H.264 (ekran kartı), sonra VP9/AV1/VP8.
+// Chromium 130 (Electron 33) tercih listesini ALICI yeteneklerinden istiyor; gönderici
+// listesiyle verilince sessizce reddediyordu ve yazılım VP8 (libvpx) kullanılıyordu (ölçüldü).
+function codecSirasi(transceiver, log) {
+  const caps = RTCRtpReceiver.getCapabilities?.('video') || RTCRtpSender.getCapabilities?.('video');
+  if (!caps || !transceiver.setCodecPreferences) return;
+  const puan = (c) => {
+    const t = c.mimeType.toLowerCase();
+    if (t === 'video/h264') return c.sdpFmtpLine?.includes('packetization-mode=1') ? 0 : 1;
+    if (t === 'video/vp9') return 2;
+    if (t === 'video/av1') return 3;
+    if (t === 'video/vp8') return 4;
+    return 9; // rtx, red, ulpfec: sonda kalır
+  };
+  try {
+    // H.264 içinde yüksek profil (640032) önce: aynı bit hızında daha net
+    const profil = (c) => (/profile-level-id=64/.test(c.sdpFmtpLine || '') ? 0 : 1);
+    transceiver.setCodecPreferences([...caps.codecs].sort((a, b) => puan(a) - puan(b) || profil(a) - profil(b)));
+  } catch (err) {
+    log?.('yayin-codec-hata', { hata: String(err) }); // varsayılan sıra kalır
+  }
+}
+
+export function createYayinIstemci({ socket, request, onDurum = () => {}, log = () => {} }) {
+  // ---- host ----
+  let akis = null;          // yakalanan MediaStream
+  let kalite = null;        // KALITELER[...]
+  let iceServers = [];
+  const esler = new Map();  // userId -> RTCPeerConnection
+  let istatistikZamani = null;
+  let sonBayt = new Map();  // userId -> { bytes, at }
+  let hostOzet = { izleyici: 0, mbps: 0, fps: null, kodlayici: null };
+
+  // ---- izleyici ----
+  let izlePc = null;
+  let izleVideo = null;
+  let izleIce = [];
+  let izleZamanAsimi = null;
+
+  const bildir = (olay) => onDurum({ ...olay, host: yayinliyor(), izliyor: Boolean(izlePc) });
+  const yayinliyor = () => Boolean(akis);
+
+  async function esOlustur(userId) {
+    esler.get(userId)?.close();
+    const pc = new RTCPeerConnection({ iceServers });
+    esler.set(userId, pc);
+    for (const track of akis.getTracks()) {
+      const t = pc.addTransceiver(track, { direction: 'sendonly', streams: [akis] });
+      if (track.kind === 'video') codecSirasi(t, log);
+      const p = t.sender.getParameters();
+      p.encodings = p.encodings?.length ? p.encodings : [{}];
+      if (track.kind === 'video') {
+        p.encodings[0].maxBitrate = kalite.kbps * 1000;
+        p.encodings[0].maxFramerate = kalite.fps;
+        p.degradationPreference = 'balanced';
+      } else {
+        p.encodings[0].maxBitrate = SES_KBPS * 1000;
+      }
+      t.sender.setParameters(p).catch(() => {});
+    }
+    pc.addEventListener('connectionstatechange', () => {
+      if (['failed', 'closed'].includes(pc.connectionState)) {
+        if (esler.get(userId) === pc) esler.delete(userId);
+        pc.close();
+      }
+      log('yayin-es', { userId, durum: pc.connectionState });
+    });
+    const teklif = await pc.createOffer();
+    await pc.setLocalDescription({ type: 'offer', sdp: opusStereo(teklif.sdp) });
+    await adaylariBekle(pc);
+    if (esler.get(userId) !== pc) return; // bu arada ayrıldı
+    await request('yayinSinyal', { to: userId, sinyal: { tur: 'teklif', sdp: pc.localDescription.sdp } });
+  }
+
+  async function istatistik() {
+    let toplamBit = 0;
+    let fps = null;
+    let kodlayici = null;
+    const simdi = performance.now();
+    for (const [userId, pc] of esler) {
+      let bayt = 0;
+      const rapor = await pc.getStats();
+      rapor.forEach((s) => {
+        if (s.type !== 'outbound-rtp') return;
+        bayt += s.bytesSent || 0;
+        if (s.kind === 'video') {
+          fps = s.framesPerSecond ?? fps;
+          kodlayici = s.encoderImplementation || kodlayici;
+        }
+      });
+      const once = sonBayt.get(userId);
+      if (once) toplamBit += ((bayt - once.bytes) * 8) / ((simdi - once.at) / 1000);
+      sonBayt.set(userId, { bytes: bayt, at: simdi });
+    }
+    for (const id of sonBayt.keys()) if (!esler.has(id)) sonBayt.delete(id);
+    hostOzet = { izleyici: esler.size, mbps: Math.round(toplamBit / 1e5) / 10, fps: fps && Math.round(fps), kodlayici };
+    bildir({ tur: 'istatistik', ...hostOzet });
+  }
+
+  async function baslat(kaliteAdi, sinir) {
+    if (akis) return { ok: true };
+    kalite = KALITELER[kaliteAdi] || KALITELER['1080p30'];
+    // Masaüstü uygulaması: oynatıcı penceresi gizliyse (diyalog açık, video yükleniyor/başlamadı)
+    // yakalama "Could not start video source" ile düşüyor - önce sor, anlaşılır sebep ver.
+    if (window.kabuk?.yayinHazir) {
+      const hazir = await window.kabuk.yayinHazir().catch(() => ({ ok: true }));
+      if (!hazir.ok) return { error: 'oynaticiHazirDegil', sebep: hazir.sebep };
+    }
+    try {
+      akis = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: { max: kalite.genislik }, height: { max: kalite.yukseklik }, frameRate: { ideal: kalite.fps, max: kalite.fps } },
+        // Konuşma filtreleri filmi bozar (mono, gürültü bastırma, otomatik ses): hepsi kapalı.
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 },
+        systemAudio: 'include',
+        selfBrowserSurface: 'exclude',
+      });
+    } catch (err) {
+      akis = null;
+      return { error: err?.name === 'NotAllowedError' ? 'iptal' : 'yakalama', detay: String(err?.message || err) };
+    }
+    const video = akis.getVideoTracks()[0];
+    if (video) video.contentHint = 'motion';
+    // Tarayıcının "Paylaşımı durdur" düğmesi ya da pencere kapanırsa yayın biter.
+    video?.addEventListener('ended', () => bitir());
+    const res = await request('yayinBaslat', { kalite: kaliteAdi, sinir });
+    if (res?.error) {
+      durdurYerel();
+      return res;
+    }
+    const ice = await request('yayinIce');
+    iceServers = ice?.iceServers || [];
+    istatistikZamani = setInterval(() => istatistik().catch(() => {}), ISTATISTIK_MS);
+    bildir({ tur: 'basladi', sesVar: akis.getAudioTracks().length > 0, ...res });
+    return res;
+  }
+
+  function durdurYerel() {
+    clearInterval(istatistikZamani);
+    istatistikZamani = null;
+    for (const pc of esler.values()) pc.close();
+    esler.clear();
+    sonBayt.clear();
+    akis?.getTracks().forEach((t) => t.stop());
+    akis = null;
+  }
+
+  async function bitir() {
+    if (!akis) return;
+    durdurYerel();
+    await request('yayinBitir');
+    bildir({ tur: 'bitti' });
+  }
+
+  // ---- izleyici ----
+  async function izle(videoEl) {
+    if (izlePc) return { ok: true };
+    const res = await request('yayinKatil');
+    if (res?.error) return res;
+    izleVideo = videoEl;
+    izleIce = res.iceServers || [];
+    // Teklif host'tan gelecek (yayinSinyal); gelmezse ya da bağlanamazsa haber ver.
+    izlePc = 'bekliyor';
+    clearTimeout(izleZamanAsimi);
+    izleZamanAsimi = setTimeout(() => {
+      if (izlePc === 'bekliyor' || (izlePc && izlePc.connectionState !== 'connected')) {
+        birakYerel();
+        request('yayinAyril');
+        bildir({ tur: 'baglanamadi' });
+      }
+    }, BAGLANTI_ZAMAN_ASIMI_MS);
+    bildir({ tur: 'baglaniyor' });
+    return res;
+  }
+
+  async function teklifGeldi(from, sdp) {
+    if (!izlePc) return;
+    if (izlePc !== 'bekliyor') izlePc.close();
+    const pc = new RTCPeerConnection({ iceServers: izleIce });
+    izlePc = pc;
+    const gelen = new MediaStream();
+    pc.addEventListener('track', (e) => {
+      gelen.addTrack(e.track);
+      if (izleVideo && izleVideo.srcObject !== gelen) izleVideo.srcObject = gelen;
+      izleVideo?.play().catch(() => {});
+    });
+    pc.addEventListener('connectionstatechange', () => {
+      log('yayin-izle', { durum: pc.connectionState });
+      if (pc.connectionState === 'connected') {
+        clearTimeout(izleZamanAsimi);
+        bildir({ tur: 'baglandi' });
+      } else if (pc.connectionState === 'failed' && izlePc === pc) {
+        birakYerel();
+        request('yayinAyril');
+        bildir({ tur: 'baglanamadi' });
+      }
+    });
+    await pc.setRemoteDescription({ type: 'offer', sdp });
+    const cevap = await pc.createAnswer();
+    await pc.setLocalDescription({ type: 'answer', sdp: opusStereo(cevap.sdp) });
+    await adaylariBekle(pc);
+    if (izlePc !== pc) return;
+    await request('yayinSinyal', { to: from, sinyal: { tur: 'cevap', sdp: pc.localDescription.sdp } });
+  }
+
+  function birakYerel() {
+    clearTimeout(izleZamanAsimi);
+    if (izlePc && izlePc !== 'bekliyor') izlePc.close();
+    izlePc = null;
+    if (izleVideo) izleVideo.srcObject = null;
+  }
+
+  async function birak() {
+    if (!izlePc) return;
+    birakYerel();
+    await request('yayinAyril');
+    bildir({ tur: 'birakti' });
+  }
+
+  // İzleyicinin gördüğü kare hızı ve gelen hız (arayüz rozeti için).
+  async function izleIstatistik() {
+    if (!izlePc || izlePc === 'bekliyor') return null;
+    let sonuc = null;
+    (await izlePc.getStats()).forEach((s) => {
+      if (s.type === 'inbound-rtp' && s.kind === 'video') {
+        sonuc = { fps: s.framesPerSecond ?? null, genislik: s.frameWidth ?? null, yukseklik: s.frameHeight ?? null, kayip: s.packetsLost ?? 0 };
+      }
+    });
+    return sonuc;
+  }
+
+  // ---- sunucudan gelenler ----
+  socket.on('yayinIzleyici', ({ userId }) => {
+    if (!akis) return;
+    esOlustur(userId).catch((err) => log('yayin-teklif-hata', { userId, hata: String(err) }));
+  });
+  socket.on('yayinAyrildi', ({ userId }) => {
+    esler.get(userId)?.close();
+    esler.delete(userId);
+  });
+  socket.on('yayinSinyal', ({ from, sinyal }) => {
+    if (sinyal?.tur === 'cevap') {
+      const sdp = kalite ? bitHiziIpucu(sinyal.sdp, kalite.kbps) : sinyal.sdp;
+      esler.get(from)?.setRemoteDescription({ type: 'answer', sdp }).catch((err) => log('yayin-cevap-hata', { hata: String(err) }));
+    } else if (sinyal?.tur === 'teklif') {
+      teklifGeldi(from, sinyal.sdp).catch((err) => {
+        log('yayin-izle-hata', { hata: String(err) });
+        birakYerel();
+        bildir({ tur: 'baglanamadi' });
+      });
+    }
+  });
+  socket.on('yayinDurum', (d) => {
+    if (!d?.aktif && izlePc) {
+      birakYerel();
+      bildir({ tur: 'birakti', sebep: 'yayinBitti' });
+    }
+    bildir({ tur: 'durum', ...d });
+  });
+
+  return {
+    baslat, bitir, izle, birak, izleIstatistik,
+    yayinliyor, izliyor: () => Boolean(izlePc), hostOzet: () => ({ ...hostOzet }),
+  };
+}

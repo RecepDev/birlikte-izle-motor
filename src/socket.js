@@ -121,6 +121,7 @@ export function attachSocket(io, {
       socket.join(room.id);
       reply({ ok: true, snapshot: room.snapshot(res.user.id), publicUrl: getPublicUrl() });
       dispatch(room, res.msgs);
+      dispatch(room, hooks.onJoin?.(room, res.user.id) || []);
     });
 
     on('time', (payload, reply) => reply(now()));
@@ -144,6 +145,7 @@ export function attachSocket(io, {
       const ctx = context(socket);
       if (!ctx) return;
       dispatch(ctx.room, ctx.room.disconnect(ctx.userId, socket.id).msgs);
+      dispatch(ctx.room, hooks.onDisconnect?.(ctx.room, ctx.userId) || []);
     });
   });
 

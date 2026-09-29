@@ -1,3 +1,9 @@
 node_modules/
 data/
 *.log
+
+# canli yayin uctan uca testinin ciktilari
+scripts/yayin-e2e/*.mp4
+scripts/yayin-e2e/*.json
+scripts/yayin-e2e/*.out
+scripts/yayin-e2e/*.err

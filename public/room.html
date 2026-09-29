@@ -69,6 +69,8 @@
         <button id="open-compat" type="button" title="Bu cihaz videoları açabiliyor mu?">🩺 <span class="hide-narrow">Uyumluluk</span> <span id="compat-badge" class="pill" hidden></span></button>
         <button id="copy-link" type="button">🔗 <span class="hide-narrow">Linki kopyala</span></button>
         <button id="net-usage" type="button" title="İnternet bağlantın nerelere gidiyor">📶 <span class="hide-narrow">İnternet</span></button>
+        <button id="yayin-ac" type="button" class="yayin-ac" hidden title="Discord'daki gibi: oynattığın görüntüyü ve sesi odadakilere canlı yayınla. Görüntü senden izleyicilere doğrudan gider.">📡 <span id="yayin-ac-yazi">Yayın Aç</span></button>
+        <button id="yayin-izle" type="button" class="yayin-izle" hidden title="Host'un canlı yayınını izle: kendi kaynağın durur, Stremio gerekmez.">📡 <span id="yayin-izle-yazi">Yayını izle</span></button>
         <button id="open-desktop" type="button" title="Odayı masaüstü uygulamasında aç: gerçek HDR, tüm ses dilleri, donanım çözme">🖥️ <span class="hide-narrow">Masaüstünde aç</span></button>
         <button id="open-settings" type="button" title="Ayarlar">⚙️ <span class="hide-narrow">Ayarlar</span></button>
       </div>
@@ -78,6 +80,15 @@
       <section class="player-col">
         <div id="player" class="player">
           <video id="video" playsinline webkit-playsinline preload="auto"></video>
+          <div id="yayin-katman" class="yayin-katman" hidden>
+            <video id="yayin-video" autoplay playsinline controls></video>
+            <div class="yayin-ust">
+              <span class="yayin-canli">● CANLI</span>
+              <span id="yayin-bilgi" class="yayin-bilgi"></span>
+              <button id="yayin-cik" type="button" class="yayin-cik">✕ Yayından çık</button>
+            </div>
+            <div id="yayin-mesaj" class="yayin-mesaj" hidden></div>
+          </div>
           <div id="banner" class="banner" hidden>
             <span id="banner-text"></span>
             <button id="banner-skip" type="button" hidden>Beklemeden devam et</button>
@@ -283,6 +294,22 @@
       <div class="dialog-actions">
         <button type="button" id="tani-kopyala">Kopyala</button>
         <button value="close" class="primary">Kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="yayin-dialog">
+    <form method="dialog" class="settings">
+      <h2>📡 Canlı yayın</h2>
+      <p class="muted small">Oynattığın görüntü ve bilgisayarının sesi bir kez sıkıştırılıp izleyicilere doğrudan gönderilir. İzleyicinin Stremio'ya ihtiyacı yoktur. Her izleyici ayrı bir akış olduğu için senin upload'unu kullanır.</p>
+      <label class="field"><span>Kalite</span> <select id="yayin-kalite"></select></label>
+      <label class="field inline"><span>En fazla izleyici</span> <input type="number" id="yayin-sinir" min="1" max="20" value="6"></label>
+      <p id="yayin-upload" class="muted small"></p>
+      <p class="muted small">Ses: bilgisayarın <b>tüm</b> sesi gider (Discord konuşman dahil). Masaüstü uygulamasında oynatıcı penceresi kendiliğinden seçilir; tarayıcıda paylaşılacak pencereyi sen seçersin.</p>
+      <p class="muted small">Görüntü, oynatıcının ekrandaki boyutunu geçemez: 1080p yayın için uygulamayı tam ekran yap. Yayın sırasında bir pencere (ayarlar vb.) açarsan o süre görüntü donar.</p>
+      <div class="dialog-actions">
+        <button value="cancel">Vazgeç</button>
+        <button id="yayin-basla" type="button" class="primary">📡 Yayını başlat</button>
       </div>
     </form>
   </dialog>

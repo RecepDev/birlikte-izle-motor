@@ -544,3 +544,19 @@ button.danger { background: #3a1d24; border-color: #a33b4d; color: #ffb3bf; }
 .oto-ekran p { max-width: 420px; color: var(--text, #e8e9ee); font-size: 16px; line-height: 1.5; margin: 0; }
 .oto-donen { width: 48px; height: 48px; border-radius: 50%; border: 4px solid rgba(255,255,255,.12); border-top-color: #7b5cff; animation: oto-don 0.9s linear infinite; }
 @keyframes oto-don { to { transform: rotate(360deg); } }
+
+/* ---- Canlı yayın (public/js/yayin.js) ---- */
+.yayin-ac.yayinda { background: #b91c1c; border-color: #ef4444; color: #fff; font-weight: 600; }
+.yayin-izle { border-color: #ef4444; color: #fecaca; animation: yayin-nabiz 2s ease-in-out infinite; }
+.yayin-izle.izliyor { animation: none; background: #3f1d1d; }
+@keyframes yayin-nabiz { 50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, .25); } }
+.yayin-katman { position: absolute; inset: 0; z-index: 30; background: #000; display: flex; align-items: center; justify-content: center; }
+.yayin-katman[hidden] { display: none; }
+.yayin-katman video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.yayin-ust { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
+.yayin-ust > * { pointer-events: auto; }
+.yayin-canli { background: #dc2626; color: #fff; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 6px; letter-spacing: .5px; }
+.yayin-bilgi { color: #e5e7eb; font-size: 12px; text-shadow: 0 1px 2px #000; }
+.yayin-cik { margin-left: auto; background: rgba(0, 0, 0, .55); }
+.yayin-mesaj { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 80%; text-align: center; background: rgba(15, 16, 20, .92); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; color: var(--text); }
+.yayin-mesaj[hidden] { display: none; }
