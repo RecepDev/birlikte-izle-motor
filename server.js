@@ -31,6 +31,7 @@ import { createTercih } from './src/tercih.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun, kapatilacaklar } from './src/bizim-torrentler.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
 import { createTani } from './src/tani.js';
+import { masaustuAc } from './src/masaustu-baslat.js';
 import { stremioTakildiMi } from './src/takilma.js';
 import { sinirOku as yuklemeSiniriOku, sinirKoy as yuklemeSiniriKoy } from './src/yukleme-siniri.js';
 import { setExtraSources } from './src/streams.js';
@@ -797,3 +798,9 @@ log.info('Birlikte İzle çalışıyor', {
   eklenti: `${PUBLIC_BASE}/manifest.json`,
 });
 if (!process.env.NO_TUNNEL) tunnel.start(); // NO_TUNNEL=1 for local test instances
+// Sunucu açılınca masaüstü uygulaması da açılsın (açılış ekranıyla). Zaten açıksa uygulama
+// ikinci örneği kapatıp açık pencereyi öne getiriyor. Testte ve uygulama kurulu değilse açılmıyor.
+if (!TEST) {
+  const acilis = masaustuAc(null);
+  if (acilis.ok) log.info('Masaüstü uygulaması açıldı', { exe: acilis.exe });
+}
