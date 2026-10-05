@@ -9,6 +9,7 @@
 // mesajda gider - sunucudaki "bağlantı başına saniyede 20 olay" sınırına takılmasın.
 
 export const KALITELER = {
+  '480p30': { ad: '480p · 30 fps (zayıf internet)', genislik: 854, yukseklik: 480, fps: 30, kbps: 1500 },
   '720p30': { ad: '720p · 30 fps', genislik: 1280, yukseklik: 720, fps: 30, kbps: 3500 },
   '1080p30': { ad: '1080p · 30 fps', genislik: 1920, yukseklik: 1080, fps: 30, kbps: 6000 },
   '1080p60': { ad: '1080p · 60 fps', genislik: 1920, yukseklik: 1080, fps: 60, kbps: 9000 },

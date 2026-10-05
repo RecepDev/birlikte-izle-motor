@@ -14,6 +14,7 @@ export const YAYIN_SINIR_VARSAYILAN = 6;
 export const YAYIN_SINIR_EN_FAZLA = 20;
 export const SINYAL_EN_BUYUK = 64 * 1024;          // SDP genelde 5-15 KB
 export const KALITELER = {
+  '480p30': { genislik: 854, yukseklik: 480, fps: 30, kbps: 1500 },
   '720p30': { genislik: 1280, yukseklik: 720, fps: 30, kbps: 3500 },
   '1080p30': { genislik: 1920, yukseklik: 1080, fps: 30, kbps: 6000 },
   '1080p60': { genislik: 1920, yukseklik: 1080, fps: 60, kbps: 9000 },
