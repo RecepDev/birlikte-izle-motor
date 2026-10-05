@@ -61,6 +61,33 @@ duruyor (Ayarlar: Motor = Dahili / Stremio).
 - Karar ölçütü: torrent-stream, Stremio'dan belirgin kötü değilse devam. Kötüyse webtorrent ya
   da libtorrent tabanlı bir yardımcı program (TorrServer) yeniden değerlendirilecek.
 
+**Faz 0 sonucu (2026-10-06):** ölçüm kodu `deneme/motor/olc2.mjs`. Torrent'ler önbelleksiz ve
+yeni seçildi; 9 torrent kullanıldı, motorların DHT'si ölçüm öncesinde ısındı, hat yaklaşık 50 Mbps.
+
+| Motor | Başarılı | Açılış | İzleme | Sarma (%35 / %80) |
+|---|---|---|---|---|
+| Stremio | 6/9 | 7.6 sn | 38.1 Mbps | 3 / 2.2 sn |
+| TorrServer | 7/9 | 11 sn | 32 Mbps | 2.5 / 2 sn |
+| libtorrent (basit akış katmanı) | 9/9 | 13.2 sn | 15.1 Mbps | 9.4 / 5.5 sn |
+| webtorrent | 9/9 | 14.4 sn | 19.6 Mbps | 4.5 / 5.3 sn |
+| rqbit | 5/9 | 8.9 sn | 22.4 Mbps | 3.3 / 4.7 sn |
+| torrent-stream | 6/9 | 13.8 sn | 8.4 Mbps | 13 / 11.6 sn |
+
+Tabloda açılış, izleme ve sarma için medyan değerler var.
+
+Sonuçlardan çıkanlar:
+- **torrent-stream elendi.** Stremio'nun çekirdeği olmasına rağmen tek başına en kötü sonucu verdi;
+  Stremio'nun iyi sonucu çekirdekten değil, onun üstüne kurduğu ayarlardan geliyor. Yukarıdaki
+  "torrent-stream" kararı geçersiz.
+- **Stremio'da uTP kapalı** (`utp: !1`). UPnP'yi yalnız DLNA için kullanıyor, port açmıyor.
+- **libtorrent hiçbir torrent'te takılmadı.** Yavaş kısımları (sarma, izleme), deneme için
+  yazılan basit akış katmanından (`lt_sunucu.py`) kaynaklanıyor.
+- **Aday:** libtorrent ve üstüne kendi akış katmanımız. Telefonda da aynı çekirdek
+  (libtorrent4j) kullanılabilir.
+- **Yedek:** TorrServer (hazır, Windows ve Android ikilisi var, ancak 64 MB).
+
+Karar için akış katmanı düzeltilip Stremio ve TorrServer'la yeniden ölçülecek.
+
 ### Faz 1: Host sunucusunda dahili motor (Opus)
 - `src/motor/`: torrent açma/kapama, istenen dosyayı seçme, okunan yerin parçalarını öne alma,
   bağlantı sınırı (80), yükleme hız sınırı (kendi içinde; QoS'a gerek kalmıyor).
