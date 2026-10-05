@@ -37,13 +37,12 @@ html, body { overflow: hidden !important; }
 
 /* Bekleme şeridi videonun üstünde duramıyor (mpv yerel pencere), bu yüzden
    videonun hemen üstünde, ortada kendi satırında duruyor. */
+/* Bekleme şeridi videonun üstünde, üstte ortada (oynatıcıyı aşağı itmesin): mpv penceresinde
+   şerit kadar delik açılıyor (bkz. onyukleme-kabuk.cjs). Delik dikdörtgen: köşeler düz. */
 .banner {
-  position: static !important;
-  order: -1;
-  align-self: center !important;
-  margin: 6px auto !important;
-  /* Tarayıcı düzenindeki ortalama kaydırması (translateX(-50%)) burada şeridi sola taşırıyordu. */
-  transform: none !important;
+  position: absolute !important; top: 10px; left: 50% !important; transform: translateX(-50%) !important;
+  z-index: 25; margin: 0 !important; border-radius: 0 !important;
+  max-width: calc(100% - 24px) !important;
 }
 /* Bildirim kartı (ör. "Kalite sekmesinden başka bir stream seçebilirsin") videonun ortasında;
    mpv penceresinde kart kadar delik açılıyor (bkz. onyukleme-kabuk.cjs). Eskiden videonun
