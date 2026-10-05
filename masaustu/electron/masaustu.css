@@ -101,12 +101,13 @@ html, body { overflow: hidden !important; }
 .skip-intro, .intro-ask, .next-ep button, .weak-src { border-radius: 0 !important; }
 
 /* Kontrol çubuğu (pencerede de tam ekranda da) videonun üstünde, Stremio gibi: video
-   alanın tamamını alıyor, çubuk yalnızca fare hareket edince görünüyor ve mpv penceresinde
-   onun için delik açılıyor (bkz. onyukleme-kabuk.cjs). Böylece hiçbir oranda altta boş
-   şerit kalmıyor. */
+   alanın tamamını alıyor, çubuk yalnızca fare hareket edince görünüyor. Video görünürken
+   çubuğun aynası videonun üstündeki saydam pencerede (bkz. kontrol.html); video yokken
+   (kaynak yükleniyor, diyalog) bu çubuk görünüyor: o da aynı saydam görünümde olsun. */
 .player .controls {
   position: absolute !important; left: 0; right: 0; bottom: 0; z-index: 20;
-  background: #14161d !important;
+  background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .55) 45%, rgba(0, 0, 0, .8)) !important;
+  border-top: none !important;
 }
 .player.idle .controls { display: none !important; }
 
