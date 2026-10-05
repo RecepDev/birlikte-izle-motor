@@ -26,6 +26,7 @@ import { spawn } from 'node:child_process';
 import torrentStream from 'torrent-stream';
 import WebTorrent from 'webtorrent';
 import DHT from 'bittorrent-dht';
+import { dosyaSec } from '../../src/motor/stremio-taklidi.js';
 
 const BURASI = path.dirname(new URL(import.meta.url).pathname.slice(1));
 const STREMIO = 'http://127.0.0.1:11470';
@@ -77,7 +78,7 @@ async function torrentSec() {
         const gb = boy ? Number(boy[1]) / (boy[2] === 'MB' ? 1024 : 1) : 0;
         const kalite = /2160p|4k/i.test(metin) ? '2160p' : /1080p/i.test(metin) ? '1080p' : 'diger';
         // fileIdx yoksa -1: motor en büyük dosyayı seçer (Stremio da öyle yapıyor).
-        adaylar.push({ baslik: b, ih, idx: Number.isInteger(s.fileIdx) ? s.fileIdx : -1, seed, gb, kalite });
+        adaylar.push({ baslik: b, ih, idx: Number.isInteger(s.fileIdx) ? s.fileIdx : -1, dosyaAdi: s.behaviorHints?.filename || null, seed, gb, kalite });
       }
     } catch (err) {
       log(`  (Torrentio ${b}: ${err.message})`);
@@ -362,8 +363,9 @@ function torrserverMotor() {
         const t = await istek({ action: 'get', hash: ih }).catch(() => null);
         const dosyalar = t?.file_stats;
         if (dosyalar?.length) {
-          const sirali = [...dosyalar].sort((a, b) => a.id - b.id);
-          const f = d.idx >= 0 && sirali[d.idx] ? sirali[d.idx] : sirali[enBuyuk(sirali.map((x) => x.length))];
+          // TorrServer dolgu (pad) dosyalarını listelemiyor, sıra kayabiliyor: dosya adıyla eşleştir
+          // (sunucudaki src/motor/stremio-taklidi.js dosyaSec ile aynı kural).
+          const f = dosyaSec(dosyalar, d.idx, d.dosyaAdi);
           id = f.id;
           boy = f.length;
           return;

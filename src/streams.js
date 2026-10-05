@@ -1,5 +1,7 @@
 // Turns raw addon stream objects into the room's stream list.
 
+import { dosyaAdiKaydet } from './motor/dosya-adlari.js';
+
 const INFO_HASH = /^[0-9a-f]{40}$/i;
 const UNITS = { KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
 
@@ -142,9 +144,13 @@ function normalizeOne(raw, addonName) {
 
   if (typeof raw.infoHash === 'string') {
     if (!INFO_HASH.test(raw.infoHash)) return null;
+    // Dosya adı: TorrServer motorunda dosya sırası kayabiliyor, adla eşleştiriliyor (src/motor/).
+    const filename = typeof raw.behaviorHints?.filename === 'string' ? raw.behaviorHints.filename : null;
+    dosyaAdiKaydet(raw.infoHash.toLowerCase(), raw.fileIdx, filename);
     return {
       kind: 'torrent',
       ...base,
+      filename,
       infoHash: raw.infoHash.toLowerCase(),
       fileIdx: Number.isInteger(raw.fileIdx) ? raw.fileIdx : null,
       sources: [...new Set([...(raw.sources || []).filter(

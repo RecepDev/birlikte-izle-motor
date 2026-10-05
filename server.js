@@ -23,6 +23,9 @@ import { isit as isitStremio } from './src/stremio-isit.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
+import { createTorrServer } from './src/motor/torrserver.js';
+import { createStremioTaklidi } from './src/motor/stremio-taklidi.js';
+import { dosyaAdi } from './src/motor/dosya-adlari.js';
 import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
@@ -62,9 +65,44 @@ const log = createLogger({ file: path.join(DATA, 'logs', 'server.log') });
 const config = createConfigStore(path.join(DATA, 'config.json'), log);
 const addons = createAddonsClient();
 const stremioLocal = createStremioLocal();
-const stremioRestarter = createStremioRestarter({ stremioLocal, log });
+// Torrent motoru (MOTOR): "torrserver" (varsayılan, Stremio'suz) ya da "stremio". TorrServer ayrı süreç
+// olarak açılıyor; önüne Stremio'nun adreslerini taklit eden ara katman 11470'te oturuyor, böylece
+// relay, masaüstü uygulaması ve tarayıcı hiç değişmeden çalışıyor. Stremio açıksa 11470 dolu:
+// TorrServer kullanılamıyor, Stremio'yla devam ediliyor (kapatıp sunucuyu yeniden başlatmak gerek).
+const MOTOR = TEST ? (process.env.MOTOR || 'stremio') : (process.env.MOTOR || 'torrserver');
+let torrServer = null;
+let stremioTaklidi = null;
+let motorAyri = false; // TorrServer çalışıyor (Stremio asıl sunucuyla ortak değil)
+if (MOTOR === 'torrserver') {
+  torrServer = createTorrServer({ klasor: DATA, log });
+  stremioTaklidi = createStremioTaklidi({ ts: torrServer, log, dosyaAdi });
+  try {
+    await stremioTaklidi.baslat();
+    await torrServer.baslat();
+    motorAyri = true;
+  } catch (err) {
+    stremioTaklidi.durdur();
+    torrServer.durdur();
+    torrServer = null;
+    log.error(err.code === 'EADDRINUSE'
+      ? 'TorrServer motoru açılamadı: 11470 dolu (Stremio açık). Stremio\'yu kapatıp sunucuyu yeniden başlat; şimdilik Stremio kullanılıyor.'
+      : 'TorrServer motoru açılamadı; Stremio kullanılıyor', { error: err.message });
+  }
+}
+const stremioRestarter = torrServer
+  ? {
+    // Stremio'yu yeniden başlatmanın karşılığı: TorrServer sürecini kapatıp açmak.
+    async restart(reason = 'elle') {
+      log.warn('TorrServer yeniden başlatılıyor', { reason });
+      try { return await torrServer.yenidenBaslat(); } catch (err) {
+        log.error('TorrServer yeniden açılamadı', { error: err.message });
+        return { error: 'notUp' };
+      }
+    },
+  }
+  : createStremioRestarter({ stremioLocal, log });
 // Sunucu açılınca Stremio kapalıysa kendiliğinden aç: oda açmak için onun yayın sunucusu lazım.
-if (!TEST) stremioAcikDegilseAc({ stremioLocal, log });
+if (!TEST && !torrServer) stremioAcikDegilseAc({ stremioLocal, log });
 // Otomatik yeniden başlatmalar arası en az süre: takılma sürerse döngüye girmesin.
 const AUTO_RESTART_COOLDOWN_MS = 5 * 60_000;
 // Birisi bekliyorken host'un torrent'i bu kadar süre hiç veri indirmezse Stremio takılmış sayılır.
@@ -678,9 +716,10 @@ const sahipsizTimer = setInterval(async () => {
 sahipsizTimer.unref();
 // Sunucu açılırken Stremio'da açık kalmış torrent'ler önceki oturumlardan artakalan: onlar
 // da temizliğe dahil (sunucu yeni açıldığı için kayıtlarımızda yoklar).
-// Kopya (motor dalı): Stremio asıl sunucuyla (7000/7001) ortak. Açıkta bulduklarını sahiplenip
-// kapatırsa asıl odada izlenen videoyu keser; dahili motora geçince (Faz 1) bu sorun kalkıyor.
-const PAYLASILAN_STREMIO = true;
+// Kopya (motor dalı): Stremio motoruyla çalışırken Stremio asıl sunucuyla (7000/7001) ortak. Açıkta
+// bulduklarını sahiplenip kapatırsa asıl odada izlenen videoyu keser. TorrServer bu sunucunun kendi
+// motoru: ortak değil.
+const PAYLASILAN_STREMIO = !motorAyri;
 setTimeout(async () => {
   if (TEST || PAYLASILAN_STREMIO) return;
   try {
@@ -777,6 +816,8 @@ function uygulamayiKapat() {
 }
 
 function shutdown() {
+  torrServer?.durdur();
+  stremioTaklidi?.durdur();
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('Sunucu kapatılıyor');

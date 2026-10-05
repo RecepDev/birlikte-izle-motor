@@ -89,6 +89,7 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
     sizeBytes: 2 * 1024 ** 3,
     infoHash: IH.toLowerCase(),
     fileIdx: 1,
+    filename: null,
     sources: ['tracker:udp://t:1'],
     url: null,
     notWebReady: false,
