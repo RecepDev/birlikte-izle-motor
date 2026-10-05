@@ -99,6 +99,10 @@ app.whenReady().then(async () => {
   not(await kosulBekle(wc, 'Boolean(document.fullscreenElement)', 5000) ? 'yayin tam ekran oldu' : 'YAYIN TAM EKRAN OLMADI');
   await wc.executeJavaScript('document.exitFullscreen()').catch(() => {});
   await bekle(800);
+  // Host yayın sürerken 480p'ye düşürüyor: görüntü küçülmeli (bağlantı yenilenir)
+  not(await kosulBekle(wc, "document.querySelector('#yayin-video').videoHeight > 0 && document.querySelector('#yayin-video').videoHeight <= 480", 40000)
+    ? `ayar degisince goruntu kuculdu (${await wc.executeJavaScript("document.querySelector('#yayin-video').videoWidth + 'x' + document.querySelector('#yayin-video').videoHeight")})`
+    : 'AYAR DEGISINCE GORUNTU KUCULMEDI');
   // Yayindan cik: kendi oynaticisi geri gelmeli
   await wc.executeJavaScript("document.querySelector('#yayin-cik').click()");
   not(await kosulBekle(wc, "document.querySelector('#yayin-katman').hidden && Boolean(document.querySelector('#video').currentSrc)", 15000)

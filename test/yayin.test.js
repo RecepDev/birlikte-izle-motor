@@ -146,3 +146,16 @@ test('bit hızı ipucu yalnız video codec satırlarına eklenir (rtx ve ses har
   assert.match(s, /a=fmtp:111 minptime=10;useinbandfec=1\r\n/); // ses satırına dokunulmadı
   assert.equal(bitHiziIpucu(s, 6000), s);
 });
+
+test('yayın açıkken ayar değişimi izleyicileri korur', async () => {
+  const { createYayin } = await import('../src/yayin.js');
+  const y = createYayin();
+  const r = { id: 'R', hostUserId: 'h', users: new Map([['h', { name: 'H' }], ['a', { name: 'A' }]]) };
+  y.events.yayinBaslat(r, 'h', { kalite: '1080p30', sinir: 4 });
+  await y.events.yayinKatil(r, 'a');
+  const res = y.events.yayinGuncelle(r, 'h', { kalite: '480p30', sinir: 2 });
+  assert.equal(res.reply.kalite, '480p30');
+  assert.equal(res.reply.sinir, 2);
+  assert.equal(y.durum('R').izleyiciler.length, 1, 'izleyici listesi korunur');
+  assert.equal(y.events.yayinGuncelle(r, 'a', { kalite: '720p30' }).error, 'notHost');
+});

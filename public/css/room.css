@@ -75,6 +75,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 }
 .connect-stremio { flex: none; font-size: 12px; padding: 2px 8px; }
 .top-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.ust-menu-btn { display: none; }
 /* Dar ekranda (telefon) başlık düğmelerin altına girmesin: başlık kutusu küçülebilsin,
    uzun ad "…" ile kesilsin, Relay/Stremio etiketleri alt satıra geçsin. */
 .room-title { flex: 1 1 auto; }
@@ -342,8 +343,20 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .side-resizer { display: none; }
   .lock-hint { padding: 4px 12px; }
   .volume, .hide-narrow { display: none; }
+  /* Yayın izleyicisinin ses kaydırıcısı telefonda da görünsün (istenen tek ses ayarı bu). */
+  .yayin-alt .volume { display: block; flex: 1 1 auto; max-width: 160px; }
   .ctl { min-width: 44px; min-height: 44px; }
-  .topbar { padding: 8px 12px; }
+  .topbar { padding: 8px 12px; position: relative; }
+  /* Üst çubuk dar ekranda sığmıyordu: düğmeler "⋯" menüsünde, yazılarıyla alt alta. */
+  .ust-menu-btn { display: inline-flex; flex: none; }
+  .top-actions {
+    display: none; position: absolute; right: 8px; top: calc(100% + 4px); z-index: 60;
+    flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; min-width: 210px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+  }
+  .top-actions.acik { display: flex; }
+  .top-actions > button:not([hidden]) { display: flex; align-items: center; gap: 8px; justify-content: flex-start; text-align: left; }
+  .top-actions .hide-narrow { display: inline; }
   /* Telefonda video alanı küçük: bildirim kutusu sıkışık ama tamamı görünsün, gerekirse kaysın. */
   .notice { padding: 8px; }
   .notice-card { padding: 10px 12px; gap: 8px; max-height: 100%; overflow-y: auto; font-size: 12.5px; }
@@ -563,12 +576,6 @@ button.danger { background: #3a1d24; border-color: #a33b4d; color: #ffb3bf; }
   padding: 18px 12px 8px; background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .75)); transition: opacity .2s;
 }
 .yayin-katman.bos .yayin-alt, .yayin-katman.bos .yayin-ust { opacity: 0; pointer-events: none; }
-/* Oynatıcının üstünde "canlı yayın açık" daveti (telefonda üst çubuk dar olabiliyor). */
-.yayin-davet {
-  position: absolute; top: 10px; left: 10px; z-index: 26; padding: 8px 14px; border-radius: 999px;
-  background: rgba(220, 38, 38, .9); color: #fff; border: none; font-weight: 600; font-size: 14px;
-}
-.yayin-davet[hidden] { display: none; }
 .yayin-ust { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
 .yayin-ust > * { pointer-events: auto; }
 .yayin-canli { background: #dc2626; color: #fff; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 6px; letter-spacing: .5px; }

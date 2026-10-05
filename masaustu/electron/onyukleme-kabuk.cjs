@@ -93,7 +93,7 @@ function olcumKur() {
       // penceresinde delik açılıyor: HTML videonun üstünde görünüyor, video küçülmüyor.
       // Kontrol çubuğu için delik yok: o, videonun üstündeki saydam ayrı pencerede (kontrolAynasi).
       const oyn = alan.closest('.player');
-      const secici = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])', '.intro-ask:not([hidden])', '.next-ep:not([hidden])', '.notice:not([hidden]) .notice-card', '.weak-src:not([hidden])', '.player .banner:not([hidden])', '#yayin-davet:not([hidden])'];
+      const secici = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])', '.intro-ask:not([hidden])', '.next-ep:not([hidden])', '.notice:not([hidden]) .notice-card', '.weak-src:not([hidden])', '.player .banner:not([hidden])'];
       const cubuk = oyn && !oyn.classList.contains('idle') ? oyn.querySelector('.controls')?.getBoundingClientRect() : null;
       const kontrol = cubuk && cubuk.width > 0 && cubuk.height > 0 ? { x: cubuk.x, y: cubuk.y, width: cubuk.width, height: cubuk.height } : null;
       const delikler = secici.flatMap((q) => [...document.querySelectorAll(q)])

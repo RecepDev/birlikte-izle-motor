@@ -828,6 +828,17 @@ function renderUsersTab() {
   $('#user-count').textContent = String(count);
 }
 
+// Dar ekranda üst çubuğun düğmeleri "⋯" menüsünde: aç/kapat, dışarı tıklayınca ya da bir
+// işleme basınca kapanır.
+$('#ust-menu-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('#top-actions').classList.toggle('acik');
+});
+document.addEventListener('click', (e) => {
+  if (!$('#top-actions').classList.contains('acik')) return;
+  if (e.target.closest('#top-actions button') || !e.target.closest('#top-actions')) $('#top-actions').classList.remove('acik');
+});
+
 $('#tani-kopyala').addEventListener('click', async () => {
   await copyText($('#tani-metin').textContent);
   toast('Kayıt kopyalandı');
@@ -1582,9 +1593,6 @@ function renderYayin() {
     : ac.title;
   const izle = $('#yayin-izle');
   izle.hidden = host || !yayinDurumu.aktif;
-  // Oynatıcının üstünde de: telefonda üst çubuk dar/gizli olabiliyor.
-  $('#yayin-davet').hidden = host || !yayinDurumu.aktif || yayin.izliyor();
-  $('#yayin-davet-yazi').textContent = `📡 ${userName(yayinDurumu.hostUserId)} canlı yayında · İzle`;
   izle.classList.toggle('izliyor', yayin.izliyor());
   $('#yayin-izle-yazi').textContent = yayin.izliyor() ? 'Yayından çık' : `Yayını izle · ${userName(yayinDurumu.hostUserId)}`;
   $('#yayin-katman').hidden = !yayin.izliyor();
@@ -1670,8 +1678,6 @@ function yayinOlay(o) {
   }
   renderYayin();
 }
-
-$('#yayin-davet').addEventListener('click', () => { if (!yayin.izliyor()) yayinIzle(); });
 
 // ---- yayın izleyicisinin çubuğu: ses, görüntü oranı ve tam ekran (cihaz başına hatırlanıyor) ----
 {
@@ -1762,15 +1768,20 @@ $('#yayin-kalite').addEventListener('change', yayinUploadYaz);
 $('#yayin-fps').addEventListener('change', yayinUploadYaz);
 $('#yayin-sinir').addEventListener('input', yayinUploadYaz);
 
-$('#yayin-ac').addEventListener('click', async () => {
-  if (yayin.yayinliyor()) {
-    if (!confirm('Yayın durdurulsun mu? İzleyiciler normal izlemeye döner.')) return;
-    await yayin.bitir();
-    renderYayin();
-    return;
-  }
+// Yayın kapalıyken: başlatma penceresi. Açıkken aynı pencere ayar penceresi olur (Uygula /
+// Yayını durdur): çözünürlük, fps ve izleyici sınırı yayın sürerken değiştirilebilir.
+$('#yayin-ac').addEventListener('click', () => {
+  const acik = yayin.yayinliyor();
+  $('#yayin-dialog h2').textContent = acik ? '📡 Yayın ayarları' : '📡 Canlı yayın';
+  $('#yayin-basla').textContent = acik ? '✓ Uygula' : '📡 Yayını başlat';
+  $('#yayin-durdur').hidden = !acik;
   yayinUploadYaz();
   $('#yayin-dialog').showModal();
+});
+$('#yayin-durdur').addEventListener('click', async () => {
+  $('#yayin-dialog').close();
+  await yayin.bitir();
+  renderYayin();
 });
 
 $('#yayin-basla').addEventListener('click', async () => {
@@ -1780,6 +1791,13 @@ $('#yayin-basla').addEventListener('click', async () => {
   storage.set('yayinFps', $('#yayin-fps').value);
   storage.set('yayinSinir', String(sinir));
   $('#yayin-dialog').close();
+  if (yayin.yayinliyor()) {
+    const r = await yayin.ayarla(kalite, sinir);
+    if (r?.error) toast(YAYIN_HATALARI[r.error] || errorText(r.error), 6000);
+    else toast(`📡 Yayın ayarlandı: ${KALITELER[kalite]?.ad || kalite}, en fazla ${sinir} izleyici.`, 5000);
+    renderYayin();
+    return;
+  }
   // Masaüstünde diyalog açıkken oynatıcı penceresi gizli; kapanınca yeniden görünmesini bekle.
   if (window.kabuk) await new Promise((r) => setTimeout(r, 400));
   const res = await yayin.baslat(kalite, sinir);

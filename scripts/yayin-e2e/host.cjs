@@ -56,7 +56,20 @@ app.whenReady().then(async () => {
   sonuc.uyarilar = await wc.executeJavaScript("[...document.querySelectorAll('.toast, .toasts > *')].map((t) => t.textContent)").catch(() => []);
   sonuc.oynatici = await wc.executeJavaScript("({ paused: document.querySelector('#video').paused, src: document.querySelector('#video').currentSrc })").catch(() => null);
   const son = Date.now() + sure;
+  const ayarZamani = Date.now() + 38000; // izleyici ölçümünü bitirdikten sonra
+  let ayarlandi = false;
   while (Date.now() < son) {
+    // Yayın sürerken ayar değişimi: 480p'ye düşür (izleyici görüntünün küçüldüğünü görmeli)
+    if (!ayarlandi && Date.now() > ayarZamani) {
+      ayarlandi = true;
+      await wc.executeJavaScript(`(() => {
+        document.querySelector('#yayin-ac').click();
+        document.querySelector('#yayin-kalite').value = '480p';
+        document.querySelector('#yayin-fps').value = '30';
+        document.querySelector('#yayin-basla').click();
+      })()`, true);
+      not('yayin ayari degistirildi (480p30)');
+    }
     const d = await wc.executeJavaScript(`({ yazi: document.querySelector('#yayin-ac-yazi').textContent, ipucu: document.querySelector('#yayin-ac').title, oynuyor: !document.querySelector('#video').paused, t: Math.round(document.querySelector('#video').currentTime), bekleme: document.querySelector('#banner').hidden ? null : document.querySelector('#banner-text').textContent })`).catch(() => null);
     if (d) { sonuc.durumlar.push({ t: Date.now(), ...d }); yaz(SONUC, sonuc); }
     await bekle(2000);

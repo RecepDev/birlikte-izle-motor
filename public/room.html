@@ -65,7 +65,8 @@
           <div id="subtitle" class="muted small"></div>
         </div>
       </div>
-      <div class="top-actions">
+      <button id="ust-menu-btn" type="button" class="ust-menu-btn" aria-label="Diğer işlemler" title="Diğer işlemler">⋯</button>
+      <div class="top-actions" id="top-actions">
         <button id="open-compat" type="button" title="Bu cihaz videoları açabiliyor mu?">🩺 <span class="hide-narrow">Uyumluluk</span> <span id="compat-badge" class="pill" hidden></span></button>
         <button id="copy-link" type="button">🔗 <span class="hide-narrow">Linki kopyala</span></button>
         <button id="net-usage" type="button" title="İnternet bağlantın nerelere gidiyor">📶 <span class="hide-narrow">İnternet</span></button>
@@ -80,7 +81,6 @@
       <section class="player-col">
         <div id="player" class="player">
           <video id="video" playsinline webkit-playsinline preload="auto"></video>
-          <button id="yayin-davet" type="button" class="yayin-davet" hidden><span id="yayin-davet-yazi">📡 Canlı yayın · İzle</span></button>
           <div id="yayin-katman" class="yayin-katman" hidden>
             <video id="yayin-video" autoplay playsinline></video>
             <div class="yayin-ust">
@@ -320,6 +320,7 @@
       <p class="muted small">Görüntü, oynatıcının ekrandaki boyutunu geçemez: 1080p yayın için uygulamayı tam ekran yap. Yayın sırasında bir pencere (ayarlar vb.) açarsan o süre görüntü donar.</p>
       <div class="dialog-actions">
         <button value="cancel">Vazgeç</button>
+        <button id="yayin-durdur" type="button" class="danger" hidden>⏹ Yayını durdur</button>
         <button id="yayin-basla" type="button" class="primary">📡 Yayını başlat</button>
       </div>
     </form>

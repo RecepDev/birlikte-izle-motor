@@ -74,6 +74,19 @@ export function createYayin({ iceServers = async () => VARSAYILAN_ICE, now = Dat
       return { reply: { ok: true, kalite, sinir, ...KALITELER[kalite] }, msgs: [durumMesaji(room)] };
     },
 
+    // Yayın açıkken ayar değişimi (çözünürlük/fps, izleyici sınırı): izleyici listesi korunur.
+    // Sınır izleyici sayısının altına inerse kimse atılmaz, yalnız yeni giriş kapanır.
+    yayinGuncelle: (room, uid, p) => {
+      if (uid !== room.hostUserId) return { error: 'notHost' };
+      const y = gecerli(room);
+      if (!y) return { error: 'yayinYok' };
+      if (KALITELER[p?.kalite]) y.kalite = p.kalite;
+      const istenen = Number(p?.sinir);
+      if (Number.isInteger(istenen) && istenen >= 1 && istenen <= YAYIN_SINIR_EN_FAZLA) y.sinir = istenen;
+      log?.info?.('Yayın ayarlandı', { roomId: room.id, kalite: y.kalite, sinir: y.sinir });
+      return { reply: { ok: true, kalite: y.kalite, sinir: y.sinir, ...KALITELER[y.kalite] }, msgs: [durumMesaji(room)] };
+    },
+
     yayinBitir: (room, uid) => {
       if (uid !== room.hostUserId) return { error: 'notHost' };
       return { reply: { ok: true }, msgs: bitir(room, 'host kapattı') };

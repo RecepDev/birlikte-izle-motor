@@ -348,8 +348,31 @@ export function createYayinIstemci({ socket, request, onDurum = () => {}, log = 
     bildir({ tur: 'durum', ...d });
   });
 
+  // Yayın sürerken ayar değişimi: yakalama yeni çözünürlük/fps'e ayarlanır, her izleyiciyle
+  // bağlantı yeni bit hızıyla yeniden kurulur (izleyicide 1-3 sn'lik kısa kesinti).
+  async function ayarla(kaliteAdi, sinir) {
+    if (!akis) return { error: 'yayinYok' };
+    const yeni = KALITELER[kaliteAdi];
+    if (!yeni) return { error: 'badValue' };
+    const res = await request('yayinGuncelle', { kalite: kaliteAdi, sinir });
+    if (res?.error) return res;
+    const degisti = yeni !== kalite;
+    kalite = yeni;
+    if (degisti) {
+      const video = akis.getVideoTracks()[0];
+      await video?.applyConstraints({
+        width: { max: kalite.genislik }, height: { max: kalite.yukseklik }, frameRate: { ideal: kalite.fps, max: kalite.fps },
+      }).catch((err) => log('yayin-ayar-hata', { hata: String(err) }));
+      for (const userId of [...esler.keys()]) {
+        esOlustur(userId).catch((err) => log('yayin-teklif-hata', { userId, hata: String(err) }));
+      }
+    }
+    bildir({ tur: 'ayarlandi', ...res });
+    return res;
+  }
+
   return {
-    baslat, bitir, izle, birak, izleIstatistik,
+    baslat, bitir, ayarla, izle, birak, izleIstatistik,
     yayinliyor, izliyor: () => Boolean(izlePc), hostOzet: () => ({ ...hostOzet }),
   };
 }
