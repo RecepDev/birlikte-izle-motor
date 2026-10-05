@@ -88,6 +88,27 @@ Sonuçlardan çıkanlar:
 
 Karar için akış katmanı düzeltilip Stremio ve TorrServer'la yeniden ölçülecek.
 
+**İkinci tur (2026-10-06, 9 yeni torrent):** libtorrent katmanı düzeltildi (parça durumu
+alarmlardan takip, sınırlı acil pencere, tüm tracker'lara aynı anda istek).
+
+| Motor | Başarılı | Açılış | İzleme | Sarma (%35 / %80) | Peer |
+|---|---|---|---|---|---|
+| Stremio | 7/9 | 4.1 sn | 37.5 Mbps | 2 / 1.9 sn | 13 |
+| TorrServer | 7/9 | 12.9 sn | 27.9 Mbps | 2.8 / 2.1 sn | 20 |
+| libtorrent | 8/9 | 13.4 sn | 14.8 Mbps | 12.1 / 11.5 sn | 24.5 |
+
+İki turun toplamı (18 torrent):
+- Açılan torrent: Stremio 13, TorrServer 14, libtorrent 17.
+- libtorrent en çok peer'e bağlanıyor ve en çok torrent'i açıyor.
+- Ama tek parçayı almakta yavaş: sarma 12 sn, Stremio'da 2 sn. Hızlı bir katmanla düzelmedi.
+  Akış için ayarlanması ayrı bir araştırma işi, sonucu belirsiz.
+
+Hızda Stremio hâlâ önde. Stremio'suz en yakın seçenek TorrServer.
+
+Ölçüm kodunda dikkat edilecek bir nokta var. TorrServer bir torrent'te 7.8 sn'de hata verdi.
+Muhtemel sebep dosya sırası uyuşmazlığı: TorrServer dolgu (pad) dosyalarını listelemiyor
+olabilir. Bu doğruysa TorrServer'ın sonucu bir torrent kadar haksız yere düşük çıktı.
+
 ### Faz 1: Host sunucusunda dahili motor (Opus)
 - `src/motor/`: torrent açma/kapama, istenen dosyayı seçme, okunan yerin parçalarını öne alma,
   bağlantı sınırı (80), yükleme hız sınırı (kendi içinde; QoS'a gerek kalmıyor).
