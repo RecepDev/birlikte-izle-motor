@@ -2052,6 +2052,23 @@ volume.addEventListener('input', () => {
   storage.set('volume', volume.value);
   window.masaustuBilgi?.(`Ses %${Math.round(Number(volume.value) * 100)}`);
 });
+// Dar ekranda (telefon) ses kaydırıcısı gizli: ses düğmesine basınca açılır, 3 sn dokunulmazsa
+// kapanır. Sessize almak için kaydırıcı en sola çekilir. Geniş ekranda düğme eskisi gibi sessize alır.
+function sesBariKur(dugme, cubuk, kapsayici) {
+  let zaman = null;
+  const kapat = () => kapsayici.classList.remove('ses-acik');
+  const sure = () => { clearTimeout(zaman); zaman = setTimeout(kapat, 3000); };
+  dugme.addEventListener('click', (e) => {
+    if (!matchMedia('(max-width: 900px)').matches) return;
+    e.stopImmediatePropagation();
+    if (kapsayici.classList.toggle('ses-acik')) sure();
+    else clearTimeout(zaman);
+  }, true);
+  for (const tur of ['input', 'pointerdown', 'touchstart']) cubuk.addEventListener(tur, sure, { passive: true });
+}
+sesBariKur($('#btn-mute'), $('#volume'), $('.ctl-row'));
+sesBariKur($('#yayin-sessiz'), $('#yayin-ses'), $('.yayin-alt'));
+
 $('#btn-mute').addEventListener('click', () => {
   video.muted = !video.muted;
 });
@@ -3338,4 +3355,6 @@ $('#join-form').addEventListener('submit', (e) => {
 if (appName && /^[A-Z0-9]{6}$/.test(roomId)) {
   $('#join').hidden = true;
   $('#join-form').requestSubmit();
+} else {
+  $('#join').hidden = false;
 }

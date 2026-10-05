@@ -15,7 +15,9 @@
     <div class="oto-donen"></div>
     <p id="oto-ekran-metin"></p>
   </div>
-  <div id="join" class="overlay">
+  <!-- Gizli başlıyor: uygulamada ad kayıtlıysa hiç görünmez (sayfa yüklenirken bir an çıkıp
+       kapanıyordu); ad yoksa room.js gösteriyor. -->
+  <div id="join" class="overlay" hidden>
     <form id="join-form" class="card" autocomplete="off">
       <img id="join-poster" class="join-poster" alt="" hidden>
       <h1>Birlikte İzle</h1>
@@ -65,13 +67,16 @@
           <div id="subtitle" class="muted small"></div>
         </div>
       </div>
+      <!-- Yayın düğmeleri menünün dışında: dar ekranda da "⋯"nin hemen solunda görünür. -->
+      <div class="yayin-dugmeler">
+          <button id="yayin-ac" type="button" class="yayin-ac" hidden title="Discord'daki gibi: oynattığın görüntüyü ve sesi odadakilere canlı yayınla. Görüntü senden izleyicilere doğrudan gider.">📡 <span id="yayin-ac-yazi">Yayın Aç</span></button>
+          <button id="yayin-izle" type="button" class="yayin-izle" hidden title="Host'un canlı yayınını izle: kendi kaynağın durur, Stremio gerekmez.">📡 <span id="yayin-izle-yazi">Yayını izle</span></button>
+      </div>
       <button id="ust-menu-btn" type="button" class="ust-menu-btn" aria-label="Diğer işlemler" title="Diğer işlemler">⋯</button>
       <div class="top-actions" id="top-actions">
         <button id="open-compat" type="button" title="Bu cihaz videoları açabiliyor mu?">🩺 <span class="hide-narrow">Uyumluluk</span> <span id="compat-badge" class="pill" hidden></span></button>
         <button id="copy-link" type="button">🔗 <span class="hide-narrow">Linki kopyala</span></button>
         <button id="net-usage" type="button" title="İnternet bağlantın nerelere gidiyor">📶 <span class="hide-narrow">İnternet</span></button>
-        <button id="yayin-ac" type="button" class="yayin-ac" hidden title="Discord'daki gibi: oynattığın görüntüyü ve sesi odadakilere canlı yayınla. Görüntü senden izleyicilere doğrudan gider.">📡 <span id="yayin-ac-yazi">Yayın Aç</span></button>
-        <button id="yayin-izle" type="button" class="yayin-izle" hidden title="Host'un canlı yayınını izle: kendi kaynağın durur, Stremio gerekmez.">📡 <span id="yayin-izle-yazi">Yayını izle</span></button>
         <button id="open-desktop" type="button" title="Odayı masaüstü uygulamasında aç: gerçek HDR, tüm ses dilleri, donanım çözme">🖥️ <span class="hide-narrow">Masaüstünde aç</span></button>
         <button id="open-settings" type="button" title="Ayarlar">⚙️ <span class="hide-narrow">Ayarlar</span></button>
       </div>

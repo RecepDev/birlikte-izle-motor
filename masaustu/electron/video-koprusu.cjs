@@ -128,6 +128,7 @@ function bagla(video) {
   // hareketi sanıp odaya yeniden yolluyordu.
   video.play = () => {
     ipcRenderer.send('mpv:ozellik', 'pause', false);
+    istenen = { paused: false, zaman: Date.now() };
     if (durum.paused) {
       durum.paused = false;
       durumZamani = Date.now();
@@ -137,6 +138,7 @@ function bagla(video) {
   };
   video.pause = () => {
     ipcRenderer.send('mpv:ozellik', 'pause', true);
+    istenen = { paused: true, zaman: Date.now() };
     if (!durum.paused) {
       durum.position = konumTahmini();
       durum.paused = true;
@@ -173,6 +175,10 @@ let kaynak = '';
 let volume = 1;
 let durumZamani = 0;
 let sarma = null; // { hedef, zaman }: bizim yaptığımız son sarma
+// Son oynat/duraklat isteği: mpv'den o istekten önce sorulmuş bir cevap eski hali getirebiliyor
+// ("oynat"tan hemen sonra "duraklatılmış"). Sayfa bunu kişinin duraklatması sanıp odayı tekrar
+// duraklatıyordu (host oynat'a basınca video hemen duruyordu). 1,5 sn içinde çelişen cevap yok sayılır.
+let istenen = null;
 function konumTahmini() {
   if (durum.paused || durum.seeking || durum.cacheStalled || !durumZamani) return durum.position;
   const gecen = Math.min(0.5, (Date.now() - durumZamani) / 1000);
@@ -279,6 +285,10 @@ ipcRenderer.on('mpv:durum', (_e, next) => {
     next = { ...next, position: sarma.hedef, seeking: true };
   } else if (sarma && Math.abs(next.position - sarma.hedef) <= 1.5) {
     sarma = null;
+  }
+  if (istenen) {
+    if (Date.now() - istenen.zaman > 1500 || next.paused === istenen.paused) istenen = null;
+    else next = { ...next, paused: istenen.paused };
   }
   Object.assign(durum, next);
   durumZamani = Date.now();
