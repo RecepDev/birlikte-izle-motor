@@ -138,16 +138,22 @@ class MainActivity : AppCompatActivity() {
         })
         for (i in 0 until liste.length()) {
             val oda = liste.getJSONObject(i)
-            val satir = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(8), dp(8), dp(8), dp(8))
+            // Kart: üstte afiş + ad + durum; yayın açıksa altında tam genişlik "Yayına gir"
+            // (yan yana sığmıyordu, ad iki satıra bölünüp sıkışıyordu).
+            val kartOda = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(10), dp(10), dp(10), dp(10))
                 background = GradientDrawable().apply {
-                    cornerRadius = dp(10).toFloat()
+                    cornerRadius = dp(12).toFloat()
                     setColor(ContextCompat.getColor(context, R.color.zemin))
                 }
                 setOnClickListener { odayaGit("$sunucu/room/${oda.getString("id")}") }
             }
+            val satir = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            kartOda.addView(satir)
             val afis = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(0xFF232633.toInt())
@@ -176,18 +182,19 @@ class MainActivity : AppCompatActivity() {
             satir.addView(metinler, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             // Yayın açıksa doğrudan yayına giriş (odaya girince kendi kaynağı açılmadan yayın başlar).
             if (oda.optBoolean("yayin")) {
-                satir.addView(Button(this).apply {
+                kartOda.addView(Button(this).apply {
                     text = "📡 Yayına gir"
+                    isAllCaps = false
                     setTextColor(0xFFFFFFFF.toInt())
-                    textSize = 13f
+                    textSize = 14f
                     background = GradientDrawable().apply {
-                        cornerRadius = dp(8).toFloat()
+                        cornerRadius = dp(10).toFloat()
                         setColor(ContextCompat.getColor(context, R.color.vurgu))
                     }
                     setOnClickListener { odayaGit("$sunucu/room/${oda.getString("id")}") }
-                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40)))
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply { topMargin = dp(10) })
             }
-            kutu.addView(satir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            kutu.addView(kartOda, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             })
         }
@@ -222,24 +229,42 @@ class MainActivity : AppCompatActivity() {
         }
         kart.addView(odalar)
         odalarKutusu = odalar
+        // Link alanı ve "Odaya gir" tek kutuda: solda yazı alanı, sağda düğme.
+        val girisKutusu = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(4), dp(4), dp(4))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(ContextCompat.getColor(context, R.color.zemin))
+                setStroke(dp(1), 0xFF2A2E39.toInt())
+            }
+        }
         val link = EditText(this).apply {
-            hint = "https://… /room/ABC123"
+            hint = "Oda linki: https://… /room/ABC123"
             setText(kayit.getString("sonLink", ""))
             inputType = InputType.TYPE_TEXT_VARIATION_URI
             imeOptions = EditorInfo.IME_ACTION_GO
             setSingleLine()
             setTextColor(yazi)
             setHintTextColor(soluk)
+            textSize = 14f
+            background = null // alt çizgi yok: kutunun kendisi çerçeve
         }
-        kart.addView(link)
+        girisKutusu.addView(link, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         val gir = Button(this).apply {
             text = "Odaya gir"
+            isAllCaps = false
+            textSize = 14f
             setTextColor(0xFFFFFFFF.toInt())
+            setPadding(dp(16), 0, dp(16), 0)
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
                 setColor(ContextCompat.getColor(context, R.color.vurgu))
             }
         }
+        girisKutusu.addView(gir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)))
+        kart.addView(girisKutusu, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         val git = {
             val url = link.text.toString().trim()
             if (!url.startsWith("http")) {
@@ -250,11 +275,9 @@ class MainActivity : AppCompatActivity() {
         }
         gir.setOnClickListener { git() }
         link.setOnEditorActionListener { _, _, _ -> git(); true }
-        kart.addView(gir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply {
-            topMargin = dp(16)
-        })
         val guncelle = Button(this).apply {
             text = "Güncellemeleri denetle"
+            isAllCaps = false
             setTextColor(yazi)
             background = GradientDrawable().apply {
                 cornerRadius = dp(10).toFloat()
