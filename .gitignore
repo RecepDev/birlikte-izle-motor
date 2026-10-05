@@ -12,3 +12,8 @@ scripts/yayin-e2e/*.mkv
 # motor olcumu (deneme)
 deneme/motor/node_modules/
 deneme/motor/sonuc.json
+deneme/motor/araclar/
+deneme/motor/.venv-lt/
+deneme/motor/kullanilan.json
+deneme/motor/sonuc2.json
+deneme/motor/*.out

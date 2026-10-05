@@ -77,7 +77,8 @@ async function* akis(stream) {
 async function stremio(d, tr) {
   await fetch(`${STREMIO}/${d.ih}/remove`).catch(() => {});
   await bekle(1500);
-  const q = tr.map((t) => `tr=${encodeURIComponent(t)}`).join('&');
+  // Canlı kodla aynı biçim: Stremio tracker'ı "tracker:" önekiyle bekliyor (public/js/shared/stream-url.js).
+  const q = tr.map((t) => `tr=${encodeURIComponent(`tracker:${t}`)}`).join('&');
   const adres = `${STREMIO}/${d.ih}/${d.idx}?${q}`;
   let boyut = null;
   const oku = async function* (bas, son) {
@@ -129,8 +130,8 @@ async function wtMotor(d, tr) {
   const istemci = new WebTorrent({ maxConns: 80 });
   istemci.on('error', () => {});
   try {
-    const torrent = istemci.add(`magnet:?xt=urn:btih:${d.ih}`, { path: klasor, announce: tr, deselect: true });
-    await zamanla(new Promise((r) => torrent.on('ready', r)), ZAMAN_ASIMI, 'metadata');
+    const torrent = istemci.add(`magnet:?xt=urn:btih:${d.ih}`, { path: klasor, announce: tr });
+    await zamanla(new Promise((r) => { if (torrent.files?.length) r(); else { torrent.once('ready', r); torrent.once('metadata', r); } }), ZAMAN_ASIMI, 'metadata');
     const dosya = torrent.files[d.idx];
     return await olc({
       boyut: dosya.length,
