@@ -13,13 +13,18 @@
 export const YAYIN_SINIR_VARSAYILAN = 6;
 export const YAYIN_SINIR_EN_FAZLA = 20;
 export const SINYAL_EN_BUYUK = 64 * 1024;          // SDP genelde 5-15 KB
-export const KALITELER = {
-  '480p30': { genislik: 854, yukseklik: 480, fps: 30, kbps: 1500 },
-  '720p30': { genislik: 1280, yukseklik: 720, fps: 30, kbps: 3500 },
-  '1080p30': { genislik: 1920, yukseklik: 1080, fps: 30, kbps: 6000 },
-  '1080p60': { genislik: 1920, yukseklik: 1080, fps: 60, kbps: 9000 },
-  '1440p60': { genislik: 2560, yukseklik: 1440, fps: 60, kbps: 14000 },
+// Çözünürlük ve kare hızı ayrı seçiliyor; anahtar '<çözünürlük><fps>' (ör. '720p60').
+// Bit hızı: çözünürlüğün 30 fps değeri, 60 fps'te 1,5 katı.
+export const COZUNURLUKLER = {
+  '480p': { genislik: 854, yukseklik: 480, kbps30: 1500 },
+  '720p': { genislik: 1280, yukseklik: 720, kbps30: 3500 },
+  '1080p': { genislik: 1920, yukseklik: 1080, kbps30: 6000 },
+  '1440p': { genislik: 2560, yukseklik: 1440, kbps30: 10000 },
 };
+export const FPSLER = [30, 60];
+export const KALITELER = Object.fromEntries(Object.entries(COZUNURLUKLER).flatMap(([ad, c]) => FPSLER.map((fps) => [
+  `${ad}${fps}`, { genislik: c.genislik, yukseklik: c.yukseklik, fps, kbps: fps === 60 ? Math.round(c.kbps30 * 1.5) : c.kbps30 },
+])));
 
 // Ücretsiz, herkese açık STUN: çoğu ev bağlantısında doğrudan bağlantı için yeter. Mobil veri /
 // sıkı NAT için TURN gerekir (config.yayin.iceServers ya da Cloudflare TURN anahtarı).

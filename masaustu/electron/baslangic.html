@@ -179,7 +179,7 @@
       const ad = Object.assign(document.createElement('div'), { className: 'ad', textContent: oda.name });
       const alt = Object.assign(document.createElement('div'), {
         className: 'alt',
-        textContent: `${oda.users} kişi · ${oda.playing ? '▶ oynuyor' : '⏸ duraklatıldı'}`,
+        textContent: `${oda.yayin ? '📡 Canlı yayın · ' : ''}${oda.users} kişi · ${oda.playing ? '▶ oynuyor' : '⏸ duraklatıldı'}`,
       });
       yazi.append(ad, alt);
       b.append(afis, yazi);

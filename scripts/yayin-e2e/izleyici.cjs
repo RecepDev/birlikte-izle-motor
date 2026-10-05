@@ -85,6 +85,13 @@ app.whenReady().then(async () => {
   })`);
   sonuc.olcum = olcum;
   yaz(SONUC, sonuc);
+  // Yayının kendi çubuğu: ses kaydırıcısı ve tam ekran
+  const ses = await wc.executeJavaScript(`(() => { const r = document.querySelector('#yayin-ses'); r.value = '0.3'; r.dispatchEvent(new Event('input')); return document.querySelector('#yayin-video').volume; })()`);
+  not(Math.abs(ses - 0.3) < 0.01 ? 'yayin ses kaydiricisi calisiyor' : `YAYIN SES KAYDIRICISI CALISMIYOR (${ses})`);
+  await wc.executeJavaScript("document.querySelector('#yayin-tam').click()", true);
+  not(await kosulBekle(wc, 'Boolean(document.fullscreenElement)', 5000) ? 'yayin tam ekran oldu' : 'YAYIN TAM EKRAN OLMADI');
+  await wc.executeJavaScript('document.exitFullscreen()').catch(() => {});
+  await bekle(800);
   // Yayindan cik: kendi oynaticisi geri gelmeli
   await wc.executeJavaScript("document.querySelector('#yayin-cik').click()");
   not(await kosulBekle(wc, "document.querySelector('#yayin-katman').hidden && Boolean(document.querySelector('#video').currentSrc)", 15000)

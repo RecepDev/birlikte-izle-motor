@@ -162,6 +162,7 @@ publicApp.get('/odalar.json', (req, res) => {
     poster: room.meta?.poster || null,
     users: room.connectedUsers().length,
     playing: !room.playback?.paused,
+    yayin: Boolean(yayin.katilmaDurumu(room).aktif),
   })));
 });
 publicApp.get('/', (req, res) => res.redirect(302, '/room/'));

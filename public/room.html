@@ -81,13 +81,19 @@
         <div id="player" class="player">
           <video id="video" playsinline webkit-playsinline preload="auto"></video>
           <div id="yayin-katman" class="yayin-katman" hidden>
-            <video id="yayin-video" autoplay playsinline controls></video>
+            <video id="yayin-video" autoplay playsinline></video>
             <div class="yayin-ust">
               <span class="yayin-canli">● CANLI</span>
               <span id="yayin-bilgi" class="yayin-bilgi"></span>
               <button id="yayin-cik" type="button" class="yayin-cik">✕ Yayından çık</button>
             </div>
             <div id="yayin-mesaj" class="yayin-mesaj" hidden></div>
+            <div class="yayin-alt">
+              <button id="yayin-sessiz" type="button" class="ctl" aria-label="Sessiz"></button>
+              <input id="yayin-ses" class="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="Ses">
+              <span class="ctl-bosluk"></span>
+              <button id="yayin-tam" type="button" class="ctl" aria-label="Tam ekran" title="Tam ekran"></button>
+            </div>
           </div>
           <div id="banner" class="banner" hidden>
             <span id="banner-text"></span>
@@ -302,10 +308,13 @@
     <form method="dialog" class="settings">
       <h2>📡 Canlı yayın</h2>
       <p class="muted small">Oynattığın görüntü ve bilgisayarının sesi bir kez sıkıştırılıp izleyicilere doğrudan gönderilir. İzleyicinin Stremio'ya ihtiyacı yoktur. Her izleyici ayrı bir akış olduğu için senin upload'unu kullanır.</p>
-      <label class="field"><span>Kalite</span> <select id="yayin-kalite"></select></label>
+      <div class="row">
+        <label class="field"><span>Çözünürlük</span> <select id="yayin-kalite"></select></label>
+        <label class="field"><span>Kare hızı</span> <select id="yayin-fps"><option value="30">30 fps</option><option value="60">60 fps (akıcı, daha çok upload)</option></select></label>
+      </div>
       <label class="field inline"><span>En fazla izleyici</span> <input type="number" id="yayin-sinir" min="1" max="20" value="6"></label>
       <p id="yayin-upload" class="muted small"></p>
-      <p class="muted small">Ses: bilgisayarın <b>tüm</b> sesi gider (Discord konuşman dahil). Masaüstü uygulamasında oynatıcı penceresi kendiliğinden seçilir; tarayıcıda paylaşılacak pencereyi sen seçersin.</p>
+      <p class="muted small">Ses: masaüstü uygulamasında yalnız videonun sesi gider (bildirimler, Discord gitmez). Tarayıcıda bilgisayarın tüm sesi gider. Masaüstü uygulamasında oynatıcı penceresi kendiliğinden seçilir; tarayıcıda paylaşılacak pencereyi sen seçersin.</p>
       <p class="muted small">Görüntü, oynatıcının ekrandaki boyutunu geçemez: 1080p yayın için uygulamayı tam ekran yap. Yayın sırasında bir pencere (ayarlar vb.) açarsan o süre görüntü donar.</p>
       <div class="dialog-actions">
         <button value="cancel">Vazgeç</button>

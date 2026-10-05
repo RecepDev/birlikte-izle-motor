@@ -169,11 +169,24 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(yazi)
             })
             metinler.addView(TextView(this).apply {
-                text = "${oda.optInt("users")} kişi · ${if (oda.optBoolean("playing")) "▶ oynuyor" else "⏸ duraklatıldı"}"
+                text = "${if (oda.optBoolean("yayin")) "📡 Canlı yayın · " else ""}${oda.optInt("users")} kişi · ${if (oda.optBoolean("playing")) "▶ oynuyor" else "⏸ duraklatıldı"}"
                 textSize = 12f
                 setTextColor(soluk)
             })
-            satir.addView(metinler)
+            satir.addView(metinler, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            // Yayın açıksa doğrudan yayına giriş (odaya girince kendi kaynağı açılmadan yayın başlar).
+            if (oda.optBoolean("yayin")) {
+                satir.addView(Button(this).apply {
+                    text = "📡 Yayına gir"
+                    setTextColor(0xFFFFFFFF.toInt())
+                    textSize = 13f
+                    background = GradientDrawable().apply {
+                        cornerRadius = dp(8).toFloat()
+                        setColor(ContextCompat.getColor(context, R.color.vurgu))
+                    }
+                    setOnClickListener { odayaGit("$sunucu/room/${oda.getString("id")}") }
+                }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(40)))
+            }
             kutu.addView(satir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = dp(8)
             })

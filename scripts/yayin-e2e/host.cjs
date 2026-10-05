@@ -33,12 +33,16 @@ app.whenReady().then(async () => {
   not(await katil(wc, 'TestHost') ? 'odaya girdi' : 'ODAYA GIREMEDI');
   not(await kosulBekle(wc, "!document.querySelector('#yayin-ac').hidden", 15000) ? 'Yayin Ac dugmesi gorunur (host)' : 'YAYIN AC DUGMESI YOK');
   // mpv oynamaya baslasin (yakalanacak goruntu)
-  await kosulBekle(wc, "document.querySelector('#video') && !document.querySelector('#video').paused", 20000);
-  await wc.executeJavaScript("document.querySelector('#video').play?.()").catch(() => {});
+  // Kullanıcı gibi odanın oynat düğmesiyle (video.play() doğrudan oynatıcıya gidiyor, oda
+  // duraklatılmış sayıp geri alabiliyordu: test bazen durağan kare yayınlıyordu).
+  await kosulBekle(wc, "window.__odaDurumu?.().oynatici.state === 'ready'", 20000);
+  await wc.executeJavaScript("window.__odaDurumu().playback.paused && document.querySelector('#btn-play').click()").catch(() => {});
+  await kosulBekle(wc, "!document.querySelector('#video').paused", 10000);
   await bekle(3000);
   const pencereler = () => BrowserWindow.getAllWindows().map((w) => ({ cocuk: Boolean(w.getParentWindow()), gorunur: w.isVisible(), sinir: w.getBounds() }));
   sonuc.pencereler_once = pencereler();
   sonuc.mpv_calisiyor = require('node:child_process').execSync('tasklist /FI "IMAGENAME eq mpv.exe" /FO CSV /NH').toString().includes('mpv.exe');
+  sonuc.oda_once = await wc.executeJavaScript('JSON.stringify(window.__odaDurumu?.())').catch((e) => String(e));
   sonuc.oynatici_once = await wc.executeJavaScript("({ paused: document.querySelector('#video').paused, t: document.querySelector('#video').currentTime, oda: document.querySelector('#banner-text')?.textContent })").catch(() => null);
   yaz(SONUC, sonuc);  await wc.executeJavaScript(`(() => {
     document.querySelector('#yayin-ac').click();

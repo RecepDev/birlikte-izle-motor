@@ -8,13 +8,17 @@
 // ICE adayları tek tek gönderilmez: aday toplama bitince (ya da süre dolunca) tam SDP tek
 // mesajda gider - sunucudaki "bağlantı başına saniyede 20 olay" sınırına takılmasın.
 
-export const KALITELER = {
-  '480p30': { ad: '480p · 30 fps (zayıf internet)', genislik: 854, yukseklik: 480, fps: 30, kbps: 1500 },
-  '720p30': { ad: '720p · 30 fps', genislik: 1280, yukseklik: 720, fps: 30, kbps: 3500 },
-  '1080p30': { ad: '1080p · 30 fps', genislik: 1920, yukseklik: 1080, fps: 30, kbps: 6000 },
-  '1080p60': { ad: '1080p · 60 fps', genislik: 1920, yukseklik: 1080, fps: 60, kbps: 9000 },
-  '1440p60': { ad: '1440p · 60 fps', genislik: 2560, yukseklik: 1440, fps: 60, kbps: 14000 },
+// Çözünürlük ve kare hızı ayrı seçiliyor (bkz. src/yayin.js): anahtar '<çözünürlük><fps>'.
+export const COZUNURLUKLER = {
+  '480p': { ad: '480p (zayıf internet)', genislik: 854, yukseklik: 480, kbps30: 1500 },
+  '720p': { ad: '720p', genislik: 1280, yukseklik: 720, kbps30: 3500 },
+  '1080p': { ad: '1080p', genislik: 1920, yukseklik: 1080, kbps30: 6000 },
+  '1440p': { ad: '1440p', genislik: 2560, yukseklik: 1440, kbps30: 10000 },
 };
+export const FPSLER = [30, 60];
+export const KALITELER = Object.fromEntries(Object.entries(COZUNURLUKLER).flatMap(([ad, c]) => FPSLER.map((fps) => [
+  `${ad}${fps}`, { ad: `${ad} · ${fps} fps`, genislik: c.genislik, yukseklik: c.yukseklik, fps, kbps: fps === 60 ? Math.round(c.kbps30 * 1.5) : c.kbps30 },
+])));
 const SES_KBPS = 192;
 const ADAY_BEKLEME_MS = 3000;
 const BAGLANTI_ZAMAN_ASIMI_MS = 20_000;

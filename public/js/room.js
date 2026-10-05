@@ -18,7 +18,7 @@ import { browserCodecs, isRealSafari } from './codecs.js';
 import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
 import { probeDevice, evaluate as evaluateCompat, autoScanTargets } from './compat.js';
 import { createCompatScreen } from './compat-view.js';
-import { createYayinIstemci, KALITELER } from './yayin.js';
+import { createYayinIstemci, KALITELER, COZUNURLUKLER } from './yayin.js';
 
 // ---- identity --------------------------------------------------------------
 
@@ -612,6 +612,11 @@ setInterval(() => {
 
 let roomRev = 0;
 let ackRev = 0;
+// Test/tanı için oda ve oynatıcının o anki hali (uçtan uca testler okuyor).
+window.__odaDurumu = () => ({
+  playback: state.room?.playback, autoPaused: state.room?.autoPaused, waiting: state.room?.waitingUserIds,
+  oynatici: player.status(), rev: [roomRev, ackRev], settled: sync.settled(), rs: video.readyState, paused: video.paused,
+});
 setInterval(() => {
   if (ackRev === roomRev || !state.room || player.status().state !== 'ready' || !sync.settled()) return;
   ackRev = roomRev;
@@ -1654,20 +1659,68 @@ function yayinOlay(o) {
   renderYayin();
 }
 
+// ---- yayın izleyicisinin çubuğu: ses ve tam ekran (cihaz başına ses hatırlanıyor) ----
+{
+  const sesKaydirici = $('#yayin-ses');
+  const kayitli = Number(storage.get('yayinSes'));
+  yayinVideo.volume = Number.isFinite(kayitli) && storage.get('yayinSes') !== null ? Math.min(1, Math.max(0, kayitli)) : 1;
+  sesKaydirici.value = String(yayinVideo.volume);
+  const sesSimgesi = () => {
+    const v = yayinVideo.volume;
+    setIcon($('#yayin-sessiz'), yayinVideo.muted || v === 0 ? 'mute' : v < 0.34 ? 'vol0' : v < 0.67 ? 'vol1' : 'vol2');
+  };
+  sesSimgesi();
+  sesKaydirici.addEventListener('input', () => {
+    yayinVideo.volume = Number(sesKaydirici.value);
+    yayinVideo.muted = yayinVideo.volume === 0;
+    storage.set('yayinSes', String(yayinVideo.volume));
+    sesSimgesi();
+  });
+  $('#yayin-sessiz').addEventListener('click', () => {
+    yayinVideo.muted = !yayinVideo.muted;
+    if (!yayinVideo.muted && yayinVideo.volume === 0) yayinVideo.volume = 0.5;
+    sesKaydirici.value = String(yayinVideo.muted ? 0 : yayinVideo.volume);
+    sesSimgesi();
+  });
+  // Tam ekran: oynatıcının tamamı (telefonda uygulamanın kendi tam ekranı, bkz. kopru.js).
+  $('#yayin-tam').addEventListener('click', toggleFullscreen);
+  setIcon($('#yayin-tam'), 'fs');
+  document.addEventListener('fullscreenchange', () => setIcon($('#yayin-tam'), document.fullscreenElement ? 'fsExit' : 'fs'));
+  yayinVideo.addEventListener('dblclick', toggleFullscreen);
+  // Çubuk 3 sn hareketsizlikte gizlenir; dokunup/hareket ettirince gelir.
+  const katman = $('#yayin-katman');
+  let bosZaman = null;
+  const uyan = () => {
+    katman.classList.remove('bos');
+    clearTimeout(bosZaman);
+    bosZaman = setTimeout(() => katman.classList.add('bos'), 3000);
+  };
+  katman.addEventListener('mousemove', uyan);
+  katman.addEventListener('touchstart', uyan, { passive: true });
+  katman.addEventListener('click', uyan);
+}
+
 const yayin = createYayinIstemci({ socket, request, onDurum: yayinOlay, log: (tur, veri) => tani.kaydet(tur, veri) });
 
 function yayinUploadYaz() {
-  const k = KALITELER[$('#yayin-kalite').value];
+  const k = KALITELER[yayinKaliteAnahtari()];
   const n = Math.max(1, Math.min(20, Number($('#yayin-sinir').value) || 1));
   if (!k) return;
   const mbps = (k.kbps + 192) / 1000;
   $('#yayin-upload').textContent = `Gereken upload: izleyici başı ~${mbps.toFixed(1)} Mbps, ${n} izleyicide ~${(mbps * n).toFixed(0)} Mbps. Upload'un yetmezse görüntü herkes için bozulur; sınırı buna göre seç.`;
 }
 
-$('#yayin-kalite').append(...Object.entries(KALITELER).map(([k, v]) => el('option', { value: k }, v.ad)));
-$('#yayin-kalite').value = storage.get('yayinKalite') || '1080p30';
+$('#yayin-kalite').append(...Object.entries(COZUNURLUKLER).map(([k, v]) => el('option', { value: k }, v.ad)));
+// Eski kayıt '1080p30' biçiminde: çözünürlük ve fps'e ayır.
+{
+  const eski = /^(\d+p)(30|60)$/.exec(storage.get('yayinKalite') || '');
+  $('#yayin-kalite').value = storage.get('yayinCozunurluk') || eski?.[1] || '1080p';
+  $('#yayin-fps').value = storage.get('yayinFps') || eski?.[2] || '30';
+}
+const yayinKaliteAnahtari = () => `${$('#yayin-kalite').value}${$('#yayin-fps').value}`;
 $('#yayin-sinir').value = storage.get('yayinSinir') || '6';
 $('#yayin-kalite').addEventListener('change', yayinUploadYaz);
+$('#yayin-fps').addEventListener('change', yayinUploadYaz);
 $('#yayin-sinir').addEventListener('input', yayinUploadYaz);
 
 $('#yayin-ac').addEventListener('click', async () => {
@@ -1682,9 +1735,10 @@ $('#yayin-ac').addEventListener('click', async () => {
 });
 
 $('#yayin-basla').addEventListener('click', async () => {
-  const kalite = $('#yayin-kalite').value;
+  const kalite = yayinKaliteAnahtari();
   const sinir = Math.max(1, Math.min(20, Number($('#yayin-sinir').value) || 6));
-  storage.set('yayinKalite', kalite);
+  storage.set('yayinCozunurluk', $('#yayin-kalite').value);
+  storage.set('yayinFps', $('#yayin-fps').value);
   storage.set('yayinSinir', String(sinir));
   $('#yayin-dialog').close();
   // Masaüstünde diyalog açıkken oynatıcı penceresi gizli; kapanınca yeniden görünmesini bekle.

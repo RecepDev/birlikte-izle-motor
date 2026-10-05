@@ -556,6 +556,13 @@ button.danger { background: #3a1d24; border-color: #a33b4d; color: #ffb3bf; }
 .yayin-katman { position: absolute; inset: 0; z-index: 30; background: #000; display: flex; align-items: center; justify-content: center; }
 .yayin-katman[hidden] { display: none; }
 .yayin-katman video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+/* Yayın izleyicisinin kendi çubuğu: ses kaydırıcısı ve tam ekran (tarayıcının kendi video
+   düğmeleri telefonda yalnız sessiz/açık veriyordu, tam ekran da çalışmıyordu). */
+.yayin-alt {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px;
+  padding: 18px 12px 8px; background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .75)); transition: opacity .2s;
+}
+.yayin-katman.bos .yayin-alt, .yayin-katman.bos .yayin-ust { opacity: 0; pointer-events: none; }
 .yayin-ust { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
 .yayin-ust > * { pointer-events: auto; }
 .yayin-canli { background: #dc2626; color: #fff; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 6px; letter-spacing: .5px; }
