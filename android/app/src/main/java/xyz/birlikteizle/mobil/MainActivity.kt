@@ -212,13 +212,39 @@ class MainActivity : AppCompatActivity() {
                 setColor(ContextCompat.getColor(context, R.color.kart))
             }
         }
-        kart.addView(TextView(this).apply {
+        // Başlık ve sağ üstte "⋮" menüsü (Link ile odaya gir).
+        val baslik = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        baslik.addView(TextView(this).apply {
             text = "Birlikte İzle"
             textSize = 22f
             setTextColor(yazi)
-        })
+        }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        val menuDugmesi = TextView(this).apply {
+            text = "⋮"
+            textSize = 24f
+            setTextColor(yazi)
+            gravity = Gravity.CENTER
+            contentDescription = "Menü"
+            isClickable = true
+            background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(0xFF232633.toInt())
+            }
+        }
+        menuDugmesi.setOnClickListener { v ->
+            android.widget.PopupMenu(this, v).apply {
+                menu.add(0, 1, 0, "🔗 Link ile odaya gir")
+                setOnMenuItemClickListener { if (it.itemId == 1) linkIleGir(); true }
+                show()
+            }
+        }
+        baslik.addView(menuDugmesi, LinearLayout.LayoutParams(dp(44), dp(44)))
+        kart.addView(baslik)
         kart.addView(TextView(this).apply {
-            text = "Arkadaşının gönderdiği oda linkini yapıştır. Linke dokunarak da açabilirsin."
+            text = "Açık odalardan birine dokun. Arkadaşının gönderdiği linke dokunarak ya da sağ üstteki ⋮ menüsünden de girebilirsin."
             textSize = 14f
             setTextColor(soluk)
             setPadding(0, dp(8), 0, dp(16))
@@ -229,52 +255,6 @@ class MainActivity : AppCompatActivity() {
         }
         kart.addView(odalar)
         odalarKutusu = odalar
-        // Link alanı ve "Odaya gir" tek kutuda: solda yazı alanı, sağda düğme.
-        val girisKutusu = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(4), dp(4), dp(4))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(12).toFloat()
-                setColor(ContextCompat.getColor(context, R.color.zemin))
-                setStroke(dp(1), 0xFF2A2E39.toInt())
-            }
-        }
-        val link = EditText(this).apply {
-            hint = "Oda linki: https://… /room/ABC123"
-            setText(kayit.getString("sonLink", ""))
-            inputType = InputType.TYPE_TEXT_VARIATION_URI
-            imeOptions = EditorInfo.IME_ACTION_GO
-            setSingleLine()
-            setTextColor(yazi)
-            setHintTextColor(soluk)
-            textSize = 14f
-            background = null // alt çizgi yok: kutunun kendisi çerçeve
-        }
-        girisKutusu.addView(link, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        val gir = Button(this).apply {
-            text = "Odaya gir"
-            isAllCaps = false
-            textSize = 14f
-            setTextColor(0xFFFFFFFF.toInt())
-            setPadding(dp(16), 0, dp(16), 0)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(10).toFloat()
-                setColor(ContextCompat.getColor(context, R.color.vurgu))
-            }
-        }
-        girisKutusu.addView(gir, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(44)))
-        kart.addView(girisKutusu, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        val git = {
-            val url = link.text.toString().trim()
-            if (!url.startsWith("http")) {
-                Toast.makeText(this, "Linkin başı http ile başlamalı.", Toast.LENGTH_SHORT).show()
-            } else {
-                odayaGit(url)
-            }
-        }
-        gir.setOnClickListener { git() }
-        link.setOnEditorActionListener { _, _, _ -> git(); true }
         val guncelle = Button(this).apply {
             text = "Güncellemeleri denetle"
             isAllCaps = false
@@ -352,6 +332,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- otomatik kaynak: odada seçilen kaliteye en uygun kaynak açılır ------------------
+
+    // ---- link ile odaya giriş (⋮ menüsü) -----------------------------------------------
+    private fun linkIleGir() {
+        val kutu = EditText(this).apply {
+            hint = "https://… /room/ABC123"
+            setText(kayit.getString("sonLink", ""))
+            inputType = InputType.TYPE_TEXT_VARIATION_URI
+            imeOptions = EditorInfo.IME_ACTION_GO
+            setSingleLine()
+            selectAll()
+        }
+        val pencere = android.app.AlertDialog.Builder(this)
+            .setTitle("Link ile odaya gir")
+            .setMessage("Arkadaşının gönderdiği oda linkini yapıştır.")
+            .setView(kutu)
+            .setNegativeButton("Vazgeç", null)
+            .setPositiveButton("Odaya gir", null)
+            .create()
+        val git = {
+            val url = kutu.text.toString().trim()
+            if (!url.startsWith("http")) {
+                Toast.makeText(this, "Linkin başı http ile başlamalı.", Toast.LENGTH_SHORT).show()
+            } else {
+                pencere.dismiss()
+                odayaGit(url)
+            }
+        }
+        pencere.setOnShowListener {
+            pencere.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener { git() }
+        }
+        kutu.setOnEditorActionListener { _, _, _ -> git(); true }
+        pencere.show()
+    }
 
     // ---- ad ------------------------------------------------------------------------------
     private var isimDugmesi: TextView? = null
