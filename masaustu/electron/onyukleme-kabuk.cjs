@@ -47,20 +47,22 @@ function olcumKur() {
       bekleyen = false;
       const r = alan.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return;
-      // Kontrol kutuları (altyazı, sohbet, bölümler…), çubuk ipucu, "Girişi atla" ve görünen
-      // kontrol çubuğu için mpv penceresinde delik açılıyor: HTML videonun
-      // üstünde görünüyor, video küçülmüyor.
+      // Kontrol kutuları (altyazı, sohbet, bölümler…), çubuk ipucu, "Girişi atla" için mpv
+      // penceresinde delik açılıyor: HTML videonun üstünde görünüyor, video küçülmüyor.
+      // Kontrol çubuğu için delik yok: o, videonun üstündeki saydam ayrı pencerede (kontrolAynasi).
       const oyn = alan.closest('.player');
       const secici = ['.player > .ctl-pop:not([hidden])', '.seek-tip:not([hidden])', '.skip-intro:not([hidden])', '.intro-ask:not([hidden])', '.next-ep:not([hidden])', '.notice:not([hidden]) .notice-card', '.weak-src:not([hidden])'];
-      if (oyn && !oyn.classList.contains('idle')) secici.push('.player .controls');
+      const cubuk = oyn && !oyn.classList.contains('idle') ? oyn.querySelector('.controls')?.getBoundingClientRect() : null;
+      const kontrol = cubuk && cubuk.width > 0 && cubuk.height > 0 ? { x: cubuk.x, y: cubuk.y, width: cubuk.width, height: cubuk.height } : null;
       const delikler = secici.flatMap((q) => [...document.querySelectorAll(q)])
         .map((e) => e.getBoundingClientRect())
         .filter((k) => k.width > 0 && k.height > 0)
         .map((k) => ({ x: k.x, y: k.y, width: k.width, height: k.height }));
-      const olcu = [r.x, r.y, r.width, r.height, ...delikler.flatMap((d) => [d.x, d.y, d.width, d.height])].map((n) => Math.round(n)).join('|');
+      const olcu = [r.x, r.y, r.width, r.height, ...delikler.flatMap((d) => [d.x, d.y, d.width, d.height]),
+        ...(kontrol ? [kontrol.x, kontrol.y, kontrol.width, kontrol.height] : [-1])].map((n) => Math.round(n)).join('|');
       if (olcu === son) return;
       son = olcu;
-      ipcRenderer.send('kabuk:video-alani', { x: r.x, y: r.y, width: r.width, height: r.height, delikler });
+      ipcRenderer.send('kabuk:video-alani', { x: r.x, y: r.y, width: r.width, height: r.height, delikler, kontrol });
     });
   };
   new ResizeObserver(bildir).observe(alan);
@@ -74,6 +76,52 @@ function olcumKur() {
   document.addEventListener('fullscreenchange', bildir);
   bildir();
   return true;
+}
+
+// Saydam kontrol çubuğu: sayfanın kontrol çubuğu videonun arkasında kalıyor; aynası ayrı,
+// saydam bir pencerede videonun üstünde çiziliyor (bkz. kontrol-onyukleme.cjs). Buradan
+// çubuğun HTML'i gidiyor, oradan tıklama/kaydırma/fare hareketi gelip asıl öğeye uygulanıyor.
+function kontrolAynasi() {
+  const kok = document.querySelector('.player .controls');
+  const oyn = kok?.closest('.player');
+  if (!kok) return;
+  let sonHtml = '';
+  const yolla = () => {
+    const kopya = kok.cloneNode(true);
+    const asil = kok.querySelectorAll('input');
+    kopya.querySelectorAll('input').forEach((g, i) => g.setAttribute('value', asil[i].value));
+    const html = kopya.outerHTML;
+    if (html === sonHtml) return;
+    sonHtml = html;
+    ipcRenderer.send('kabuk:kontrol-html', { html, origin: location.origin });
+  };
+  setInterval(yolla, 200);
+  new MutationObserver(() => requestAnimationFrame(yolla))
+    .observe(kok, { childList: true, subtree: true, attributes: true, characterData: true });
+  kok.addEventListener('input', yolla);
+  ipcRenderer.on('kabuk:kontrol-yenile', () => { sonHtml = ''; yolla(); });
+
+  const bul = (yol) => yol.reduce((el, i) => el?.children[i], kok);
+  ipcRenderer.on('kabuk:kontrol-olay', (_e, o) => {
+    if (o.tur === 'leave') {
+      document.getElementById('seek')?.dispatchEvent(new PointerEvent('pointerleave'));
+      return;
+    }
+    const el = bul(o.yol || []);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const konum = { clientX: r.left + (o.oranX ?? 0.5) * r.width, clientY: r.top + (o.oranY ?? 0.5) * r.height, bubbles: true };
+    if (o.tur === 'click') el.click();
+    else if (o.tur === 'input' || o.tur === 'change') {
+      el.value = o.deger;
+      el.dispatchEvent(new Event(o.tur, { bubbles: true }));
+    } else if (o.tur === 'move') {
+      el.dispatchEvent(new PointerEvent('pointermove', konum));
+      oyn?.dispatchEvent(new MouseEvent('mousemove', konum)); // boşta sayacı: çubuk gizlenmesin
+    } else if (o.tur === 'wheel') {
+      el.dispatchEvent(new WheelEvent('wheel', { ...konum, deltaY: o.deltaY, cancelable: true }));
+    }
+  });
 }
 
 // mpv yerel pencerede çizdiği için HTML katmanı onun üstüne gelemiyor: bir diyalog
@@ -93,6 +141,7 @@ function kur() {
   stilEkle();
   olcumKur();
   ortuKur();
+  kontrolAynasi();
   try {
     require('./video-koprusu.cjs');
   } catch (err) {

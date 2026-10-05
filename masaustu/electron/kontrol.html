@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Kontroller</title>
+<!-- Saydam kontrol çubuğu penceresi (bkz. kontrol-onyukleme.cjs): videonun üstünde durur,
+     oda sayfasındaki kontrol çubuğunun aynası. Stiller oda sayfasının sunucusundan yükleniyor. -->
+<link id="oda-css" rel="stylesheet">
+<style id="masaustu-css"></style>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent !important; overflow: hidden; }
+  body .player {
+    position: fixed !important; inset: 0 !important; background: transparent !important;
+    display: block !important; width: auto !important; height: auto !important;
+  }
+  body .player .controls {
+    position: absolute !important; left: 0; right: 0; bottom: 0; top: 0;
+    background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .55) 45%, rgba(0, 0, 0, .8)) !important;
+    border: none !important; justify-content: flex-end;
+  }
+  /* Çubuk ipucu ana sayfada (mpv'de delik açılarak) gösteriliyor; burada çift olmasın. */
+  body .seek-tip { display: none !important; }
+  .ctl, .time, .aspect-btn { text-shadow: 0 1px 3px rgba(0, 0, 0, .8); }
+</style>
+</head>
+<body><div class="player"><div class="controls" id="ayna"></div></div></body>
+</html>

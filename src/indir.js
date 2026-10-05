@@ -19,6 +19,8 @@ export const MASAUSTU_DOSYALARI = [
   'karar.js',
   'electron/ana.cjs',
   'electron/stremio-vekil.cjs',
+  'electron/kontrol.html',
+  'electron/kontrol-onyukleme.cjs',
   'electron/onyukleme-kabuk.cjs',
   'electron/video-koprusu.cjs',
   'electron/masaustu.css',

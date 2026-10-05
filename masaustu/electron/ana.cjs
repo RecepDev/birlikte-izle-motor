@@ -53,10 +53,30 @@ function videoGorunurluk() {
   if (!videoPenceresi || videoPenceresi.isDestroyed() || !ana) return;
   if (!mpv || !odadaMi || ortuluMu || yukleniyor || ana.isMinimized()) {
     videoPenceresi.hide();
+    kontrolGorunurluk();
     return;
   }
   if (sonAlan) hizala(sonAlan);
   if (!videoPenceresi.isVisible()) videoPenceresi.showInactive();
+  kontrolGorunurluk();
+}
+// Kontrol çubuğu penceresi: video görünürken ve çubuk açıkken (fare hareket edince), çubuğun
+// sayfadaki yerinde. Video gizliyken sayfanın kendi çubuğu görünüyor, bu pencere gizli.
+let kontrolPenceresi = null;
+function kontrolGorunurluk() {
+  if (!kontrolPenceresi || kontrolPenceresi.isDestroyed() || !ana) return;
+  const k = sonAlan?.kontrol;
+  if (!k || !videoPenceresi?.isVisible()) {
+    if (kontrolPenceresi.isVisible()) kontrolPenceresi.hide();
+    return;
+  }
+  const b = ana.getContentBounds();
+  const yeni = { x: Math.round(b.x + k.x), y: Math.round(b.y + k.y), width: Math.max(1, Math.round(k.width)), height: Math.max(1, Math.round(k.height)) };
+  const simdiki = kontrolPenceresi.getBounds();
+  if (simdiki.x !== yeni.x || simdiki.y !== yeni.y || simdiki.width !== yeni.width || simdiki.height !== yeni.height) {
+    kontrolPenceresi.setBounds(yeni);
+  }
+  if (!kontrolPenceresi.isVisible()) kontrolPenceresi.showInactive();
 }
 // Seçili altyazının geçici dosyası. loadfile her yeni dosyada altyazıyı düşürdüğü
 // için 'file-loaded' olayında yeniden eklenir.
@@ -272,6 +292,7 @@ function hizala(rect) {
   const delikler = (rect.delikler || (rect.delik ? [rect.delik] : []))
     .map((d) => ({ ...d, x: b.x + d.x - yeni.x, y: b.y + d.y - yeni.y }));
   delikAc(yeni, delikler);
+  kontrolGorunurluk();
 }
 
 // HTML (kontrol kutuları, tam ekranda kontrol çubuğu) mpv'nin üstünde görünsün diye mpv
@@ -680,6 +701,20 @@ app.whenReady().then(() => {
     transparent: true, backgroundColor: '#00000000', show: false,
   });
   videoPenceresi.setIgnoreMouseEvents(true);
+
+  // Saydam kontrol çubuğu penceresi: videonun üstünde (video penceresinin sahipli penceresi,
+  // hep onun üstünde), odak almıyor. İçeriği oda sayfasının çubuğunun aynası (bkz. kontrol-onyukleme.cjs).
+  kontrolPenceresi = new BrowserWindow({
+    parent: videoPenceresi, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
+    resizable: false, movable: false, minimizable: false, maximizable: false, skipTaskbar: true, focusable: false, show: false,
+    webPreferences: { preload: path.join(__dirname, 'kontrol-onyukleme.cjs'), contextIsolation: false, sandbox: false },
+  });
+  kontrolPenceresi.loadFile(path.join(__dirname, 'kontrol.html'));
+  kontrolPenceresi.webContents.on('did-finish-load', () => ana?.webContents.send('kabuk:kontrol-yenile'));
+  ipcMain.on('kabuk:kontrol-html', (_e, veri) => {
+    if (kontrolPenceresi && !kontrolPenceresi.isDestroyed()) kontrolPenceresi.webContents.send('kontrol:html', veri);
+  });
+  ipcMain.on('kontrol:olay', (_e, olay) => ana?.webContents.send('kabuk:kontrol-olay', olay));
 
   // Canlı yayın (public/js/yayin.js): oda sayfası getDisplayMedia isteyince seçici göstermeden
   // oynatıcı penceresini (mpv burada çiziyor) ve sistem sesini ver. Bu pencere yakalanabilir
