@@ -300,14 +300,22 @@ export function createYayinIstemci({ socket, request, onDurum = () => {}, log = 
   }
 
   // İzleyicinin gördüğü kare hızı ve gelen hız (arayüz rozeti için).
+  let izleOnceki = null; // { bayt, at }: gelen hız (Mbps) için
   async function izleIstatistik() {
     if (!izlePc || izlePc === 'bekliyor') return null;
     let sonuc = null;
+    let bayt = 0;
     (await izlePc.getStats()).forEach((s) => {
+      if (s.type === 'inbound-rtp') bayt += s.bytesReceived || 0;
       if (s.type === 'inbound-rtp' && s.kind === 'video') {
         sonuc = { fps: s.framesPerSecond ?? null, genislik: s.frameWidth ?? null, yukseklik: s.frameHeight ?? null, kayip: s.packetsLost ?? 0 };
       }
     });
+    const simdi = Date.now();
+    if (sonuc && izleOnceki && simdi > izleOnceki.at) {
+      sonuc.mbps = Math.round((((bayt - izleOnceki.bayt) * 8) / 1e6 / ((simdi - izleOnceki.at) / 1000)) * 10) / 10;
+    }
+    izleOnceki = { bayt, at: simdi };
     return sonuc;
   }
 

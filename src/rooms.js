@@ -299,6 +299,10 @@ export class Room {
       downMbps: num(st.downMbps) !== null && st.downMbps >= 0 ? Math.min(st.downMbps, 100_000) : null,
       ahead: num(st.ahead) !== null && st.ahead >= 0 ? Math.min(st.ahead, 100_000) : null,
       rev: Number.isInteger(st.rev) && st.rev >= 0 ? st.rev : null,
+      // Canlı yayını izliyorsa (İzleyiciler listesinde "yayını izliyor" ve verileri).
+      yayin: st.yayin && typeof st.yayin === 'object' ? {
+        yukseklik: num(st.yayin.yukseklik), fps: num(st.yayin.fps), mbps: num(st.yayin.mbps), kayip: num(st.yayin.kayip),
+      } : null,
       // Hata sebebi (unsupported/decode/network/timeout…): host panelde neden açılmadığını görsün.
       ...(st.state === 'error' && typeof st.error === 'string' ? { error: st.error.slice(0, 20) } : {}),
     };
@@ -471,7 +475,8 @@ export class Room {
   // the ones relay users picked.
   statsStreamIds() {
     const ids = new Set([this.hostStreamId]);
-    for (const u of this.users.values()) if (u.connected && u.ownStreamId) ids.add(u.ownStreamId);
+    // Yayını izleyenin kendi kaynağı kullanılmıyor: torrent'i kapanabilsin (indirme dursun).
+    for (const u of this.users.values()) if (u.connected && u.ownStreamId && !u.status?.yayin) ids.add(u.ownStreamId);
     return [...ids];
   }
 

@@ -48,10 +48,17 @@ export function renderUsers(listEl, room, meId, { onKick, onDiag = null, streamL
       if (Number.isFinite(u.status.drift) && u.status.state === 'ready') {
         parts.push(`sapma ${Math.round(u.status.drift * 1000)} ms`);
       }
+      // Canlı yayını izleyen: kendi oynatıcısı boşta; yayından gelen görüntünün verileri gösteriliyor.
+      const yy = u.connected && u.status.yayin;
+      const satirSimge = yy ? '📡' : icon;
+      const satirBilgi = yy
+        ? ['yayını izliyor', yy.yukseklik ? `${yy.yukseklik}p` : null, yy.fps ? `${yy.fps} fps` : null,
+          Number.isFinite(yy.mbps) ? `↓ ${yy.mbps} Mbps` : null, yy.kayip ? `${yy.kayip} paket kaybı` : null].filter(Boolean).join(' · ')
+        : parts.filter(Boolean).join(' · ');
       return el(
         'li',
         { class: u.connected ? '' : 'away' },
-        el('span', { class: 'icon', text: icon }),
+        el('span', { class: 'icon', text: satirSimge }),
         el(
           'div',
           { class: 'who' },
@@ -65,7 +72,7 @@ export function renderUsers(listEl, room, meId, { onKick, onDiag = null, streamL
               ? el('span', { class: 'badge warn', title: 'Farklı sürüm, senkron kayabilir', text: 'süre farklı' })
               : null,
           ),
-          el('div', { class: 'meta', text: parts.filter(Boolean).join(' · ') }),
+          el('div', { class: 'meta', text: satirBilgi }),
         ),
         iAmHost && onDiag
           ? el('button', { type: 'button', class: 'tani-btn', text: 'Kayıt', title: 'Bu kişinin oynatıcı kaydı (takılma, sarma, sapma, hız)', onclick: () => onDiag(u) })

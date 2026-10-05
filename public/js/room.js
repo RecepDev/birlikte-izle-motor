@@ -598,6 +598,7 @@ function sendStatus() {
     quality: myStream()?.quality ?? null,
     error: st.state === 'error' ? player.lastError() : null,
     rev: ackRev,
+    yayin: yayin?.izliyor?.() ? yayinIzleSon : null,
     ...liveDownload(),
   });
 }
@@ -1581,11 +1582,15 @@ function renderYayin() {
     : ac.title;
   const izle = $('#yayin-izle');
   izle.hidden = host || !yayinDurumu.aktif;
+  // Oynatıcının üstünde de: telefonda üst çubuk dar/gizli olabiliyor.
+  $('#yayin-davet').hidden = host || !yayinDurumu.aktif || yayin.izliyor();
+  $('#yayin-davet-yazi').textContent = `📡 ${userName(yayinDurumu.hostUserId)} canlı yayında · İzle`;
   izle.classList.toggle('izliyor', yayin.izliyor());
   $('#yayin-izle-yazi').textContent = yayin.izliyor() ? 'Yayından çık' : `Yayını izle · ${userName(yayinDurumu.hostUserId)}`;
   $('#yayin-katman').hidden = !yayin.izliyor();
 }
 
+let yayinIzleSon = { yukseklik: null, fps: null, mbps: null, kayip: null };
 function yayinBirakildi() {
   clearInterval(yayinIzleZamani);
   yayinIzleZamani = null;
@@ -1609,6 +1614,10 @@ function yayinYenidenBaglandi() {
 }
 
 async function yayinIzle() {
+  // Yayına girince bu cihazın kendi torrent'i boşuna inmesin: masaüstünde kendi Stremio'sunda
+  // kapatılıyor (host'un bilgisayarındakini sunucu, kullanılmadığı için kendisi kapatıyor).
+  const kendi = myStream();
+  if (kendi?.kind === 'torrent' && player.status().source === 'local' && !isHost()) window.kabuk?.torrentKapat?.(kendi.infoHash);
   yayinIzleniyor = true;
   loadMyStream(true);
   $('#yayin-katman').hidden = false;
@@ -1642,7 +1651,10 @@ function yayinOlay(o) {
       clearInterval(yayinIzleZamani);
       yayinIzleZamani = setInterval(async () => {
         const st = await yayin.izleIstatistik();
-        if (st) $('#yayin-bilgi').textContent = `${userName(yayinDurumu.hostUserId)} · ${st.yukseklik ? `${st.yukseklik}p` : ''}${st.fps ? ` · ${Math.round(st.fps)} fps` : ''}`;
+        if (st) {
+          yayinIzleSon = { yukseklik: st.yukseklik, fps: st.fps && Math.round(st.fps), mbps: st.mbps ?? null, kayip: st.kayip };
+          $('#yayin-bilgi').textContent = `${userName(yayinDurumu.hostUserId)} · ${st.yukseklik ? `${st.yukseklik}p` : ''}${st.fps ? ` · ${Math.round(st.fps)} fps` : ''}${Number.isFinite(st.mbps) ? ` · ${st.mbps} Mbps` : ''}`;
+        }
       }, 2000);
       break;
     case 'baglanamadi':
@@ -1659,8 +1671,35 @@ function yayinOlay(o) {
   renderYayin();
 }
 
-// ---- yayın izleyicisinin çubuğu: ses ve tam ekran (cihaz başına ses hatırlanıyor) ----
+$('#yayin-davet').addEventListener('click', () => { if (!yayin.izliyor()) yayinIzle(); });
+
+// ---- yayın izleyicisinin çubuğu: ses, görüntü oranı ve tam ekran (cihaz başına hatırlanıyor) ----
 {
+  // Görüntü oranı: izleyici kendi ekranına göre (Sığdır / Doldur / Uzat / 16:9 / 4:3 / 21:9).
+  const ORANLAR = ['Sığdır', 'Doldur', 'Uzat', '16:9', '4:3', '21:9'];
+  let oran = ORANLAR.includes(storage.get('yayinOran')) ? storage.get('yayinOran') : 'Sığdır';
+  const oranUygula = () => {
+    const v = yayinVideo;
+    const kutu = $('#yayin-katman').getBoundingClientRect();
+    Object.assign(v.style, { width: '', height: '', objectFit: '' });
+    if (oran === 'Doldur') v.style.objectFit = 'cover';
+    else if (oran === 'Uzat') v.style.objectFit = 'fill';
+    else if (oran.includes(':')) {
+      const [a, b] = oran.split(':').map(Number);
+      const r = a / b;
+      const g = kutu.width / kutu.height > r ? kutu.height * r : kutu.width;
+      Object.assign(v.style, { objectFit: 'fill', width: `${Math.round(g)}px`, height: `${Math.round(g / r)}px` });
+    }
+    $('#yayin-oran').textContent = oran;
+  };
+  $('#yayin-oran').addEventListener('click', () => {
+    oran = ORANLAR[(ORANLAR.indexOf(oran) + 1) % ORANLAR.length];
+    storage.set('yayinOran', oran);
+    oranUygula();
+  });
+  new ResizeObserver(oranUygula).observe($('#yayin-katman'));
+  oranUygula();
+
   const sesKaydirici = $('#yayin-ses');
   const kayitli = Number(storage.get('yayinSes'));
   yayinVideo.volume = Number.isFinite(kayitli) && storage.get('yayinSes') !== null ? Math.min(1, Math.max(0, kayitli)) : 1;

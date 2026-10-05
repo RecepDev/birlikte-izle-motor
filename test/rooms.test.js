@@ -440,3 +440,13 @@ test('seek gate: room waits until every rev-reporting user reached the new posit
   room.skipWaiting(host.id);
   assert.equal(room.playback.paused, false, 'host can skip');
 });
+
+test('yayını izleyenin kendi kaynağı kullanımda sayılmıyor (torrent kapanabilsin)', () => {
+  const { room, join } = setup();
+  const ali = join('ali');
+  room.setOwnStream(ali.id, 's2');
+  assert.ok(room.statsStreamIds().includes('s2'));
+  room.status(ali.id, { state: 'idle', source: 'none', yayin: { yukseklik: 720, fps: 30, mbps: 4.2 } });
+  assert.ok(!room.statsStreamIds().includes('s2'));
+  assert.equal(room.users.get(ali.id).status.yayin.mbps, 4.2);
+});

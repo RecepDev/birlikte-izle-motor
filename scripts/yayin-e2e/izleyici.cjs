@@ -88,6 +88,13 @@ app.whenReady().then(async () => {
   // Yayının kendi çubuğu: ses kaydırıcısı ve tam ekran
   const ses = await wc.executeJavaScript(`(() => { const r = document.querySelector('#yayin-ses'); r.value = '0.3'; r.dispatchEvent(new Event('input')); return document.querySelector('#yayin-video').volume; })()`);
   not(Math.abs(ses - 0.3) < 0.01 ? 'yayin ses kaydiricisi calisiyor' : `YAYIN SES KAYDIRICISI CALISMIYOR (${ses})`);
+  // Görüntü oranı: Doldur'a geçince video kutuyu kaplasın
+  const oranlar = await wc.executeJavaScript(`(() => { const b = document.querySelector('#yayin-oran'); const once = b.textContent; b.click(); return [once, b.textContent, getComputedStyle(document.querySelector('#yayin-video')).objectFit]; })()`);
+  not(oranlar[2] === 'cover' ? `yayin orani degisti (${oranlar[0]} -> ${oranlar[1]})` : `YAYIN ORANI DEGISMEDI (${oranlar.join(' ')})`);
+  // İzleyiciler listesinde "yayını izliyor" ve verileri (kendi satırı)
+  await bekle(2500);
+  const satir = await wc.executeJavaScript("[...document.querySelectorAll('#user-list li')].map((li) => li.textContent).find((t) => t.includes('TestIzleyici')) || ''");
+  not(/yayını izliyor/.test(satir) ? `izleyiciler listesinde: ${satir.replace(/\s+/g, ' ').slice(0, 90)}` : `IZLEYICILER LISTESINDE YAYIN YOK (${satir.slice(0, 80)})`);
   await wc.executeJavaScript("document.querySelector('#yayin-tam').click()", true);
   not(await kosulBekle(wc, 'Boolean(document.fullscreenElement)', 5000) ? 'yayin tam ekran oldu' : 'YAYIN TAM EKRAN OLMADI');
   await wc.executeJavaScript('document.exitFullscreen()').catch(() => {});

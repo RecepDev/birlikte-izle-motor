@@ -99,7 +99,7 @@ html, body { overflow: hidden !important; }
 
 /* Çubuk ipucu (zaman + önizleme) videonun üstüne taşıyor: mpv penceresinde onun için de delik açılıyor. */
 .seek-tip { z-index: 5; }
-.skip-intro, .intro-ask, .next-ep button, .weak-src { border-radius: 0 !important; }
+.skip-intro, .intro-ask, .next-ep button, .weak-src, #yayin-davet { border-radius: 0 !important; }
 
 /* Kontrol çubuğu (pencerede de tam ekranda da) videonun üstünde, Stremio gibi: video
    alanın tamamını alıyor, çubuk yalnızca fare hareket edince görünüyor. Video görünürken

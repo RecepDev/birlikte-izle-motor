@@ -737,6 +737,10 @@ app.whenReady().then(() => {
       return { error: 'yakalanamadi', detay: err.message };
     }
   });
+  ipcMain.on('kabuk:torrent-kapat', (_e, infoHash) => {
+    if (!/^[0-9a-f]{40}$/i.test(infoHash)) return;
+    fetch(`http://127.0.0.1:11470/${infoHash.toLowerCase()}/remove`, { signal: AbortSignal.timeout(4000) }).catch(() => {});
+  });
   ipcMain.on('kabuk:uygulama-sesi-durdur', () => {
     uygulamaSesi?.durdur();
     uygulamaSesi = null;

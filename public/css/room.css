@@ -563,6 +563,12 @@ button.danger { background: #3a1d24; border-color: #a33b4d; color: #ffb3bf; }
   padding: 18px 12px 8px; background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .75)); transition: opacity .2s;
 }
 .yayin-katman.bos .yayin-alt, .yayin-katman.bos .yayin-ust { opacity: 0; pointer-events: none; }
+/* Oynatıcının üstünde "canlı yayın açık" daveti (telefonda üst çubuk dar olabiliyor). */
+.yayin-davet {
+  position: absolute; top: 10px; left: 10px; z-index: 26; padding: 8px 14px; border-radius: 999px;
+  background: rgba(220, 38, 38, .9); color: #fff; border: none; font-weight: 600; font-size: 14px;
+}
+.yayin-davet[hidden] { display: none; }
 .yayin-ust { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; gap: 10px; pointer-events: none; }
 .yayin-ust > * { pointer-events: auto; }
 .yayin-canli { background: #dc2626; color: #fff; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 6px; letter-spacing: .5px; }
