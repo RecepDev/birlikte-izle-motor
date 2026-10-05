@@ -7,3 +7,8 @@ scripts/yayin-e2e/*.mp4
 scripts/yayin-e2e/*.json
 scripts/yayin-e2e/*.out
 scripts/yayin-e2e/*.err
+scripts/yayin-e2e/*.mkv
+
+# motor olcumu (deneme)
+deneme/motor/node_modules/
+deneme/motor/sonuc.json

@@ -88,6 +88,8 @@ export function createMpv({ binary = 'mpv', pipeName = 'birlikte-izle', args = [
 
   const api = {
     pipePath,
+    // mpv sürecinin kimliği (canlı yayında yalnız onun sesini yakalamak için).
+    pid: () => child?.pid ?? null,
     start,
     command,
     get: (name) => command('get_property', name),

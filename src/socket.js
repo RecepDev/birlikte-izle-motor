@@ -119,7 +119,7 @@ export function attachSocket(io, {
       socket.data.roomId = room.id;
       socket.data.userId = res.user.id;
       socket.join(room.id);
-      reply({ ok: true, snapshot: room.snapshot(res.user.id), publicUrl: getPublicUrl() });
+      reply({ ok: true, snapshot: room.snapshot(res.user.id), publicUrl: getPublicUrl(), yayin: hooks.yayinDurumu?.(room) ?? null });
       dispatch(room, res.msgs);
       dispatch(room, hooks.onJoin?.(room, res.user.id) || []);
     });

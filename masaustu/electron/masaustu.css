@@ -13,7 +13,9 @@
 /* Video kalan boşluğu doldurur ama asla taşırmaz: esas boy 0'dan başlıyor.
    "auto" olunca fitVideo'nun yazdığı boy esas alınıp sayfa aşağı taşıyor, sağda
    kaydırma çubuğu çıkıp kontroller ekranın altına kayıyordu. */
-.player video {
+/* Yalnız oynatıcının kendi videosu (#video): ".player video" canlı yayın videosunu da (#yayin-video)
+   yüksekliği 0 yapıp gizliyordu; yayın izleyicisi siyah ekran görüp yalnız ses duyuyordu. */
+.player #video {
   flex: 1 1 0 !important;
   width: 100% !important;
   height: 0 !important;
@@ -58,7 +60,7 @@ html, body { overflow: hidden !important; }
 
 /* mpv yerel pencerede çiziyor: bir diyalog açıkken pencereyi gizliyoruz, yoksa
    diyaloğun üstünü örtüyor (bkz. onyukleme-kabuk.cjs). */
-.player.mpv-gizli video { background: #000 !important; }
+.player.mpv-gizli #video { background: #000 !important; }
 
 /* Videonun üstüne binen ve masaüstünde işe yaramayan katmanlar.
    Uyumlu mod gerekmiyor: mpv her biçimi kendi çözüyor. */

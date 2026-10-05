@@ -21,6 +21,8 @@ export const MASAUSTU_DOSYALARI = [
   'electron/stremio-vekil.cjs',
   'electron/kontrol.html',
   'electron/kontrol-onyukleme.cjs',
+  'electron/uygulama-sesi.cs',
+  'electron/uygulama-sesi.cjs',
   'electron/onyukleme-kabuk.cjs',
   'electron/video-koprusu.cjs',
   'electron/masaustu.css',

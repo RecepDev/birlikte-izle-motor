@@ -472,11 +472,12 @@
   // ---- görünüm -----------------------------------------------------------------
   const STIL = `
     html, body { background: transparent !important; }
-    .player, .player video { background: transparent !important; }
+    .player, .player #video { background: transparent !important; }
     /* Android WebView boş <video> için gri zeminli büyük bir oynat simgesi çiziyor ve
        arkadaki ExoPlayer görüntüsünü örtüyordu (ses/altyazı gelip görüntü gelmiyordu).
-       Öğe yerinde kalsın (ölçü için) ama hiç çizilmesin. */
-    .player video { opacity: 0 !important; }
+       Öğe yerinde kalsın (ölçü için) ama hiç çizilmesin. Yalnız #video: canlı yayın videosu
+       (#yayin-video) da görünmez oluyordu, yayında siyah ekran + yalnız ses. */
+    .player #video { opacity: 0 !important; }
     #open-desktop, #open-compat, #btn-compat, .compat-popover { display: none !important; }
     .mobil-tam-oge {
       position: fixed !important; inset: 0 !important; z-index: 1000 !important;

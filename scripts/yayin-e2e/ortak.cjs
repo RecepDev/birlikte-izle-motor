@@ -31,4 +31,13 @@ function yaz(dosya, veri) {
   fs.writeFileSync(dosya, JSON.stringify(veri, null, 1));
 }
 
-module.exports = { bekle, kosulBekle, katil, yaz };
+// Ekran kapalı/kilitliyken Windows pencereleri "görünmüyor" sayıyor; Chromium o zaman çizmeyi
+// (requestAnimationFrame) durduruyor ve oda sayfası mpv'ye alan bildiremiyordu. Test, kullanıcı
+// başında değilken de çalışsın.
+function gorunmezlikKapat(app) {
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+  app.commandLine.appendSwitch('disable-background-timer-throttling');
+}
+
+module.exports = { bekle, kosulBekle, katil, yaz, gorunmezlikKapat };

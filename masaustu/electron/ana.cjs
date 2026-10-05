@@ -716,6 +716,32 @@ app.whenReady().then(() => {
   });
   ipcMain.on('kontrol:olay', (_e, olay) => ana?.webContents.send('kabuk:kontrol-olay', olay));
 
+  // Canlı yayın sesi: yalnız mpv'nin sesi (tüm bilgisayar sesi değil). Yardımcı PCM veriyor,
+  // sayfaya parça parça gidiyor; sayfa bunu yayının ses izine çeviriyor (bkz. onyukleme-kabuk.cjs).
+  let uygulamaSesi = null;
+  ipcMain.handle('kabuk:uygulama-sesi-baslat', async () => {
+    uygulamaSesi?.durdur();
+    uygulamaSesi = null;
+    const pid = mpv?.pid?.();
+    if (!pid) return { error: 'mpvYok' };
+    try {
+      uygulamaSesi = await require('./uygulama-sesi.cjs').baslat({
+        pid,
+        klasor: app.getPath('userData'),
+        onVeri: (parca) => { if (ana && !ana.isDestroyed()) ana.webContents.send('kabuk:uygulama-sesi-veri', parca); },
+        onBitti: () => { uygulamaSesi = null; },
+      });
+      return { ok: true };
+    } catch (err) {
+      console.error('Uygulama sesi yakalanamadı:', err.message);
+      return { error: 'yakalanamadi', detay: err.message };
+    }
+  });
+  ipcMain.on('kabuk:uygulama-sesi-durdur', () => {
+    uygulamaSesi?.durdur();
+    uygulamaSesi = null;
+  });
+
   // Canlı yayın (public/js/yayin.js): oda sayfası getDisplayMedia isteyince seçici göstermeden
   // oynatıcı penceresini (mpv burada çiziyor) ve sistem sesini ver. Bu pencere yakalanabilir
   // pencereler listesinde görünmüyor (sahipli, görev çubuğunda yok) ama kimliğiyle istenince

@@ -19,7 +19,47 @@ window.kabuk = {
   onbellekYaz: (sn) => ipcRenderer.send('kabuk:onbellek-yaz', sn),
   // Canlı yayın: oynatıcı penceresi yakalanabilir durumda mı (bkz. ana.cjs)
   yayinHazir: () => ipcRenderer.invoke('kabuk:yayin-hazir'),
+  // Canlı yayın sesi: yalnız oynatıcının (mpv) sesi bir ses izi olarak; olmazsa null.
+  uygulamaSesi: () => uygulamaSesiIzi(),
+  uygulamaSesiDurdur: () => uygulamaSesiKapat(),
 };
+
+// mpv'nin sesi (ham PCM, 48 kHz 2 kanal 16 bit) -> MediaStreamTrack. Tüm bilgisayar sesi
+// (bildirimler, Discord, tarayıcı) yayına gitmesin diye sistem sesi yerine bu kullanılıyor.
+let sesUretici = null;
+let sesYazici = null;
+let sesZamani = 0;
+function uygulamaSesiKapat() {
+  ipcRenderer.send('kabuk:uygulama-sesi-durdur');
+  try { sesYazici?.close(); } catch { /* */ }
+  sesUretici = null;
+  sesYazici = null;
+}
+ipcRenderer.on('kabuk:uygulama-sesi-veri', (_e, parca) => {
+  if (!sesYazici) return;
+  const bayt = parca instanceof Uint8Array ? parca : new Uint8Array(parca);
+  const kare = Math.floor(bayt.byteLength / 4);
+  if (!kare) return;
+  try {
+    const veri = new AudioData({
+      format: 's16', sampleRate: 48000, numberOfChannels: 2, numberOfFrames: kare,
+      timestamp: sesZamani, data: bayt.slice(0, kare * 4),
+    });
+    sesZamani += Math.round((kare / 48000) * 1e6);
+    sesYazici.write(veri).catch(() => {});
+  } catch { /* iz kapandı */ }
+});
+async function uygulamaSesiIzi() {
+  if (typeof MediaStreamTrackGenerator !== 'function' || typeof AudioData !== 'function') return null;
+  const res = await ipcRenderer.invoke('kabuk:uygulama-sesi-baslat').catch(() => null);
+  if (!res?.ok) return null;
+  sesUretici = new MediaStreamTrackGenerator({ kind: 'audio' });
+  sesYazici = sesUretici.writable.getWriter();
+  sesZamani = 0;
+  const iz = sesUretici;
+  iz.addEventListener('ended', uygulamaSesiKapat);
+  return iz;
+}
 
 // Masaüstüne özel düzen: kontroller/bildirimler videonun dışına alınır (mpv üstlerini örter).
 // Dosya olarak bağlamak yerine içeriği gömüyoruz: http sayfasından file:// yüklemesi engelleniyor.

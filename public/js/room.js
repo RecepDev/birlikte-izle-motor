@@ -681,7 +681,7 @@ let otoTelefonCalisiyor = null;
 const otoTelefonAnahtar = () => `${state.room?.contentId}|${state.room?.hostStreamId}`;
 function otoTelefonBekliyor() {
   const cihaz = window.mobilCihaz;
-  return Boolean(cihaz?.kalite && cihaz.oto !== false && state.room && !isHost()
+  return Boolean(cihaz?.kalite && cihaz.oto !== false && state.room && !isHost() && !yayinIzleniyor
     && !me()?.ownStreamId && otoTelefonBitti !== otoTelefonAnahtar());
 }
 function otoEkran(metin) {
@@ -1394,7 +1394,18 @@ function end(message) {
 socket.on('connect', async () => {
   tani.kaydet('baglanti', { durum: 'baglandi' });
   const res = await request('join', { roomId, userToken, name: state.name });
-  if (!res?.error) return applySnapshot(res.snapshot, res.publicUrl);
+  if (!res?.error) {
+    // Odada yayın açıksa: ilk girişte doğrudan yayına (kendi kaynağı ve otomatik arama hiç açılmadan).
+    if (!state.joinedOnce && res.yayin?.aktif && res.yayin.hostUserId !== res.snapshot.you) {
+      Object.assign(yayinDurumu, { aktif: true, hostUserId: res.yayin.hostUserId, kalite: res.yayin.kalite ?? null, izleyici: res.yayin.izleyici ?? 0, sinir: res.yayin.sinir ?? 0 });
+      yayinDuyuruldu = true;
+      yayinIzleniyor = true;
+      applySnapshot(res.snapshot, res.publicUrl);
+      yayinIzle();
+      return;
+    }
+    return applySnapshot(res.snapshot, res.publicUrl);
+  }
   const message = JOIN_ERRORS[res.error] || errorText(res.error);
   if (state.joinedOnce) return end(message);
   socket.disconnect();
@@ -1617,7 +1628,9 @@ function yayinOlay(o) {
       if (!o.aktif) yayinDuyuruldu = false;
       break;
     case 'basladi':
-      toast(o.sesVar ? '📡 Yayın başladı.' : '📡 Yayın başladı, ama ses yakalanamadı: izleyiciler yalnız görüntüyü alır.', 6000);
+      toast(!o.sesVar ? '📡 Yayın başladı, ama ses yakalanamadı: izleyiciler yalnız görüntüyü alır.'
+        : o.sistemSesi && window.kabuk ? '📡 Yayın başladı. Yalnız video sesi alınamadı: bilgisayarın tüm sesi gidiyor (bildirimler dahil).'
+          : '📡 Yayın başladı.', 7000);
       break;
     case 'baglandi':
       yayinMesaj('');

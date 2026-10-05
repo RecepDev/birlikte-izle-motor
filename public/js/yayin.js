@@ -95,6 +95,7 @@ export function createYayinIstemci({ socket, request, onDurum = () => {}, log = 
   let akis = null;          // yakalanan MediaStream
   let kalite = null;        // KALITELER[...]
   let iceServers = [];
+  let sistemSesi = false;   // ses tüm bilgisayardan mı (uygulama sesi alınamadıysa)
   const esler = new Map();  // userId -> RTCPeerConnection
   let istatistikZamani = null;
   let sonBayt = new Map();  // userId -> { bytes, at }
@@ -175,18 +176,25 @@ export function createYayinIstemci({ socket, request, onDurum = () => {}, log = 
       const hazir = await window.kabuk.yayinHazir().catch(() => ({ ok: true }));
       if (!hazir.ok) return { error: 'oynaticiHazirDegil', sebep: hazir.sebep };
     }
+    // Masaüstü uygulamasında ses yalnız oynatıcıdan (mpv): tüm bilgisayar sesi (bildirimler,
+    // Discord, tarayıcı…) yayına gitmesin. Olmazsa (eski Windows) sistem sesine düşülür.
+    const uygSes = await window.kabuk?.uygulamaSesi?.().catch(() => null);
+    sistemSesi = !uygSes;
     try {
       akis = await navigator.mediaDevices.getDisplayMedia({
         video: { width: { max: kalite.genislik }, height: { max: kalite.yukseklik }, frameRate: { ideal: kalite.fps, max: kalite.fps } },
         // Konuşma filtreleri filmi bozar (mono, gürültü bastırma, otomatik ses): hepsi kapalı.
-        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 },
-        systemAudio: 'include',
+        audio: uygSes ? false : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 },
+        systemAudio: uygSes ? 'exclude' : 'include',
         selfBrowserSurface: 'exclude',
       });
     } catch (err) {
       akis = null;
+      uygSes?.stop();
+      window.kabuk?.uygulamaSesiDurdur?.();
       return { error: err?.name === 'NotAllowedError' ? 'iptal' : 'yakalama', detay: String(err?.message || err) };
     }
+    if (uygSes) akis.addTrack(uygSes);
     const video = akis.getVideoTracks()[0];
     if (video) video.contentHint = 'motion';
     // Tarayıcının "Paylaşımı durdur" düğmesi ya da pencere kapanırsa yayın biter.
@@ -199,7 +207,7 @@ export function createYayinIstemci({ socket, request, onDurum = () => {}, log = 
     const ice = await request('yayinIce');
     iceServers = ice?.iceServers || [];
     istatistikZamani = setInterval(() => istatistik().catch(() => {}), ISTATISTIK_MS);
-    bildir({ tur: 'basladi', sesVar: akis.getAudioTracks().length > 0, ...res });
+    bildir({ tur: 'basladi', sesVar: akis.getAudioTracks().length > 0, sistemSesi, ...res });
     return res;
   }
 
@@ -211,6 +219,7 @@ export function createYayinIstemci({ socket, request, onDurum = () => {}, log = 
     sonBayt.clear();
     akis?.getTracks().forEach((t) => t.stop());
     akis = null;
+    window.kabuk?.uygulamaSesiDurdur?.();
   }
 
   async function bitir() {

@@ -4,10 +4,11 @@
 const path = require('node:path');
 const os = require('node:os');
 const { app, BrowserWindow } = require('electron');
-const { bekle, kosulBekle, katil, yaz } = require('./ortak.cjs');
+const { bekle, kosulBekle, katil, yaz, gorunmezlikKapat } = require('./ortak.cjs');
 
 const kullanici = path.join(os.tmpdir(), `birlikte-izle-yayin-testi-host-${process.pid}`);
 app.setPath('userData', kullanici);
+gorunmezlikKapat(app);
 // ilk acilistaki 'Hangi goruntu kalitesini tercih edersin?' penceresi cikmasin (acik diyalog mpv'yi gizliyor)
 require('node:fs').mkdirSync(kullanici, { recursive: true });
 require('node:fs').writeFileSync(path.join(kullanici, 'ayar.json'), JSON.stringify({ kalite: '1080p' }));
@@ -52,7 +53,7 @@ app.whenReady().then(async () => {
   sonuc.oynatici = await wc.executeJavaScript("({ paused: document.querySelector('#video').paused, src: document.querySelector('#video').currentSrc })").catch(() => null);
   const son = Date.now() + sure;
   while (Date.now() < son) {
-    const d = await wc.executeJavaScript(`({ yazi: document.querySelector('#yayin-ac-yazi').textContent, ipucu: document.querySelector('#yayin-ac').title })`).catch(() => null);
+    const d = await wc.executeJavaScript(`({ yazi: document.querySelector('#yayin-ac-yazi').textContent, ipucu: document.querySelector('#yayin-ac').title, oynuyor: !document.querySelector('#video').paused, t: Math.round(document.querySelector('#video').currentTime), bekleme: document.querySelector('#banner').hidden ? null : document.querySelector('#banner-text').textContent })`).catch(() => null);
     if (d) { sonuc.durumlar.push({ t: Date.now(), ...d }); yaz(SONUC, sonuc); }
     await bekle(2000);
   }

@@ -5,9 +5,10 @@
 const path = require('node:path');
 const os = require('node:os');
 const { app, BrowserWindow } = require('electron');
-const { bekle, kosulBekle, katil, yaz } = require('./ortak.cjs');
+const { bekle, kosulBekle, katil, yaz, gorunmezlikKapat } = require('./ortak.cjs');
 
 app.setPath('userData', path.join(os.tmpdir(), `birlikte-izle-yayin-testi-izleyici-${process.pid}`));
+gorunmezlikKapat(app);
 const SONUC = process.env.SONUC_IZLEYICI;
 const ODA = process.env.ODA_IZLEYICI;
 
@@ -18,9 +19,14 @@ app.whenReady().then(async () => {
   win.webContents.setAudioMuted(true);
   await win.loadURL(ODA);
   const wc = win.webContents;
+  // Masaüstü uygulamasının stilleri de olsun: yayın videosunu gizleyen kural orada yakalanır.
+  await wc.insertCSS(require('node:fs').readFileSync(path.join(__dirname, '..', '..', 'masaustu', 'electron', 'masaustu.css'), 'utf8'));
   not(await katil(wc, 'TestIzleyici') ? 'odaya girdi' : 'ODAYA GIREMEDI');
   not(await kosulBekle(wc, "!document.querySelector('#yayin-izle').hidden", 60000) ? 'Yayini izle dugmesi gorundu' : 'YAYIN DUGMESI GORUNMEDI');
-  await wc.executeJavaScript("document.querySelector('#yayin-izle').click()");
+  // Yayın açıkken girildiyse doğrudan yayına girmiş olmalı (kendi kaynağı açılmadan).
+  const dogrudan = await wc.executeJavaScript("!document.querySelector('#yayin-katman').hidden");
+  if (dogrudan) not('yayin acikken girince dogrudan yayina girdi');
+  else await wc.executeJavaScript("document.querySelector('#yayin-izle').click()");
   not(await kosulBekle(wc, "document.querySelector('#yayin-video').videoWidth > 0", 25000) ? 'yayin goruntusu geldi' : 'YAYIN GORUNTUSU GELMEDI');
   await bekle(6000); // bit hizi otursun
   const olcum = await wc.executeJavaScript(`new Promise((sonuc) => {
@@ -59,6 +65,17 @@ app.whenReady().then(async () => {
           kendi_oynatici_src: document.querySelector('#video').getAttribute('src'),
           kendi_oynatici: (() => { const x = document.querySelector('#video'); return 'currentSrc=' + (x.currentSrc || '-') + ' network=' + x.networkState + ' ready=' + x.readyState + ' paused=' + x.paused + ' buffered=' + (x.buffered.length ? x.buffered.end(0).toFixed(1) : 0); })(),
           katman_acik: !document.querySelector('#yayin-katman').hidden,
+          // Görüntü siyah mı? Karenin ortalama parlaklığı (0-255) ve renk çeşitliliği.
+          parlaklik: (() => {
+            const c = document.createElement('canvas');
+            c.width = 160; c.height = 90;
+            const g = c.getContext('2d');
+            g.drawImage(v, 0, 0, c.width, c.height);
+            const d = g.getImageData(0, 0, c.width, c.height).data;
+            let t = 0; let enCok = 0;
+            for (let i = 0; i < d.length; i += 4) { const y = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; t += y; enCok = Math.max(enCok, y); }
+            return { ortalama: Math.round(t / (d.length / 4)), en_parlak: Math.round(enCok) };
+          })(),
           bilgi: document.querySelector('#yayin-bilgi').textContent,
           bekleme_afisi: document.querySelector('#banner').hidden ? null : document.querySelector('#banner-text').textContent,
         });

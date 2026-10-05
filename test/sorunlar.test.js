@@ -152,3 +152,21 @@ test('Telefon duraklatılmışken 17 sn geride "hazır" kalıyordu: yerinde değ
   assert.equal(v.currentTime, 800);
   sync.stop();
 });
+
+test('Yayında siyah ekran: masaüstü ve telefon stilleri yayın videosunu gizlemiyor', async () => {
+  const fs = await import('node:fs');
+  const masaustu = fs.readFileSync(new URL('../masaustu/electron/masaustu.css', import.meta.url), 'utf8');
+  const kopru = fs.readFileSync(new URL('../android/app/src/main/assets/kopru.js', import.meta.url), 'utf8');
+  // ".player video" #yayin-video'yu da kapsıyordu (masaüstünde yükseklik 0, telefonda görünmez).
+  for (const [ad, css] of [['masaustu.css', masaustu], ['kopru.js', kopru]]) {
+    assert.doesNotMatch(css.replace(/\/\*[\s\S]*?\*\//g, ''), /\.player video\b/, `${ad} tüm videolara kural yazmasın`);
+  }
+});
+
+test('Yayın açıkken girince: katılma cevabında yayın durumu var', async () => {
+  const { createYayin } = await import('../src/yayin.js');
+  const y = createYayin();
+  const oda = { id: 'R', hostUserId: 'h' };
+  assert.deepEqual(y.katilmaDurumu(oda), { aktif: false });
+  assert.equal(typeof y.durum, 'function', 'eski durum(roomId) da duruyor');
+});

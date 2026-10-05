@@ -37,6 +37,7 @@ attachSocket(io, {
   hooks: {
     onRoomClosed: (room) => yayin.kapat(room.id),
     onJoin: (room, uid) => yayin.onJoin(room, uid),
+    yayinDurumu: (room) => yayin.katilmaDurumu(room),
     onDisconnect: (room, uid) => yayin.onDisconnect(room, uid),
     roomEvents: { ...yayin.events },
   },

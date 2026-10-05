@@ -121,6 +121,9 @@ export function createYayin({ iceServers = async () => VARSAYILAN_ICE, now = Dat
 
   return {
     events,
+    // Odaya katılma cevabına eklenen yayın durumu: yayın açıksa izleyici doğrudan yayına girer
+    // (kendi kaynağını hiç açmadan, otomatik kaynak aramadan).
+    katilmaDurumu: (room) => durumMesaji(room).data,
     // Yeni katılan kişi açık bir yayını görsün.
     onJoin(room, uid) {
       const y = gecerli(room);
