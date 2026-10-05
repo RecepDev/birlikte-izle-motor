@@ -110,6 +110,9 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .seek-row, .ctl-row { display: flex; align-items: center; gap: 12px; width: 100%; }
 .ctl-row { gap: 6px; }
 .ctl-bosluk { flex: 1; }
+/* Ayarlar > Kontrol çubuğu'ndan gizlenen düğmeler (kodun hidden'ıyla çakışmasın diye ayrı sınıf). */
+.kullanici-gizli { display: none !important; }
+.ctl-secim { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; }
 .seek-row .time { min-width: 56px; font-size: 12px; opacity: .85; }
 .seek-row .time:last-child { text-align: right; }
 .player.idle .controls, .player.idle .viewers-ov, .player.idle .compat-popover { opacity: 0; pointer-events: none; }

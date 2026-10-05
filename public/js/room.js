@@ -3110,6 +3110,39 @@ if (window.kabuk?.onbellekYaz) {
   $('#set-onbellek').addEventListener('change', (e) => window.kabuk.onbellekYaz(Number(e.target.value)));
 }
 $('#set-auto-subs').checked = storage.get('otoAltyazi') !== '0';
+// ---- Kontrol çubuğu: hangi düğmeler görünsün (Ayarlar; cihaz başına, tarayıcı deposunda) ----
+const CUBUK_DUGMELERI = [
+  ['btn-prev', 'Önceki bölüm'], ['btn-next', 'Sonraki bölüm'], ['btn-mute', 'Sessiz'], ['volume', 'Ses kaydırıcısı'],
+  ['btn-info', 'Hız ve kaynak bilgisi'], ['btn-aspect', 'Görüntü oranı'], ['btn-audio', 'Ses dili'],
+  ['btn-subs-panel', 'Altyazı'], ['btn-chat', 'Sohbet'], ['btn-react', 'Tepki'], ['btn-episodes', 'Bölümler'],
+  ['btn-fs', 'Tam ekran'], ...(window.kabuk ? [] : [['btn-compat', 'Uyumlu mod']]),
+];
+function gizliDugmeler() {
+  try {
+    const liste = JSON.parse(storage.get('gizliDugmeler') || '[]');
+    return new Set(Array.isArray(liste) ? liste : []);
+  } catch {
+    return new Set();
+  }
+}
+function cubuguUygula() {
+  const gizli = gizliDugmeler();
+  for (const [id] of CUBUK_DUGMELERI) document.getElementById(id)?.classList.toggle('kullanici-gizli', gizli.has(id));
+}
+cubuguUygula();
+$('#ctl-secim').replaceChildren(...CUBUK_DUGMELERI.map(([id, ad]) => {
+  const kutu = el('input', { type: 'checkbox' });
+  kutu.checked = !gizliDugmeler().has(id);
+  kutu.addEventListener('change', () => {
+    const gizli = gizliDugmeler();
+    if (kutu.checked) gizli.delete(id);
+    else gizli.add(id);
+    storage.set('gizliDugmeler', JSON.stringify([...gizli]));
+    cubuguUygula();
+  });
+  return el('label', { class: 'check' }, kutu, el('span', { text: ` ${ad}` }));
+}));
+
 $('#set-auto-subs').addEventListener('change', (e) => storage.set('otoAltyazi', e.target.checked ? '1' : '0'));
 
 const dialog = $('#settings-dialog');
