@@ -80,8 +80,11 @@ export function createTorrServer({ klasor, port = 8097, log, fetchImpl = fetch, 
     log.info('TorrServer hazır', { port });
   }
 
+  // Sunucumuz zorla kapatılırsa (görev yöneticisi, taskkill) TorrServer arkada açık kalıyor; bir
+  // sonraki açılışta portta hazır bulunup yeniden kullanılıyor. Düzgün kapanışta /shutdown ile de kapatılıyor.
   function durdur() {
     durduruldu = true;
+    fetchImpl(`${adres}/shutdown`, { signal: AbortSignal.timeout(1000) }).catch(() => {});
     try { cocuk?.kill(); } catch { /* */ }
     cocuk = null;
   }

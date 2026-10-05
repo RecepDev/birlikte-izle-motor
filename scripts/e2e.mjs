@@ -49,7 +49,7 @@ for (const f of ['config.json', 'tercih.json', 'trackerlar.json']) {
 const onceki = new Set(await acikTorrentler().catch(() => []));
 const sunucu = spawn(process.execPath, ['server.js'], {
   cwd: ROOT,
-  env: { ...process.env, PUBLIC_PORT: String(PUB), PANEL_PORT: String(PANEL), NO_TUNNEL: '1', TEST_INSTANCE: '1', DATA_DIR: veri, SAHIPSIZ_MS: '3000', MOTOR, ...(process.env.MOTOR_URL ? { MOTOR_URL: process.env.MOTOR_URL } : {}) },
+  env: { ...process.env, PUBLIC_PORT: String(PUB), PANEL_PORT: String(PANEL), NO_TUNNEL: '1', TEST_INSTANCE: '1', DATA_DIR: veri, SAHIPSIZ_MS: '3000', MOTOR, TORRSERVER_PORT: '8197', ...(process.env.MOTOR_URL ? { MOTOR_URL: process.env.MOTOR_URL } : {}) },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let sunucuCikti = '';
@@ -58,10 +58,15 @@ sunucu.stderr.on('data', (d) => { sunucuCikti += d; });
 
 async function temizle() {
   sunucu.kill();
+  // Zorla kapatılan sunucunun TorrServer'ı arkada kalıyor (Windows): kendi uç noktasıyla kapat.
+  if (MOTOR === 'torrserver') {
+    await fetch('http://127.0.0.1:8197/shutdown', { signal: AbortSignal.timeout(2000) }).catch(() => {});
+    await bekle(1500);
+  }
   for (const h of await acikTorrentler().catch(() => [])) {
     if (!onceki.has(h)) await fetch(`${STREMIO}/${h}/remove`).catch(() => {});
   }
-  fs.rmSync(veri, { recursive: true, force: true });
+  try { fs.rmSync(veri, { recursive: true, force: true }); } catch { /* kilitli dosya kalırsa geçici klasörde kalsın */ }
 }
 
 try {

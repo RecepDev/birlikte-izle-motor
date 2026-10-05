@@ -75,7 +75,8 @@ let torrServer = null;
 let stremioTaklidi = null;
 let motorAyri = false; // TorrServer çalışıyor (Stremio asıl sunucuyla ortak değil)
 if (MOTOR === 'torrserver') {
-  torrServer = createTorrServer({ klasor: DATA, log });
+  torrServer = createTorrServer({ klasor: DATA, port: Number(process.env.TORRSERVER_PORT) || 8097, log });
+  process.on('exit', () => torrServer?.durdur());
   stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: Number(new URL(STREMIO_BASE).port) || 11470, log, dosyaAdi });
   try {
     await stremioTaklidi.baslat();
