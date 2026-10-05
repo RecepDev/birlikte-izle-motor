@@ -8,7 +8,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "xyz.birlikteizle.mobil"
+        applicationId = "xyz.birlikteizle.mobil.motor"
         minSdk = 24
         targetSdk = 34
         versionCode = 30

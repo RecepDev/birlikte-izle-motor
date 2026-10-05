@@ -9,7 +9,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_uygulama"
-        android:label="Birlikte İzle"
+        android:label="Birlikte İzle Motor"
         android:supportsRtl="true"
         android:theme="@style/Tema"
         android:usesCleartextTraffic="true">
@@ -33,7 +33,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="birlikteizle" />
+                <data android:scheme="birlikteizlemotor" />
             </intent-filter>
         </activity>
 

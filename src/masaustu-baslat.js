@@ -16,7 +16,7 @@ const BURASI = path.dirname(fileURLToPath(import.meta.url));
 function kayittanBul() {
   if (process.platform !== 'win32') return null;
   try {
-    const cikti = execFileSync('reg', ['query', 'HKCU\\Software\\Classes\\birlikteizle\\shell\\open\\command', '/ve'], {
+    const cikti = execFileSync('reg', ['query', 'HKCU\\Software\\Classes\\birlikteizlemotor\\shell\\open\\command', '/ve'], {
       encoding: 'utf8',
       windowsHide: true,
     });
@@ -29,9 +29,9 @@ function kayittanBul() {
 
 export function masaustuYolu() {
   const adaylar = [
-    process.env.BIRLIKTE_MASAUSTU,
+    process.env.BIRLIKTE_MOTOR_MASAUSTU,
     kayittanBul(),
-    path.join(BURASI, '..', 'masaustu', 'dagitim', 'Birlikte Izle-win32-x64', 'Birlikte Izle.exe'),
+    path.join(BURASI, '..', 'masaustu', 'dagitim', 'Birlikte Izle Motor-win32-x64', 'Birlikte Izle Motor.exe'),
   ].filter(Boolean);
   for (const aday of adaylar) if (fs.existsSync(aday)) return aday;
   return null;

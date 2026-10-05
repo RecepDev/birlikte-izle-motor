@@ -32,7 +32,7 @@ function parseArgs(argv) {
     console.error('Kullanım: node masaustu/prototip.js <oda-linki> <isim> [--mpv <yol>]');
     process.exit(1);
   }
-  let base = flags.sunucu || 'http://127.0.0.1:7000';
+  let base = flags.sunucu || 'http://127.0.0.1:7300';
   let roomId = link;
   if (/^https?:\/\//i.test(link)) {
     const url = new URL(link);

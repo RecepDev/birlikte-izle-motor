@@ -3160,8 +3160,8 @@ $('#copy-link').addEventListener('click', async () => {
 if (window.masaustuSes) $('#open-desktop').hidden = true;
 else {
   $('#open-desktop').addEventListener('click', () => {
-    location.href = `birlikteizle://${encodeURIComponent(location.href)}`;
-    toast('Masaüstü uygulaması açılıyor. Kurulu değilse indirilen klasördeki "Birlikte Izle.exe" bir kez çalıştırılmalı.', 8000);
+    location.href = `birlikteizlemotor://${encodeURIComponent(location.href)}`;
+    toast('Masaüstü uygulaması açılıyor. Kurulu değilse indirilen klasördeki "Birlikte Izle Motor.exe" bir kez çalıştırılmalı.', 8000);
   });
 }
 

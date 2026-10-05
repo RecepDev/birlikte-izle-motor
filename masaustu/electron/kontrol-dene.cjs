@@ -5,7 +5,7 @@ const { app, BrowserWindow, desktopCapturer, screen } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SUNUCU = process.env.SUNUCU || 'http://127.0.0.1:7000';
+const SUNUCU = process.env.SUNUCU || 'http://127.0.0.1:7300';
 const CIKTI = process.env.CIKTI || path.join(require('node:os').tmpdir(), 'kontrol-dene.png');
 
 app.whenReady().then(async () => {

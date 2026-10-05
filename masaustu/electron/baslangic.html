@@ -139,9 +139,9 @@
   // Oda açma yalnızca sunucuyu çalıştıran kişide anlamlı. Misafirlerde sunucu yok,
   // o yüzden düğmeyi ancak panel bu bilgisayarda cevap verirse gösteriyoruz.
   document.getElementById('panel').addEventListener('click', () => {
-    window.kabuk.odayaGit('http://127.0.0.1:7001/ara');
+    window.kabuk.odayaGit('http://127.0.0.1:7301/ara');
   });
-  fetch('http://127.0.0.1:7001/api/ping', { mode: 'no-cors', cache: 'no-store' })
+  fetch('http://127.0.0.1:7301/api/ping', { mode: 'no-cors', cache: 'no-store' })
     .then(() => {
       document.getElementById('panel').hidden = false;
       document.getElementById('panel-ipucu').hidden = false;

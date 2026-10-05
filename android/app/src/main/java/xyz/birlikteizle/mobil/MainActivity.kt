@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
     private fun linktenAc(intent: Intent?): String? {
         val veri = intent?.data ?: return null
         if (veri.scheme == "birlikteizle") {
-            val kalan = veri.toString().removePrefix("birlikteizle://").trimEnd('/')
+            val kalan = veri.toString().removePrefix("birlikteizlemotor://").trimEnd('/')
             return Uri.decode(kalan).takeIf { it.startsWith("http") }
         }
         return veri.toString()

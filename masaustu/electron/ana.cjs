@@ -596,7 +596,7 @@ async function sunucular() {
   if (Date.now() - ntfyOnbellek.zaman > 60_000) ntfyOnbellek = { adres: await ntfyAdresi(ayar.konu), zaman: Date.now() };
   const guncel = ntfyOnbellek.adres;
   if (guncel && guncel !== ayar.sonSunucu) ayarYaz({ sonSunucu: guncel });
-  return [...new Set(['http://127.0.0.1:7000', guncel, ayar.sonSunucu].filter(Boolean))];
+  return [...new Set(['http://127.0.0.1:7300', guncel, ayar.sonSunucu].filter(Boolean))];
 }
 ipcMain.handle('kabuk:sunucular', () => sunucular());
 ipcMain.on('kabuk:son-sunucu', (e) => { e.returnValue = ayarOku().sonSunucu || null; });
@@ -639,7 +639,7 @@ ipcMain.handle('kabuk:guncelle', async () => {
 
 // birlikteizle://<oda adresi> bağlantısı uygulamayı açsın. Tarayıcıdaki "Masaüstü
 // uygulamasında aç" düğmesi bu şemayı kullanıyor.
-const SEMA = 'birlikteizle';
+const SEMA = 'birlikteizlemotor';
 
 function semadanUrl(arglar) {
   // Sunucu uygulamayı doğrudan http adresiyle de başlatabiliyor (Stremio özel

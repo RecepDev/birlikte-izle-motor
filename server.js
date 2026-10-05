@@ -1,6 +1,6 @@
 // Birlikte İzle: Stremio watch-party addon + room server + local control panel.
-//   :7000  public  (addon, room pages, Socket.IO, relay)  <- cloudflared tunnel
-//   :7001  panel   (GUI, room creation)                   <- 127.0.0.1 only
+//   :7300  public  (addon, room pages, Socket.IO, relay)  <- cloudflared tunnel
+//   :7301  panel   (GUI, room creation)                   <- 127.0.0.1 only
 
 import { spawn } from 'node:child_process';
 import http from 'node:http';
@@ -28,7 +28,7 @@ import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
 import { createGiris } from './src/giris.js';
 import { createTercih } from './src/tercih.js';
-import { kaydet as torrentKaydet, dokun as torrentDokun, kapatilacaklar } from './src/bizim-torrentler.js';
+import { kaydet as torrentKaydet, dokun as torrentDokun, kapatilacaklar, bizimMi } from './src/bizim-torrentler.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
 import { createTani } from './src/tani.js';
 import { masaustuAc } from './src/masaustu-baslat.js';
@@ -53,8 +53,8 @@ const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // kullanıcının açık sunucusuna, izlediği torrent'lere ve uygulamasına dokunulmasın.
 const TEST = Boolean(process.env.TEST_INSTANCE);
 const DATA = process.env.DATA_DIR || path.join(ROOT, 'data');
-const PUBLIC_PORT = Number(process.env.PUBLIC_PORT) || 7000;
-const PANEL_PORT = Number(process.env.PANEL_PORT) || 7001;
+const PUBLIC_PORT = Number(process.env.PUBLIC_PORT) || 7300;
+const PANEL_PORT = Number(process.env.PANEL_PORT) || 7301;
 const PUBLIC_BASE = `http://127.0.0.1:${PUBLIC_PORT}`;
 const PANEL_BASE = `http://127.0.0.1:${PANEL_PORT}`;
 
@@ -121,7 +121,7 @@ function refreshSubtitles(room) {
   });
 }
 
-// ---- public server (:7000) ------------------------------------------------
+// ---- public server (:7300) ------------------------------------------------
 
 const ROOM_CSP = [
   "default-src 'self'",
@@ -678,8 +678,11 @@ const sahipsizTimer = setInterval(async () => {
 sahipsizTimer.unref();
 // Sunucu açılırken Stremio'da açık kalmış torrent'ler önceki oturumlardan artakalan: onlar
 // da temizliğe dahil (sunucu yeni açıldığı için kayıtlarımızda yoklar).
+// Kopya (motor dalı): Stremio asıl sunucuyla (7000/7001) ortak. Açıkta bulduklarını sahiplenip
+// kapatırsa asıl odada izlenen videoyu keser; dahili motora geçince (Faz 1) bu sorun kalkıyor.
+const PAYLASILAN_STREMIO = true;
 setTimeout(async () => {
-  if (TEST) return;
+  if (TEST || PAYLASILAN_STREMIO) return;
   try {
     for (const h of await stremioLocal.openTorrents()) torrentKaydet([{ kind: 'torrent', infoHash: h }]);
   } catch { /* Stremio kapalı */ }
@@ -703,7 +706,7 @@ const cleanupTimer = setInterval(async () => {
       }
     }
     for (const infoHash of await stremioLocal.openTorrents()) {
-      if (!keep.has(infoHash)) await stremioLocal.removeTorrent({ infoHash });
+      if (!keep.has(infoHash) && (!PAYLASILAN_STREMIO || bizimMi(infoHash))) await stremioLocal.removeTorrent({ infoHash });
     }
   } finally {
     cleanupBusy = false;
@@ -711,7 +714,7 @@ const cleanupTimer = setInterval(async () => {
 }, 5000);
 cleanupTimer.unref();
 
-// ---- panel server (:7001) -------------------------------------------------
+// ---- panel server (:7301) -------------------------------------------------
 
 const panelServer = http.createServer(
   createPanelApp({
