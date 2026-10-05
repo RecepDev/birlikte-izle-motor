@@ -26,6 +26,7 @@ import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-rest
 import { createTorrServer } from './src/motor/torrserver.js';
 import { createStremioTaklidi } from './src/motor/stremio-taklidi.js';
 import { dosyaAdi } from './src/motor/dosya-adlari.js';
+import { STREMIO_BASE } from './public/js/shared/stream-url.js';
 import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
 import { createKesif } from './src/kesif.js';
@@ -75,7 +76,7 @@ let stremioTaklidi = null;
 let motorAyri = false; // TorrServer çalışıyor (Stremio asıl sunucuyla ortak değil)
 if (MOTOR === 'torrserver') {
   torrServer = createTorrServer({ klasor: DATA, log });
-  stremioTaklidi = createStremioTaklidi({ ts: torrServer, log, dosyaAdi });
+  stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: Number(new URL(STREMIO_BASE).port) || 11470, log, dosyaAdi });
   try {
     await stremioTaklidi.baslat();
     await torrServer.baslat();
@@ -336,7 +337,7 @@ socketCtl = attachSocket(io, {
             if (s?.infoHash) izlenen.set(s.infoHash, r.id === room.id ? 'bu oda' : 'başka oda');
           }
           try {
-            const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(4000) })).json();
+            const stats = await (await fetch(`${STREMIO_BASE}/stats.json`, { signal: AbortSignal.timeout(4000) })).json();
             torrents = Object.values(stats || {}).map((t) => ({
               name: String(t.name || t.infoHash),
               infoHash: t.infoHash,
@@ -617,7 +618,7 @@ const birikmeTimer = setInterval(async () => {
   if (stream?.kind !== 'torrent' || !room.playback?.paused) return;
   let secim = 0;
   try {
-    const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(5000) })).json();
+    const stats = await (await fetch(`${STREMIO_BASE}/stats.json`, { signal: AbortSignal.timeout(5000) })).json();
     secim = stats?.[stream.infoHash]?.selections?.length || 0;
   } catch { return; }
   if (secim < BIRIKME_SINIRI) return;

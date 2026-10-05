@@ -4,7 +4,7 @@
 // torrent normal yoldan açılır.
 
 import http from 'node:http';
-import { localTorrentUrl } from '../public/js/shared/stream-url.js';
+import { localTorrentUrl, STREMIO_BASE } from '../public/js/shared/stream-url.js';
 import { dokun } from './bizim-torrentler.js';
 
 export function isit(stream, bytes = 1024 * 1024) {
@@ -12,7 +12,7 @@ export function isit(stream, bytes = 1024 * 1024) {
   if (stream?.kind !== 'torrent' || process.env.NODE_TEST_CONTEXT) return;
   dokun(stream.infoHash);
   try {
-    const req = http.get(localTorrentUrl(stream, 'http://127.0.0.1:11470'), { headers: { range: `bytes=0-${bytes - 1}` } }, (r) => r.resume());
+    const req = http.get(localTorrentUrl(stream, STREMIO_BASE), { headers: { range: `bytes=0-${bytes - 1}` } }, (r) => r.resume());
     req.on('error', () => {});
     // Arka plan işi: süreç (ya da testler) bunu beklemesin.
     req.on('socket', (sock) => sock.unref());

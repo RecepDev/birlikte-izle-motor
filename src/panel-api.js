@@ -6,6 +6,7 @@ import express from 'express';
 import { isContentId, isContentType } from './addon.js';
 import { normalizeStreams, normalizeAddonStreams } from './streams.js';
 import { isit } from './stremio-isit.js';
+import { STREMIO_BASE } from '../public/js/shared/stream-url.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun } from './bizim-torrentler.js';
 import { masaustuAc } from './masaustu-baslat.js';
 
@@ -267,7 +268,7 @@ export function createPanelApp({
   // Oda aç ekranı: Stremio'da açık (denetlenen) torrent'lerin canlı durumu: bağlı kişi, hız.
   app.get('/api/torrent-durum', wrap(async (req, res) => {
     try {
-      const stats = await (await fetch('http://127.0.0.1:11470/stats.json', { signal: AbortSignal.timeout(4000) })).json();
+      const stats = await (await fetch(`${STREMIO_BASE}/stats.json`, { signal: AbortSignal.timeout(4000) })).json();
       const out = {};
       for (const t of Object.values(stats || {})) {
         out[t.infoHash] = { peers: t.peers || 0, downMbps: Math.round(((t.downloadSpeed || 0) * 8) / 1e5) / 10, found: t.swarmSize || 0 };

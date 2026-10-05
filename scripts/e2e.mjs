@@ -16,7 +16,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUB = 7100;
 const PANEL = 7101;
 const ICERIK = { type: 'series', id: process.env.E2E_ID || 'tt14688458:2:3' };
-const STREMIO = 'http://127.0.0.1:11470';
+// MOTOR=torrserver MOTOR_URL=http://127.0.0.1:11471 ile Stremio yerine TorrServer motoruyla (Stremio açıkken de).
+const STREMIO = process.env.MOTOR_URL || 'http://127.0.0.1:11470';
+const MOTOR = process.env.MOTOR || 'stremio';
 
 let hata = 0;
 const ok = (kosul, ad, ayrinti = '') => {
@@ -27,19 +29,27 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
 const acikTorrentler = async () => Object.keys(await (await fetch(`${STREMIO}/stats.json`)).json().catch(() => ({})));
 
 // ---- hazırlık ----
-try { await fetch(`${STREMIO}/settings`, { signal: AbortSignal.timeout(3000) }); } catch {
-  console.log('Stremio kapalı: önce Stremio\'yu aç.');
-  process.exit(2);
+if (MOTOR === 'stremio') {
+  try { await fetch(`${STREMIO}/settings`, { signal: AbortSignal.timeout(3000) }); } catch {
+    console.log('Stremio kapalı: önce Stremio\'yu aç.');
+    process.exit(2);
+  }
 }
 const veri = fs.mkdtempSync(path.join(os.tmpdir(), 'birlikte-e2e-'));
+// TorrServer motoru: program her seferinde indirilmesin (data/araclar'dakini kopyala).
+const tsExe = path.join(ROOT, 'data', 'araclar', 'TorrServer.exe');
+if (MOTOR === 'torrserver' && fs.existsSync(tsExe)) {
+  fs.mkdirSync(path.join(veri, 'araclar'), { recursive: true });
+  fs.copyFileSync(tsExe, path.join(veri, 'araclar', 'TorrServer.exe'));
+}
 for (const f of ['config.json', 'tercih.json', 'trackerlar.json']) {
   const kaynak = path.join(ROOT, 'data', f);
   if (fs.existsSync(kaynak)) fs.copyFileSync(kaynak, path.join(veri, f));
 }
-const onceki = new Set(await acikTorrentler());
+const onceki = new Set(await acikTorrentler().catch(() => []));
 const sunucu = spawn(process.execPath, ['server.js'], {
   cwd: ROOT,
-  env: { ...process.env, PUBLIC_PORT: String(PUB), PANEL_PORT: String(PANEL), NO_TUNNEL: '1', TEST_INSTANCE: '1', DATA_DIR: veri, SAHIPSIZ_MS: '3000' },
+  env: { ...process.env, PUBLIC_PORT: String(PUB), PANEL_PORT: String(PANEL), NO_TUNNEL: '1', TEST_INSTANCE: '1', DATA_DIR: veri, SAHIPSIZ_MS: '3000', MOTOR, ...(process.env.MOTOR_URL ? { MOTOR_URL: process.env.MOTOR_URL } : {}) },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let sunucuCikti = '';

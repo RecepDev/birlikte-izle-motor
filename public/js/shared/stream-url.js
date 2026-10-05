@@ -1,6 +1,8 @@
 // Stremio streaming server URL builders shared by the browser and the server.
 
-export const STREMIO_BASE = 'http://127.0.0.1:11470';
+// Sunucuda MOTOR_URL ile değiştirilebiliyor (TorrServer motorunu, Stremio 11470'te açıkken başka portta
+// denemek için; bkz. scripts/e2e.mjs). Tarayıcıda process yok: her zaman 11470.
+export const STREMIO_BASE = (typeof process !== 'undefined' && process.env?.MOTOR_URL) || 'http://127.0.0.1:11470';
 
 export function torrentPath(stream) {
   const idx = Number.isInteger(stream.fileIdx) ? stream.fileIdx : -1;

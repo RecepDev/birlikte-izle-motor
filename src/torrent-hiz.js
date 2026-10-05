@@ -6,8 +6,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { STREMIO_BASE } from '../public/js/shared/stream-url.js';
 
-const STREMIO = 'http://127.0.0.1:11470';
+const STREMIO = STREMIO_BASE;
 const LISTE_URL = 'https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt';
 const LISTE_OMRU_MS = 24 * 60 * 60_000;
 // Peer araması 4K'ya yetecek kadar geniş, ama bağlantı sayısı ölçülü: torrent başına 250
