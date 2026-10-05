@@ -30,13 +30,16 @@ TEMEL = {
 
 # sinirli: süre sınırlı (acil) pencere bayt / en çok parça; oncelik: arkasındaki öncelik-7 penceresi;
 # ilk_ms: ilk parçanın süre sınırı; hiz: sonraki parçaların aralığı için hedef hız (bayt/sn);
-# wpt: whole_pieces_threshold (hızlı kaynağa bütün parçayı verme eşiği, sn; varsayılan 20).
+# ayar: libtorrent ayarları (AYAR_TEMEL'in üstüne); iptal: sarmada eski pencerenin önceliği 0 (1 değil).
+# 1. tur (A-E): whole_pieces_threshold=0 (B) açık ara en iyisi. Teşhis: sarılan parça 13-30 kaynaktan
+# iniyor ama yine 4-17 sn; her kaynağın önünde eski isteklerden kuyruk birikiyor. 2. tur bunu deniyor.
+AYAR_TEMEL = {'whole_pieces_threshold': 20, 'request_queue_time': 3, 'max_out_request_queue': 5000}
+PENCERE = dict(sinirli=16 * MB, sinirli_en_cok=24, oncelik=96 * MB, ilk_ms=0, hiz=6 * MB)
 VARYANTLAR = {
-    'A_simdiki': dict(wpt=20, sinirli=16 * MB, sinirli_en_cok=24, oncelik=96 * MB, ilk_ms=0, hiz=6 * MB),
-    'B_parca_bolme': dict(wpt=0, sinirli=16 * MB, sinirli_en_cok=24, oncelik=96 * MB, ilk_ms=0, hiz=6 * MB),
-    'C_hep_acil': dict(wpt=0, sinirli=64 * MB, sinirli_en_cok=64, oncelik=0, ilk_ms=0, hiz=6 * MB),
-    'D_yalniz_oncelik': dict(wpt=0, sinirli=0, sinirli_en_cok=0, oncelik=96 * MB, ilk_ms=0, hiz=6 * MB),
-    'E_gevsek_sure': dict(wpt=0, sinirli=32 * MB, sinirli_en_cok=32, oncelik=96 * MB, ilk_ms=1500, hiz=4 * MB),
+    'B_parca_bolme': dict(PENCERE, ayar={'whole_pieces_threshold': 0}),
+    'F_kisa_kuyruk': dict(PENCERE, ayar={'whole_pieces_threshold': 0, 'request_queue_time': 1, 'max_out_request_queue': 500}),
+    'G_iptal': dict(PENCERE, ayar={'whole_pieces_threshold': 0}, iptal=True),
+    'H_kisa_iptal_dar': dict(PENCERE, oncelik=32 * MB, ayar={'whole_pieces_threshold': 0, 'request_queue_time': 1, 'max_out_request_queue': 500}, iptal=True),
 }
 
 ses = lt.session(TEMEL)
@@ -80,7 +83,7 @@ class Okuyucu:
         for k in self.sinirli - inen:
             self.h.reset_piece_deadline(k)
         for k in (self.sinirli | self.oncelikli) - inen:
-            self.h.piece_priority(k, 1)
+            self.h.piece_priority(k, 0 if self.v.get('iptal') else 1)
         self.sinirli, self.oncelikli = set(), set()
 
     # p parçası inene kadar bekler; süre (sn) ya da None.
@@ -118,7 +121,7 @@ def kaynak_sayisi(h, p):
 
 
 def dene(ih, ad, v):
-    ses.apply_settings({'whole_pieces_threshold': v['wpt']})
+    ses.apply_settings({**AYAR_TEMEL, **v.get('ayar', {})})
     klasor = tempfile.mkdtemp(prefix='ltd-')
     p = lt.parse_magnet_uri(f'magnet:?xt=urn:btih:{ih}')
     p.save_path = klasor
@@ -186,7 +189,7 @@ for i, ih in enumerate(sys.argv[1:]):
         s['torrent'] = ih
         tablo.append(s)
         print('  ' + json.dumps(s, ensure_ascii=False), flush=True)
-json.dump(tablo, open(os.path.join(BURASI, 'lt_deneme.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+json.dump(tablo, open(os.path.join(BURASI, os.environ.get('CIKTI', 'lt_deneme.json')), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
 print('\n== Özet (medyan)')
 for ad in adlar:
     r = [x for x in tablo if x['varyant'] == ad and x.get('acilis') is not None]

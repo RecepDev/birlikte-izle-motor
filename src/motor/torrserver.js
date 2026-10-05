@@ -123,6 +123,22 @@ export function createTorrServer({ klasor, port = 8097, log, fetchImpl = fetch, 
     async kapat(infoHash) {
       await api('/torrents', { action: 'drop', hash: infoHash }).catch(() => {});
     },
+    // Yükleme (upload) hız sınırı, Mbps ya da null (sınırsız). TorrServer KB/sn olarak tutuyor.
+    async yuklemeSiniri() {
+      const kb = Number((await (await api('/settings', { action: 'get' })).json())?.UploadRateLimit) || 0;
+      return kb > 0 ? Math.round((kb * 1024 * 8) / 1e5) / 10 : null;
+    },
+    async yuklemeSiniriKoy(mbps) {
+      try {
+        const simdiki = await (await api('/settings', { action: 'get' })).json();
+        const kb = mbps ? Math.max(1, Math.round((mbps * 1e6) / 8 / 1024)) : 0;
+        await api('/settings', { action: 'set', sets: { ...simdiki, UploadRateLimit: kb } });
+        return { ok: true, mbps: await this.yuklemeSiniri() };
+      } catch (err) {
+        log.warn('TorrServer yükleme sınırı ayarlanamadı', { error: err.message });
+        return { error: 'motor' };
+      }
+    },
     akisAdresi: (infoHash, dosyaId) => `${adres}/stream?link=${infoHash}&index=${dosyaId}&play`,
   };
 }

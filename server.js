@@ -238,15 +238,17 @@ socketCtl = attachSocket(io, {
       // Stremio'nun yükleme sınırı (host bilgisayarı, Windows QoS; bkz. src/yukleme-siniri.js).
       yuklemeSiniriOku: async (room, uid) => {
         if (uid !== room.hostUserId) return { error: 'notHost' };
-        return { reply: { ok: true, mbps: await yuklemeSiniriOku() }, msgs: [] };
+        const mbps = torrServer ? await torrServer.yuklemeSiniri() : await yuklemeSiniriOku();
+        return { reply: { ok: true, mbps }, msgs: [] };
       },
       yuklemeSiniri: async (room, uid, p) => {
         if (uid !== room.hostUserId) return { error: 'notHost' };
         const mbps = p.mbps === null ? null : Number(p.mbps);
         if (mbps !== null && !(mbps >= 1 && mbps <= 100)) return { error: 'badValue' };
-        const res = await yuklemeSiniriKoy(mbps);
+        // TorrServer'da kendi ayarı (yönetici izni gerekmiyor); Stremio'da Windows QoS kuralı.
+        const res = torrServer ? await torrServer.yuklemeSiniriKoy(mbps) : await yuklemeSiniriKoy(mbps);
         if (res.error) return { error: res.error };
-        log.info('Stremio yükleme sınırı', { mbps: res.mbps });
+        log.info(torrServer ? 'TorrServer yükleme sınırı' : 'Stremio yükleme sınırı', { mbps: res.mbps });
         return { reply: { ok: true, mbps: res.mbps }, msgs: [] };
       },
       olcumler: (room) => {
