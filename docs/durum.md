@@ -17,6 +17,7 @@ Son güncelleme: 2026-10-06 · Son commit: d72779e · Masaüstü 0.7.37 · Andro
   - Motor rozeti: kendi TorrServer'ı / sunucunun motoru / Stremio / açılıyor / yok.
   - Bekçi anahtarı (varsayılan kapalı).
   - Motor açılırken önbellek alanı artık yanlışlıkla "sunucunun önbelleği" demiyor.
+  - "Film ara ve oda aç" düğmesi: sunucu uygulamadan sonra açılırsa da 5 sn içinde görünüyor.
 - **Hız:**
   - Peer portu sabit (`data/torrserver/peer-port.txt`). UPnP yönlendirmesi ve DHT'de duyurulan adres yeniden açılışta eskimiyor.
   - TorrServer'ın eski varsayılan tracker listesi güncel listeyle değişti (ngosang + sabit iyi liste).
@@ -25,7 +26,7 @@ Son güncelleme: 2026-10-06 · Son commit: d72779e · Masaüstü 0.7.37 · Andro
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.
   - TorrServer modunda "Windows onayı" uyarısı çıkmıyor.
-- `npm test` 207/207 (yeni: `test/motor-yonetim.test.js`). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
+- `npm test` 214/214 (yeni: `test/motor-yonetim.test.js`; `html-kimlik.test.js` sayfalardaki gömülü kodu derliyor). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
 - Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.36.exe`, `BirlikteIzleMotor-Android-0.32.0.apk`. 0.7.37 masaüstüne sunucudan otomatik güncellemeyle gidiyor.
 
 ## Bekleyen
@@ -41,4 +42,5 @@ Son güncelleme: 2026-10-06 · Son commit: d72779e · Masaüstü 0.7.37 · Andro
 - TorrServer'ın kendi disk önbelleği yeniden açılışta kullanılmıyor; kendi blok önbelleğimiz bu yüzden var.
 - TorrServer zorla kapatılırsa süreç sahipsiz kalır: önce `/shutdown`.
 - TorrServer'a `/settings set` göndermek açık torrent'leri kapatır. İzleme sırasında ayar yazma.
+- Kurulumsuz kısayol (`masaustu` içinde electron.exe) kaynak dosyaları doğrudan çalıştırır: açılış ekranındaki hata hemen ona yansır. d72779e'de bir tırnak hatası bütün ekran kodunu durdurmuştu.
 - Stremio motorunda Stremio asıl Birlikte İzle'yle ortak. Panel orada yeniden başlatma ve torrent kapatma göstermiyor.

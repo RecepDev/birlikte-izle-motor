@@ -164,7 +164,7 @@
     motorRozet.className = `rozet ${sinif}`;
     motorRozet.textContent = yazi;
     if (m.tur === 'kendi') motorIpucu.textContent = `Kendi TorrServer'ı${m.surum ? ` ${m.surum}` : ''}${m.peerPort ? ` · peer portu ${m.peerPort}` : ''}`;
-    else if (m.tur === 'yok') motorIpucu.textContent = m.hata ? `Açılamadı: ${m.hata}` : 'Uygulamayı yeniden aç ya da Stremio'yu başlat';
+    else if (m.tur === 'yok') motorIpucu.textContent = m.hata ? `Açılamadı: ${m.hata}` : "Uygulamayı yeniden aç ya da Stremio'yu başlat";
     else if (m.tur === 'aciliyor') motorIpucu.textContent = 'İlk açılışta TorrServer indiriliyor (yaklaşık 64 MB)';
     document.getElementById('motor-bekci-satir').hidden = m.tur !== 'kendi';
     motorBekci.checked = m.bekci === true;
@@ -212,12 +212,16 @@
   document.getElementById('panel').addEventListener('click', () => {
     window.kabuk.odayaGit('http://127.0.0.1:7301/ara');
   });
-  fetch('http://127.0.0.1:7301/api/ping', { mode: 'no-cors', cache: 'no-store' })
-    .then(() => {
-      document.getElementById('panel').hidden = false;
-      document.getElementById('panel-ipucu').hidden = false;
-    })
-    .catch(() => {});
+  // Sunucu uygulamadan sonra açılırsa düğme de sonradan görünsün: bulunana kadar 5 sn'de bir bakılıyor.
+  function panelAra() {
+    fetch('http://127.0.0.1:7301/api/ping', { mode: 'no-cors', cache: 'no-store' })
+      .then(() => {
+        document.getElementById('panel').hidden = false;
+        document.getElementById('panel-ipucu').hidden = false;
+      })
+      .catch(() => setTimeout(panelAra, 5000));
+  }
+  panelAra();
 
   // Açık odalar: sende çalışan sunucu ve son girdiğin odanın sunucusu. Tünel adresi
   // değiştiyse (host sunucuyu yeniden başlattıysa) yeni linki yapıştırmak gerekiyor.
