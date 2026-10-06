@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-06 · Son commit: 2c75025 · Masaüstü 0.7.37 · Android 0.32.0 (versionCode 32)
+Son güncelleme: 2026-10-06 · Son commit: 9b696ec · Masaüstü 0.7.37 · Android 0.32.0 (versionCode 32)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
@@ -22,6 +22,9 @@ Son güncelleme: 2026-10-06 · Son commit: 2c75025 · Masaüstü 0.7.37 · Andro
   - Peer portu sabit (`data/torrserver/peer-port.txt`). UPnP yönlendirmesi ve DHT'de duyurulan adres yeniden açılışta eskimiyor.
   - TorrServer'ın eski varsayılan tracker listesi güncel listeyle değişti (ngosang + sabit iyi liste).
   - Metadata yoklaması 300 ms'den 100 ms'ye indi.
+  - Okuyan kalmayan torrent 30 sn yerine 2 dk sonra kapanıyor (duraklatıp dönünce peer'ler sıfırlanmasın).
+  - Günlükte her yeni torrent için "Torrent açılışı" satırı var: `metadataSn` ve `ilkVeriSn`.
+  - Oda: video hiç başlamadı ve veri gelmiyorsa, ölçülmüş iyi kaynağa 15 sn'de geçiliyor (eskisi 45 sn).
 - **Düzeltme:** TorrServer'da ayar yazmak bütün torrent'leri kapatıyor (`SetSettings` → `dropAllTorrent`).
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.
@@ -34,7 +37,10 @@ Son güncelleme: 2026-10-06 · Son commit: 2c75025 · Masaüstü 0.7.37 · Andro
 - Kullanıcıyla Stremio kapalıyken gerçek izleme denemesi yapılmadı.
 - Tarayıcı uyumluluk modu (Stremio hlsv2 dönüştürücüsü) TorrServer modunda yok.
 - Arayüzde ~78 kullanıcıya görünen "Stremio" yazısı kaldı (Faz 5).
-- Açılış hızı ölçümde Stremio'nun gerisinde (medyan 12.9 sn, Stremio 4.1 sn). Yeni ayarlarla yeniden ölçülmedi (`deneme/motor/olc2.mjs`).
+- Açılış hızı ölçümde Stremio'nun gerisinde (medyan 12.9 sn, Stremio 4.1 sn).
+  - Yeni ölçüm `deneme/motor/olc5.out` / `sonuc5.json`. Varyantlar: ts-uretim, ts-kucuk-ra (ReaderReadAHead 10), ts-utp-yok.
+  - Ölçüm kullanıcı izlerken bekliyor. Sonuca göre `AYARLAR` güncellenecek.
+- Film bilgisini (metadata) diskte saklama ve itorrents gibi bir siteden isteme yapılmadı. İkincisi gizlilik yüzünden kullanıcı onayı bekliyor.
 - Windows güvenlik duvarı açık olan bilgisayarlarda TorrServer'a gelen bağlantı kuralı yok (bu bilgisayarda duvar kapalı).
 
 ## Bilinen tuzaklar
