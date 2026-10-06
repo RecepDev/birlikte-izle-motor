@@ -72,7 +72,9 @@ class OdaActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         // Kısıtlı donanım çözücüsü olan telefonlarda yazılım çözücüye düşebilsin.
+        // Telefonun çözemediği sesler (DTS, TrueHD…) FFmpeg çözücüsüyle (önce telefonun kendi çözücüsü).
         val renderers = DefaultRenderersFactory(this).setEnableDecoderFallback(true)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
         // Telefondaki Stremio'dan parça parça oku (bkz. ParcaliKaynak); diğer adresler aynen.
         // enginefs-prio: telefondaki Stremio izlenen yerin parçalarını her şeyden önce indirsin.
         val http = androidx.media3.datasource.DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)

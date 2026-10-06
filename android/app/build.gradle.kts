@@ -13,6 +13,8 @@ android {
         targetSdk = 34
         versionCode = 31
         versionName = "0.31.0"
+        // Telefonlar: FFmpeg ses çözücüsünün yerel kütüphaneleri yalnız bunlar için (APK şişmesin).
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildTypes {
@@ -62,6 +64,9 @@ dependencies {
     // Uyumlu mod (host'ta dönüştürülmüş HLS) yedek olarak çalışsın diye.
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-ui:$media3")
+    // DTS, TrueHD, AC3/EAC3 gibi telefonun çözemediği sesler için FFmpeg (Jellyfin'in derlemesi). Eskiden
+    // bu dosyalarda ses Stremio'nun dönüştürücüsüyle (Uyumlu mod) geliyordu; Stremio'suz motorda o yok.
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:$media3+1")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.core:core-ktx:1.12.0")
     // Köprü betiğini sayfa betiklerinden önce çalıştırmak için (addDocumentStartJavaScript).
