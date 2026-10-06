@@ -42,7 +42,7 @@ export function validateHlsV2(room, convertId, tail, rawQuery, stremioBase = STR
   if (u.origin !== new URL(stremioBase).origin) return null;
   const m = u.pathname.match(/^\/([0-9a-f]{40})\/(-1|\d+)$/);
   if (!m) return null;
-  for (const k of u.searchParams.keys()) if (k !== 'tr') return null;
+  for (const k of u.searchParams.keys()) if (k !== 'tr' && k !== 'f') return null;
   const stream = room.streams.find(
     (s) => s.kind === 'torrent' && s.infoHash === m[1] && torrentPath(s) === `/${m[1]}/${m[2]}`,
   );

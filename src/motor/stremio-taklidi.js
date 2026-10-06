@@ -77,8 +77,8 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     return ekleniyor.get(ih);
   }
 
-  // Torrent'i (gerekirse) açar, metadata gelince istenen dosyayı seçer.
-  async function dosya(ih, idx, tr) {
+  // Torrent'i (gerekirse) açar, metadata gelince istenen dosyayı seçer. ad: adresteki f= ya da kayıt.
+  async function dosya(ih, idx, tr, ad) {
     const anahtar = `${ih}/${idx}`;
     let t = await ts.torrent(ih);
     if (secilen.has(anahtar) && t) return secilen.get(anahtar);
@@ -89,7 +89,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
       await new Promise((r) => setTimeout(r, 300));
       t = await ts.torrent(ih);
     }
-    const f = dosyaSec(t.file_stats, idx, dosyaAdi(ih, idx));
+    const f = dosyaSec(t.file_stats, idx, ad || dosyaAdi(ih, idx));
     secilen.set(anahtar, f);
     return f;
   }
@@ -101,7 +101,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
   }
 
   async function akit(req, res, ih, idx, adres) {
-    const f = await dosya(ih, idx, trackerlar(adres.searchParams.getAll('tr')));
+    const f = await dosya(ih, idx, trackerlar(adres.searchParams.getAll('tr')), adres.searchParams.get('f'));
     if (!f) return json(res, 504, { error: 'metadata' });
     const basliklar = {};
     if (req.headers.range) basliklar.range = req.headers.range;

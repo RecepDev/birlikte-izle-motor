@@ -17,3 +17,6 @@ deneme/motor/.venv-lt/
 deneme/motor/kullanilan.json
 deneme/motor/sonuc2.json
 deneme/motor/*.out
+
+# masaustu kurulum paketi icin kopyalanan motor kodu (asli src/motor)
+masaustu/motor/

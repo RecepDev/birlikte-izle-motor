@@ -10,6 +10,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { vekilAdres, ayarla: vekilAyarla } = require('./stremio-vekil.cjs');
+const { motoruHazirla } = require('./motor-baslat.cjs');
 
 // mpv kurulum yeri kişiden kişiye değişiyor; bilinen yerlere ve PATH'e bakıyoruz.
 const MPV_ADAYLARI = [
@@ -679,8 +680,18 @@ else {
 // kaydı çıplak electron.exe'ye çevirip bağlantıyı bozuyor.
 if (app.isPackaged) app.setAsDefaultProtocolClient(SEMA);
 
+// Stremio'suz çalışma: 11470'te yayın sunucusu yoksa TorrServer motoru açılıyor (bkz. motor-baslat.cjs).
+let motor = null;
+app.on('will-quit', () => motor?.durdur());
+
 app.whenReady().then(() => {
   if (!tekOrnek) return; // pencere açmadan kapanıyoruz
+  motoruHazirla({ klasor: app.getPath('userData'), gunluk })
+    .then((m) => {
+      motor = m;
+      if (m) gunluk('motor: TorrServer açıldı (Stremio yok)');
+    })
+    .catch((err) => gunluk(`motor açılamadı: ${err.message}`));
   ana = new BrowserWindow({
     width: 1280, height: 800, backgroundColor: '#0e0f13', title: 'Birlikte İzle',
     webPreferences: {

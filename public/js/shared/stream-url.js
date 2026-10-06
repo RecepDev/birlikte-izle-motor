@@ -17,8 +17,13 @@ function trackerQuery(sources) {
 }
 
 // Stremio starts the torrent itself when this URL is requested.
+// f=<dosya adı>: TorrServer motoru dosyayı adıyla eşleştiriyor (Torrentio'nun sırası dolgu dosyalarını
+// da sayıyor, TorrServer saymıyor; sezon paketinde yanlış bölüm açılmasın). Stremio bilinmeyen
+// parametreyi yok sayıyor.
 export function localTorrentUrl(stream, base = STREMIO_BASE) {
-  const query = trackerQuery(stream.sources);
+  const query = [trackerQuery(stream.sources), stream.filename ? `f=${encodeURIComponent(stream.filename)}` : '']
+    .filter(Boolean)
+    .join('&');
   return `${base}${torrentPath(stream)}${query ? `?${query}` : ''}`;
 }
 

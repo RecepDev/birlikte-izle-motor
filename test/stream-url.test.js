@@ -27,6 +27,13 @@ test('localTorrentUrl adds only tracker/dht sources as tr params', () => {
   );
 });
 
+test('localTorrentUrl dosya adını f= olarak ekler (TorrServer motoru adla eşleştiriyor)', () => {
+  assert.equal(
+    localTorrentUrl({ infoHash: ih, fileIdx: 4, filename: 'Film 2160p.mkv' }, 'http://x'),
+    `http://x/${ih}/4?f=Film%202160p.mkv`,
+  );
+});
+
 test('localTorrentUrl without sources has no query', () => {
   assert.equal(localTorrentUrl({ infoHash: ih, fileIdx: 1 }, 'http://x'), `http://x/${ih}/1`);
 });

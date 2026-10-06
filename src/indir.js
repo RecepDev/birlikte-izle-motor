@@ -27,6 +27,10 @@ export const MASAUSTU_DOSYALARI = [
   'electron/video-koprusu.cjs',
   'electron/masaustu.css',
   'electron/baslangic.html',
+  'electron/motor-baslat.cjs',
+  // Stremio'suz motor, sunucuyla ortak kod (src/motor'dan veriliyor).
+  'motor/torrserver.js',
+  'motor/stremio-taklidi.js',
 ];
 
 export function createIndirRouter({ root, log }) {
@@ -62,6 +66,7 @@ export function createIndirRouter({ root, log }) {
     if (!MASAUSTU_DOSYALARI.includes(ad)) return res.status(404).end();
     res.set('Cache-Control', 'no-store');
     if (ad === 'kesif.json') return res.sendFile(path.join(root, 'data', 'kesif.json'));
+    if (ad.startsWith('motor/')) return res.sendFile(path.join(root, 'src', ad));
     res.sendFile(path.join(masaustuKok, ad));
   });
 
