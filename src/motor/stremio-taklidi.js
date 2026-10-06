@@ -12,6 +12,7 @@
 //
 // Uyumlu mod (/hlsv2, ffmpeg ile dönüştürme) henüz yok: 404 dönüyor (plan: Faz 4).
 
+import crypto from 'node:crypto';
 import http from 'node:http';
 
 const DOSYA = /^\/([0-9a-f]{40})\/(-1|\d+)$/i;
@@ -63,7 +64,10 @@ export function opensubHash(boyut, bas, son) {
   return (toplam & 0xffffffffffffffffn).toString(16).padStart(16, '0');
 }
 
+const YEREL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
 export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null }) {
+  const kimlik = crypto.randomBytes(8).toString('hex'); // 127.0.0.1'e cevap verenin biz olduğunu doğrulamak için
   const ekleniyor = new Map(); // hash -> ekleme sözü (aynı torrent iki kez eklenmesin)
   const secilen = new Map(); // `${hash}/${sıra}` -> { id, length }
   let sunucu = null;
@@ -140,7 +144,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     const yol = adres.pathname;
     if (yol === '/settings') {
       if (req.method === 'POST') req.resume();
-      return json(res, 200, { options: [], values: { serverVersion: 'torrserver', motor: 'torrserver' } });
+      return json(res, 200, { options: [], values: { serverVersion: 'torrserver', motor: 'torrserver', kimlik } });
     }
     if (yol === '/stats.json') {
       const liste = await ts.torrentler().catch(() => []);
@@ -171,16 +175,37 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
   return {
     async baslat() {
       sunucu = http.createServer((req, res) => {
+        // "::" üzerinde dinliyoruz (aşağıya bak) ama yalnız bu bilgisayardan gelen istekler.
+        if (!YEREL.has(req.socket.remoteAddress)) {
+          res.writeHead(403);
+          res.end();
+          return;
+        }
         isle(req, res).catch((err) => {
           log.warn('Stremio taklidi isteği başarısız', { url: req.url, error: err.message });
           if (!res.headersSent) json(res, 500, { error: 'ic' });
           else res.destroy();
         });
       });
+      // "::" (çift yığın): Windows'ta 127.0.0.1'e bağlanmak, Stremio "::" üzerinde dinlerken bile hata
+      // vermiyor ve 127.0.0.1 trafiğini Stremio'dan çalıyordu (denendi). "::" çakışınca EADDRINUSE veriyor.
       await new Promise((resolve, reject) => {
         sunucu.once('error', reject);
-        sunucu.listen(port, '127.0.0.1', resolve);
+        sunucu.listen({ port, host: '::', ipv6Only: false }, resolve);
+      }).catch(async (err) => {
+        if (err.code !== 'EAFNOSUPPORT' && err.code !== 'EADDRNOTAVAIL') throw err;
+        await new Promise((resolve, reject) => { sunucu.once('error', reject); sunucu.listen(port, '127.0.0.1', resolve); });
       });
+      // Stremio yalnız IPv4'te dinliyorsa bağlanabiliyoruz ama 127.0.0.1 ona gidiyor: cevap verenin
+      // biz olduğunu doğrula, değilse geri çekil (port dolu say).
+      const cevap = await fetch(`http://127.0.0.1:${sunucu.address().port}/settings`, { signal: AbortSignal.timeout(3000) })
+        .then((r) => r.json()).catch(() => null);
+      if (cevap?.values?.kimlik !== kimlik) {
+        sunucu.close();
+        const err = new Error(`127.0.0.1:${port} başka bir programda (Stremio)`);
+        err.code = 'EADDRINUSE';
+        throw err;
+      }
       log.info('Stremio taklidi dinliyor (motor: TorrServer)', { port });
     },
     durdur: () => sunucu?.close(),
