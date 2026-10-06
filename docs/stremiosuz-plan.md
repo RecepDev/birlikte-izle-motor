@@ -142,6 +142,14 @@ Yapılanlar (hepsi bu kopyada, `motor` dalında):
   (`org.jellyfin.media3:media3-ffmpeg-decoder`). DTS, TrueHD ve AC3'ü telefon kendisi çözüyor; Stremio'nun
   dönüştürücüsüne gerek kalmadı.
 
+- **Video önbelleği** (`src/motor/onbellek.js`):
+  - TorrServer'ın kendi disk önbelleği yeniden açılışta diskteki parçaları okumuyor (kaynak kodunda
+    Init boş başlıyor). O yüzden önbellek ara katmanda yapıldı: geçen video 4 MB'lık bloklar halinde
+    diske yazılıyor.
+  - Sınır: sunucuda 10 GB (`ONBELLEK_GB`), masaüstünde 5 GB; en uzun süredir kullanılmayan bloklar siliniyor.
+  - Ölçüm: TorrServer kapatılıp açıldıktan sonra ilk 2 MB 18.4 sn yerine 0.008 sn'de geldi.
+  - Telefonda henüz yok.
+
 Kalanlar:
 - **Gerçek kullanımda deneme.** Host'ta Stremio kapalıyken kopyanın sunucusu
   ("Birlikte Izle Motor" kısayolu), telefonda yeni APK.

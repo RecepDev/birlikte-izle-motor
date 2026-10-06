@@ -95,3 +95,49 @@ test('Stremio taklidi: stats, akış (Range), kapatma, ekleme', async () => {
     kaynak.close();
   }
 });
+
+test('Önbellek: izlenen yer diske yazılır, TorrServer kapalıyken de diskten gelir', async () => {
+  const { createOnbellek } = await import('../src/motor/onbellek.js');
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const klasor = fs.mkdtempSync(path.join(os.tmpdir(), 'onbellek-'));
+  const veri = Buffer.from('0123456789abcdefghij'); // 20 bayt, blok 4 bayt: 5 blok
+  let istek = 0;
+  const kaynak = http.createServer((req, res) => {
+    istek++;
+    const [a, b] = String(req.headers.range).slice(6).split('-').map(Number);
+    res.writeHead(206, { 'content-range': `bytes ${a}-${b}/${veri.length}` });
+    res.end(veri.subarray(a, b + 1));
+  });
+  await new Promise((r) => kaynak.listen(0, '127.0.0.1', r));
+  const ts = {
+    async torrent() { return { hash: IH, file_stats: [{ id: 1, length: 20, path: 'x/film.mkv' }] }; },
+    async ekle() {},
+    akisAdresi: () => `http://127.0.0.1:${kaynak.address().port}/`,
+  };
+  const onbellek = createOnbellek({ klasor, blok: 4, log: sessiz });
+  const taklit = createStremioTaklidi({ ts, port: 0, log: sessiz, onbellek });
+  await taklit.baslat();
+  const adres = `http://127.0.0.1:${taklit.port()}/${IH}/0`;
+  try {
+    const ilk = await fetch(adres, { headers: { range: 'bytes=0-19' } });
+    assert.equal(await ilk.text(), veri.toString());
+    assert.equal(istek, 1);
+    await new Promise((r) => setTimeout(r, 200)); // bloklar arkada yazılıyor
+    kaynak.close(); // TorrServer yok
+    const ikinci = await fetch(adres, { headers: { range: 'bytes=5-14' } });
+    assert.equal(ikinci.status, 206);
+    assert.equal(ikinci.headers.get('content-range'), 'bytes 5-14/20');
+    assert.equal(await ikinci.text(), '56789abcde');
+    assert.equal(istek, 1, 'ikinci okuma internete/TorrServer\'a gitmedi');
+    // Sınır: en uzun süredir kullanılmayan bloklar silinir.
+    const kucuk = createOnbellek({ klasor, sinirBayt: 8, blok: 4, log: sessiz });
+    const sonuc = await kucuk.temizle();
+    assert.ok(sonuc.toplam <= 8);
+  } finally {
+    taklit.durdur();
+    kaynak.close();
+    fs.rmSync(klasor, { recursive: true, force: true });
+  }
+});

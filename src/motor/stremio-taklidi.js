@@ -19,6 +19,7 @@ const DOSYA = /^\/([0-9a-f]{40})\/(-1|\d+)$/i;
 const VIDEO = /\.(mkv|mp4|avi|m4v|mov|wmv|ts|m2ts|webm|mpg|mpeg)$/i;
 const METADATA_MS = 120_000;
 const AKTARILAN = ['content-type', 'content-length', 'content-range', 'accept-ranges', 'last-modified'];
+const MIME = { mkv: 'video/x-matroska', mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', avi: 'video/x-msvideo', ts: 'video/mp2t', mov: 'video/quicktime' };
 
 // Torrentio'nun "fileIdx"i torrent'teki sırayı dolgu (pad) dosyalarıyla birlikte sayıyor,
 // TorrServer dolgu dosyalarını listelemiyor: sıra kayabiliyor (ölçümde 4 numaralı dosya
@@ -66,7 +67,8 @@ export function opensubHash(boyut, bas, son) {
 
 const YEREL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
-export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null }) {
+// onbellek: src/motor/onbellek.js (verilmezse her şey doğrudan TorrServer'dan).
+export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null, onbellek = null }) {
   const kimlik = crypto.randomBytes(8).toString('hex'); // 127.0.0.1'e cevap verenin biz olduğunu doğrulamak için
   const ekleniyor = new Map(); // hash -> ekleme sözü (aynı torrent iki kez eklenmesin)
   const secilen = new Map(); // `${hash}/${sıra}` -> { id, length }
@@ -105,7 +107,10 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
   }
 
   async function akit(req, res, ih, idx, adres) {
-    const f = await dosya(ih, idx, trackerlar(adres.searchParams.getAll('tr')), adres.searchParams.get('f'));
+    const tr = trackerlar(adres.searchParams.getAll('tr'));
+    const ad = adres.searchParams.get('f');
+    if (onbellek) return onbellekliAkit(req, res, ih, idx, tr, ad);
+    const f = await dosya(ih, idx, tr, ad);
     if (!f) return json(res, 504, { error: 'metadata' });
     const basliklar = {};
     if (req.headers.range) basliklar.range = req.headers.range;
@@ -122,6 +127,122 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     });
     res.on('close', () => ust.destroy());
     ust.end();
+  }
+
+  // Önbellekli akış: istenen aralığın baştaki önbellekte olan blokları diskten (internete, TorrServer'a
+  // gitmeden), kalanı TorrServer'dan; geçerken tam bloklar önbelleğe yazılıyor.
+  async function onbellekliAkit(req, res, ih, idx, tr, ad) {
+    // Dosya seçimi daha önce yapıldıysa TorrServer'ı beklemeden başla (torrent arkada açılıyor:
+    // önbellekteki kısım bitince lazım olacak).
+    const anahtar = `${idx}|${ad || ''}`;
+    let f = onbellek.secim(ih, anahtar);
+    if (f) {
+      dosya(ih, idx, tr, ad).catch(() => {});
+    } else {
+      f = await dosya(ih, idx, tr, ad);
+      if (!f) return json(res, 504, { error: 'metadata' });
+      onbellek.secimKaydet(ih, anahtar, f);
+    }
+    const boy = f.length;
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || '').trim());
+    let bas = 0;
+    let son = boy - 1;
+    if (m && m[1] === '' && m[2] !== '') bas = Math.max(0, boy - Number(m[2])); // "son N bayt"
+    else if (m) {
+      bas = Number(m[1] || 0);
+      if (m[2] !== '') son = Math.min(boy - 1, Number(m[2]));
+    }
+    if (bas >= boy || bas > son) {
+      res.writeHead(416, { 'content-range': `bytes */${boy}` });
+      return res.end();
+    }
+    const uzanti = String(f.path || '').split('.').pop().toLowerCase();
+    const baslik = { 'content-type': MIME[uzanti] || 'application/octet-stream', 'accept-ranges': 'bytes', 'content-length': String(son - bas + 1) };
+    if (m) baslik['content-range'] = `bytes ${bas}-${son}/${boy}`;
+    res.writeHead(m ? 206 : 200, baslik);
+    if (req.method === 'HEAD') return res.end();
+
+    let kapandi = false;
+    res.on('close', () => { kapandi = true; });
+    const gonder = (veri) => new Promise((r) => {
+      if (kapandi || res.write(veri)) return r();
+      const devam = () => {
+        res.off('drain', devam);
+        res.off('close', devam);
+        r();
+      };
+      res.on('drain', devam);
+      res.on('close', devam);
+    });
+
+    const B = onbellek.blok;
+    let konum = bas;
+    while (konum <= son && !kapandi) {
+      const no = Math.floor(konum / B);
+      const veri = await onbellek.oku(ih, f.id, no, boy);
+      if (!veri) break;
+      const a = konum - no * B;
+      const b = Math.min(veri.length, son - no * B + 1);
+      await gonder(veri.subarray(a, b));
+      konum = no * B + b;
+    }
+    if (konum > son || kapandi) return res.end();
+
+    await new Promise((bitti) => {
+      const ust = http.request(ts.akisAdresi(ih, f.id), { headers: { range: `bytes=${konum}-${son}` } }, (up) => {
+        if (up.statusCode !== 206 && up.statusCode !== 200) {
+          up.resume();
+          res.destroy();
+          return bitti();
+        }
+        let pos = konum; // up'tan gelen sıradaki baytın dosyadaki yeri
+        let blokNo = Math.ceil(konum / B); // önbelleğe yazılacak ilk tam blok (baştaki yarım blok yazılmaz)
+        let parcalar = [];
+        let toplanan = 0;
+        up.on('data', (p) => {
+          if (!res.write(p)) {
+            up.pause();
+            res.once('drain', () => up.resume());
+          }
+          let off = 0;
+          while (off < p.length) {
+            const blokBas = blokNo * B;
+            if (pos + off < blokBas) {
+              off = Math.min(p.length, blokBas - pos);
+              continue;
+            }
+            const blokSon = blokBas + onbellek.blokBoyu(boy, blokNo);
+            const al = Math.min(p.length - off, blokSon - (pos + off));
+            parcalar.push(p.subarray(off, off + al));
+            toplanan += al;
+            off += al;
+            if (blokBas + toplanan === blokSon) {
+              onbellek.yaz(ih, f.id, blokNo, Buffer.concat(parcalar));
+              parcalar = [];
+              toplanan = 0;
+              blokNo++;
+            }
+          }
+          pos += p.length;
+        });
+        up.on('end', () => {
+          res.end();
+          bitti();
+        });
+        up.on('error', () => {
+          res.destroy();
+          bitti();
+        });
+        up.on('close', bitti);
+      });
+      ust.on('error', (err) => {
+        log.warn('TorrServer akışı başarısız', { infoHash: ih, error: err.message });
+        res.destroy();
+        bitti();
+      });
+      res.on('close', () => ust.destroy());
+      ust.end();
+    });
   }
 
   async function opensub(res, videoUrl) {

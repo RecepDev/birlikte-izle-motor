@@ -37,8 +37,13 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098 }) {
   const log = { info: yaz('bilgi'), warn: yaz('uyarı'), error: yaz('hata') };
   const { createTorrServer } = await import(pathToFileURL(path.join(kok, 'torrserver.js')).href);
   const { createStremioTaklidi } = await import(pathToFileURL(path.join(kok, 'stremio-taklidi.js')).href);
+  const { createOnbellek } = await import(pathToFileURL(path.join(kok, 'onbellek.js')).href);
   const ts = createTorrServer({ klasor, port: tsPort, log });
-  const taklit = createStremioTaklidi({ ts, port, log });
+  // Video önbelleği: izlenen yerler kullanıcı klasöründe kalıyor (en çok 5 GB).
+  const onbellek = createOnbellek({ klasor: path.join(klasor, 'onbellek'), sinirBayt: 5 * 1024 ** 3, log });
+  onbellek.temizle();
+  const temizlik = setInterval(() => onbellek.temizle(), 10 * 60_000);
+  const taklit = createStremioTaklidi({ ts, port, log, onbellek });
   // Önce 11470'i tut (o arada Stremio açılırsa burada hata verir), sonra TorrServer'ı aç.
   await taklit.baslat();
   try {
@@ -49,6 +54,7 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098 }) {
   }
   return {
     durdur() {
+      clearInterval(temizlik);
       taklit.durdur();
       ts.durdur();
     },

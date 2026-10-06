@@ -31,6 +31,7 @@ export const MASAUSTU_DOSYALARI = [
   // Stremio'suz motor, sunucuyla ortak kod (src/motor'dan veriliyor).
   'motor/torrserver.js',
   'motor/stremio-taklidi.js',
+  'motor/onbellek.js',
 ];
 
 export function createIndirRouter({ root, log }) {

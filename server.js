@@ -25,6 +25,7 @@ import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
 import { createTorrServer } from './src/motor/torrserver.js';
 import { createStremioTaklidi } from './src/motor/stremio-taklidi.js';
+import { createOnbellek } from './src/motor/onbellek.js';
 import { dosyaAdi } from './src/motor/dosya-adlari.js';
 import { STREMIO_BASE } from './public/js/shared/stream-url.js';
 import { createIndirRouter } from './src/indir.js';
@@ -77,7 +78,12 @@ let motorAyri = false; // TorrServer çalışıyor (Stremio asıl sunucuyla orta
 if (MOTOR === 'torrserver') {
   torrServer = createTorrServer({ klasor: DATA, port: Number(process.env.TORRSERVER_PORT) || 8097, log });
   process.on('exit', () => torrServer?.durdur());
-  stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: Number(new URL(STREMIO_BASE).port) || 11470, log, dosyaAdi });
+  // Video önbelleği (Stremio'nun disk önbelleği gibi): izlenen yerler diskte kalıyor; aynı film / yarım
+  // kalan yer yeniden açılınca internete gitmeden geliyor. Sınır ONBELLEK_GB (varsayılan 10 GB).
+  const onbellek = createOnbellek({ klasor: path.join(DATA, 'onbellek'), sinirBayt: (Number(process.env.ONBELLEK_GB) || 10) * 1024 ** 3, log });
+  onbellek.temizle();
+  setInterval(() => onbellek.temizle(), 10 * 60_000).unref();
+  stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: Number(new URL(STREMIO_BASE).port) || 11470, log, dosyaAdi, onbellek });
   try {
     await stremioTaklidi.baslat();
     await torrServer.baslat();
