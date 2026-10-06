@@ -179,6 +179,8 @@ class OdaActivity : AppCompatActivity() {
         thread {
             // Stremio'suz motor sayfadan önce hazır olsun: sayfa açılırken "telefonda Stremio var mı" bakıyor.
             Motor.hazirla(applicationContext)
+            // Önbellek boyutu (ana ekrandan): motora ya da telefondaki Stremio'ya.
+            Onbellek.uygula(applicationContext)
             val uzak = Guncelleme.oku("$sunucu/indir/android/kopru.js")?.takeIf { it.contains("__kopru") }
             runOnUiThread {
                 kopru = cihazBilgisi() + (uzak ?: assets.open("kopru.js").bufferedReader().use { it.readText() })

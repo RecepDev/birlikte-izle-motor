@@ -311,6 +311,9 @@ class MainActivity : AppCompatActivity() {
         ayarlar.addView(ayrac(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
         kaliteDugmesi = degerYazisi().apply { text = kaliteYazisi() }
         ayarlar.addView(satir("Görüntü kalitesi", "Önce bu kalitenin kaynakları aranır", kaliteDugmesi!!) { kaliteSor() })
+        ayarlar.addView(ayrac(), LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)))
+        onbellekDugmesi = degerYazisi().apply { text = Onbellek.yazi(Onbellek.gb(this@MainActivity)) }
+        ayarlar.addView(satir("💾 Önbellek", "İzlenen yerler telefonda kalır, yeniden açınca hemen gelir", onbellekDugmesi!!) { onbellekSor() })
         kart.addView(ayarlar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = dp(16)
         })
@@ -390,6 +393,37 @@ class MainActivity : AppCompatActivity() {
                 isimDugmesi?.text = isimYazisi()
                 pencere.dismiss()
                 if (ilk && kayit.getString("kalite", null) == null) kaliteSor()
+            }
+        }
+        pencere.show()
+    }
+
+    // ---- video önbelleği boyutu (elle, GB; 0 = kapalı) ----------------------------------
+    private var onbellekDugmesi: TextView? = null
+    private fun onbellekSor() {
+        val kutu = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setText(Onbellek.gb(this@MainActivity).let { if (it % 1f == 0f) it.toInt().toString() else it.toString() })
+            selectAll()
+        }
+        val pencere = android.app.AlertDialog.Builder(this)
+            .setTitle("Önbellek (GB)")
+            .setMessage("Telefonda izlenen yerler için ayrılacak yer. Dolunca en eski kullanılan silinir. 0 = kapalı.")
+            .setView(kutu)
+            .setNegativeButton("Vazgeç", null)
+            .setPositiveButton("Kaydet", null)
+            .create()
+        pencere.setOnShowListener {
+            pencere.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val gb = kutu.text.toString().replace(',', '.').toFloatOrNull()
+                if (gb == null || gb < 0f || gb > 1000f) {
+                    Toast.makeText(this, "0 ile 1000 arasında bir sayı gir.", Toast.LENGTH_SHORT).show()
+                } else {
+                    Onbellek.kaydet(this, gb)
+                    onbellekDugmesi?.text = Onbellek.yazi(gb)
+                    thread { Onbellek.uygula(applicationContext) }
+                    pencere.dismiss()
+                }
             }
         }
         pencere.show()

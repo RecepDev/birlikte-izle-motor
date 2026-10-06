@@ -12,8 +12,10 @@ import path from 'node:path';
 
 export const BLOK = 4 * 1024 * 1024;
 
+// sinirBayt 0: önbellek kapalı (yazılmıyor, okunmuyor; temizlikte hepsi siliniyor).
 export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK, log }) {
   fs.mkdirSync(klasor, { recursive: true });
+  let sinir = sinirBayt;
   const yazilan = new Set(); // şu an yazılmakta olan bloklar (aynı blok iki kez yazılmasın)
 
   const blokYolu = (ih, id, no) => path.join(klasor, ih, String(id), `${no}.blk`);
@@ -49,11 +51,11 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
         }
       }
       let toplam = dosyalar.reduce((a, f) => a + f.boy, 0);
-      if (toplam <= sinirBayt) return { toplam, silinen: 0 };
+      if (toplam <= sinir) return { toplam, silinen: 0 };
       dosyalar.sort((a, b) => a.zaman - b.zaman);
       let silinen = 0;
       for (const f of dosyalar) {
-        if (toplam <= sinirBayt * 0.9) break;
+        if (toplam <= sinir * 0.9) break;
         await fs.promises.unlink(f.yol).catch(() => {});
         toplam -= f.boy;
         silinen++;
@@ -70,6 +72,12 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
     blok,
     blokBoyu,
     temizle,
+    acik: () => sinir > 0,
+    // Elle girilen boyut (bkz. src/onbellek-ayar.js); küçülünce fazlası hemen siliniyor.
+    sinirAyarla(bayt) {
+      sinir = Math.max(0, bayt);
+      return temizle();
+    },
     // Daha önce seçilmiş dosya (TorrServer'a sormadan, internet yokken de): { id, length, path } | null
     secim(ih, anahtar) {
       return secimler(ih)[anahtar] || null;

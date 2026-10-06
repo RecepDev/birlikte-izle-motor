@@ -613,6 +613,45 @@ ipcMain.on('kabuk:onbellek-yaz', (_e, sn) => {
 });
 // Otomatik kaynak seçimi (Oda aç): ana ekrandan açılıp kapatılıyor, varsayılan açık.
 ipcMain.on('kabuk:oto', (e) => { e.returnValue = ayarOku().otoKaynak !== false; });
+// Video önbelleği boyutu (GB, elle; 0 = kapalı), bu bilgisayarın motoruna göre:
+// - uygulama kendi TorrServer'ını açtıysa onun önbelleği (motor-baslat.cjs),
+// - 11470'te Stremio varsa Stremio'nun kendi ayarı (cacheSize),
+// - 11470 aynı bilgisayardaki Birlikte İzle sunucusunun motoruysa oda ayarlarından (host) değişiyor.
+const GB = 1024 ** 3;
+async function yerelMotor() {
+  try {
+    return (await (await fetch('http://127.0.0.1:11470/settings', { signal: AbortSignal.timeout(3000) })).json())?.values || null;
+  } catch {
+    return null;
+  }
+}
+ipcMain.handle('kabuk:video-onbellek', async () => {
+  if (typeof motor !== 'undefined' && motor) return { motor: 'torrserver', gb: motor.onbellekGb() };
+  const v = await yerelMotor();
+  if (!v) return { motor: null };
+  if (v.motor === 'torrserver') return { motor: 'sunucu' };
+  return { motor: 'stremio', gb: v.cacheSize === null ? null : Math.round((Number(v.cacheSize) / GB) * 10) / 10 };
+});
+ipcMain.handle('kabuk:video-onbellek-yaz', async (_e, gb) => {
+  gb = Number(gb);
+  if (!(gb >= 0 && gb <= 1000)) return { error: 'badValue' };
+  if (typeof motor !== 'undefined' && motor) {
+    ayarYaz({ videoOnbellekGb: gb });
+    await motor.onbellekAyarla(gb);
+    return { ok: true, gb };
+  }
+  try {
+    const r = await fetch('http://127.0.0.1:11470/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cacheSize: Math.round(gb * GB) }), signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return { error: 'stremio' };
+  } catch {
+    return { error: 'stremio' };
+  }
+  const v = await yerelMotor();
+  return { ok: true, gb: v?.cacheSize === null ? null : Math.round((Number(v?.cacheSize) / GB) * 10) / 10 };
+});
 ipcMain.on('kabuk:oto-yaz', (_e, acik) => ayarYaz({ otoKaynak: Boolean(acik) }));
 // Ad: ilk açılışta soruluyor, odalara bu adla sorulmadan giriliyor.
 ipcMain.on('kabuk:isim', (e) => { e.returnValue = ayarOku().isim || null; });
@@ -686,7 +725,7 @@ app.on('will-quit', () => motor?.durdur());
 
 app.whenReady().then(() => {
   if (!tekOrnek) return; // pencere açmadan kapanıyoruz
-  motoruHazirla({ klasor: app.getPath('userData'), gunluk })
+  motoruHazirla({ klasor: app.getPath('userData'), gunluk, onbellekGb: ayarOku().videoOnbellekGb ?? 5 })
     .then((m) => {
       motor = m;
       if (m) gunluk('motor: TorrServer açıldı (Stremio yok)');

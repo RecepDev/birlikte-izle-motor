@@ -26,6 +26,7 @@ import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-rest
 import { createTorrServer } from './src/motor/torrserver.js';
 import { createStremioTaklidi } from './src/motor/stremio-taklidi.js';
 import { createOnbellek } from './src/motor/onbellek.js';
+import { GB, createOnbellekAyar, gecerliGb, stremioOnbellekOku, stremioOnbellekKoy } from './src/onbellek-ayar.js';
 import { dosyaAdi } from './src/motor/dosya-adlari.js';
 import { STREMIO_BASE } from './public/js/shared/stream-url.js';
 import { createIndirRouter } from './src/indir.js';
@@ -74,13 +75,16 @@ const stremioLocal = createStremioLocal();
 const MOTOR = TEST ? (process.env.MOTOR || 'stremio') : (process.env.MOTOR || 'torrserver');
 let torrServer = null;
 let stremioTaklidi = null;
+let onbellek = null;
+// Önbellek boyutu (GB, host oda ayarlarından elle; 0 = kapalı). TorrServer'da bizim önbelleğimiz.
+const onbellekAyar = createOnbellekAyar({ file: path.join(DATA, 'onbellek.json'), varsayilanGb: Number(process.env.ONBELLEK_GB) || 10, log });
 let motorAyri = false; // TorrServer çalışıyor (Stremio asıl sunucuyla ortak değil)
 if (MOTOR === 'torrserver') {
   torrServer = createTorrServer({ klasor: DATA, port: Number(process.env.TORRSERVER_PORT) || 8097, log });
   process.on('exit', () => torrServer?.durdur());
   // Video önbelleği (Stremio'nun disk önbelleği gibi): izlenen yerler diskte kalıyor; aynı film / yarım
-  // kalan yer yeniden açılınca internete gitmeden geliyor. Sınır ONBELLEK_GB (varsayılan 10 GB).
-  const onbellek = createOnbellek({ klasor: path.join(DATA, 'onbellek'), sinirBayt: (Number(process.env.ONBELLEK_GB) || 10) * 1024 ** 3, log });
+  // kalan yer yeniden açılınca internete gitmeden geliyor. Sınır oda ayarlarından (onbellekAyar).
+  onbellek = createOnbellek({ klasor: path.join(DATA, 'onbellek'), sinirBayt: onbellekAyar.gb() * GB, log });
   onbellek.temizle();
   setInterval(() => onbellek.temizle(), 10 * 60_000).unref();
   stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: Number(new URL(STREMIO_BASE).port) || 11470, log, dosyaAdi, onbellek });
@@ -258,6 +262,29 @@ socketCtl = attachSocket(io, {
         if (res.error) return { error: res.error };
         log.info(torrServer ? 'TorrServer yükleme sınırı' : 'Stremio yükleme sınırı', { mbps: res.mbps });
         return { reply: { ok: true, mbps: res.mbps }, msgs: [] };
+      },
+      // Önbellek boyutu (GB, elle): TorrServer motorunda bizim önbelleğimiz, Stremio'da Stremio'nun ayarı.
+      onbellekOku: async (room, uid) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        if (torrServer) return { reply: { ok: true, motor: 'torrserver', gb: onbellekAyar.gb() }, msgs: [] };
+        const gb = await stremioOnbellekOku(STREMIO_BASE);
+        if (gb === undefined) return { error: 'stremioDown' };
+        return { reply: { ok: true, motor: 'stremio', gb }, msgs: [] };
+      },
+      onbellekAyarla: async (room, uid, p) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        const gb = Number(p?.gb);
+        if (!gecerliGb(gb)) return { error: 'badValue' };
+        if (torrServer) {
+          onbellekAyar.ayarla(gb);
+          await onbellek?.sinirAyarla(gb * GB);
+          log.info('Önbellek boyutu', { gb, motor: 'torrserver' });
+          return { reply: { ok: true, motor: 'torrserver', gb }, msgs: [] };
+        }
+        const res = await stremioOnbellekKoy(STREMIO_BASE, gb);
+        if (res.error) return { error: res.error === 'stremio' ? 'stremioDown' : res.error };
+        log.info('Önbellek boyutu', { gb: res.gb, motor: 'stremio' });
+        return { reply: { ok: true, motor: 'stremio', gb: res.gb }, msgs: [] };
       },
       olcumler: (room) => {
         const list = [];

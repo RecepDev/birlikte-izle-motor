@@ -109,7 +109,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
   async function akit(req, res, ih, idx, adres) {
     const tr = trackerlar(adres.searchParams.getAll('tr'));
     const ad = adres.searchParams.get('f');
-    if (onbellek) return onbellekliAkit(req, res, ih, idx, tr, ad);
+    if (onbellek?.acik()) return onbellekliAkit(req, res, ih, idx, tr, ad);
     const f = await dosya(ih, idx, tr, ad);
     if (!f) return json(res, 504, { error: 'metadata' });
     const basliklar = {};

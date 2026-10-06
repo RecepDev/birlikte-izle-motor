@@ -3301,7 +3301,22 @@ $('#open-settings').addEventListener('click', () => {
     request('yuklemeSiniriOku').then((res) => {
       if (!res?.error) $('#set-upload').value = res.mbps ? String(res.mbps) : '';
     });
+    request('onbellekOku').then((res) => {
+      $('#set-onbellek').disabled = Boolean(res?.error);
+      if (!res?.error) $('#set-onbellek').value = res.gb === null ? '' : String(res.gb);
+    });
   }
+});
+// Önbellek boyutu (GB, elle): sunucu motora göre uyguluyor (TorrServer: bizim önbellek, Stremio: kendi ayarı).
+$('#set-onbellek').addEventListener('change', async (e) => {
+  const gb = Number(e.target.value);
+  if (e.target.value === '' || !(gb >= 0 && gb <= 1000)) {
+    toast('Önbellek 0 ile 1000 GB arasında olmalı (0 = kapalı).');
+    return;
+  }
+  const res = await request('onbellekAyarla', { gb });
+  if (res?.error) toast(res.error === 'stremioDown' ? 'Stremio\'ya ulaşılamadı, önbellek değişmedi.' : errorText(res.error));
+  else toast(res.gb ? `Önbellek: ${res.gb} GB` : 'Önbellek kapatıldı');
 });
 $('#set-upload').addEventListener('change', async (e) => {
   const mbps = e.target.value ? Number(e.target.value) : null;

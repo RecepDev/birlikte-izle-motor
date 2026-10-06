@@ -14,6 +14,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
 // Stremio'suz çalışma (telefon). Telefonda Stremio açık değilse TorrServer motoru açılıyor:
@@ -33,9 +34,28 @@ object Motor {
     private val DOSYA = Regex("^/([0-9a-fA-F]{40})/(-1|\\d+)$")
     private val ISLEM = Regex("^/([0-9a-fA-F]{40})/(stats\\.json|remove)$")
 
+    // Video önbelleği (sunucudaki src/motor/onbellek.js'in karşılığı): geçen video 4 MB'lık bloklar
+    // halinde telefonun önbellek klasöründe; aynı yer yeniden istenince TorrServer'a gitmeden veriliyor.
+    // Sınır ana ekrandan elle (Onbellek.kt), en uzun süredir kullanılmayan bloklar siliniyor.
+    private const val BLOK = 4 * 1024 * 1024
+    private const val GB = 1024L * 1024 * 1024
+    private val MIME = mapOf("mkv" to "video/x-matroska", "mp4" to "video/mp4", "m4v" to "video/mp4", "webm" to "video/webm", "avi" to "video/x-msvideo")
+
+    private data class Dosya(val id: Int, val boy: Long, val yol: String)
+
     @Volatile private var surec: Process? = null
     @Volatile private var sunucu: ServerSocket? = null
-    private val secilen = ConcurrentHashMap<String, Int>() // "hash/sıra" -> TorrServer dosya no
+    @Volatile private var onbellek: File? = null
+    @Volatile private var sinirBayt = 0L
+    private val yazici = Executors.newSingleThreadExecutor()
+    private val secilen = ConcurrentHashMap<String, Dosya>() // "hash/sıra" -> TorrServer dosyası
+
+    fun calisiyor() = sunucu?.isClosed == false
+
+    fun onbellekSiniri(gb: Float) {
+        sinirBayt = (gb.coerceAtLeast(0f) * GB).toLong()
+        thread { runCatching { temizle() } }
+    }
 
     // Arka plan iş parçacığında çağrılmalı (en çok ~15 sn sürer). Açıksa ya da gerek yoksa hemen döner.
     @Synchronized
@@ -65,6 +85,8 @@ object Motor {
             return
         }
         sunucu = ss
+        onbellek = File(ctx.cacheDir, "video").apply { mkdirs() }
+        onbellekSiniri(Onbellek.gb(ctx))
         thread(isDaemon = true, name = "motor") {
             while (!ss.isClosed) {
                 val s = runCatching { ss.accept() }.getOrNull() ?: break
@@ -138,7 +160,9 @@ object Motor {
 
     private fun akit(cikis: OutputStream, yontem: String, ih: String, idx: Int, uri: Uri, aralik: String?) {
         val tr = uri.getQueryParameters("tr").filter { it.startsWith("tracker:") }.map { it.removePrefix("tracker:") }
-        val id = dosya(ih, idx, tr, uri.getQueryParameter("f")) ?: return json(cikis, 504, """{"error":"metadata"}""")
+        val ad = uri.getQueryParameter("f")
+        if (sinirBayt > 0 && onbellek != null) return onbellekliAkit(cikis, yontem, ih, idx, tr, ad, aralik)
+        val id = dosya(ih, idx, tr, ad)?.id ?: return json(cikis, 504, """{"error":"metadata"}""")
         val c = URL("$TS/stream?link=$ih&index=$id&play").openConnection() as HttpURLConnection
         c.requestMethod = if (yontem == "HEAD") "HEAD" else "GET"
         c.connectTimeout = 10_000
@@ -162,7 +186,7 @@ object Motor {
     // Torrent'i (gerekirse) açar, metadata gelince dosyayı seçer. TorrServer dolgu (pad) dosyalarını
     // saymıyor, Torrentio'nun sırası sayıyor: önce adla (f=), ad yoksa sıra bir videoya denk geliyorsa
     // o, gelmiyorsa en büyük video (sunucudaki dosyaSec ile aynı kural).
-    private fun dosya(ih: String, idx: Int, tr: List<String>, ad: String?): Int? {
+    private fun dosya(ih: String, idx: Int, tr: List<String>, ad: String?): Dosya? {
         val anahtar = "$ih/$idx"
         var t = torrent(ih)
         secilen[anahtar]?.let { if (t != null) return it }
@@ -183,7 +207,152 @@ object Motor {
             ?: dosyalar.getOrNull(idx)?.takeIf { idx >= 0 && VIDEO.containsMatchIn(sonAd(it)) }
             ?: (dosyalar.filter { VIDEO.containsMatchIn(sonAd(it)) }.ifEmpty { dosyalar }).maxByOrNull { it.optLong("length") }
             ?: return null
-        return f.optInt("id").also { secilen[anahtar] = it }
+        return Dosya(f.optInt("id"), f.optLong("length"), f.optString("path")).also { secilen[anahtar] = it }
+    }
+
+    // ---- önbellek -----------------------------------------------------------------------------
+
+    // İstenen aralığın baştaki önbellekte olan blokları diskten, kalanı TorrServer'dan; geçerken tam
+    // bloklar önbelleğe yazılıyor. Dosya seçimi daha önce yapıldıysa TorrServer beklenmiyor.
+    private fun onbellekliAkit(cikis: OutputStream, yontem: String, ih: String, idx: Int, tr: List<String>, ad: String?, aralik: String?) {
+        val anahtar = "$idx|${ad ?: ""}"
+        var f = secimOku(ih, anahtar)
+        if (f != null) {
+            thread { runCatching { dosya(ih, idx, tr, ad) } } // torrent arkada açılsın: önbellek bitince lazım
+        } else {
+            f = dosya(ih, idx, tr, ad) ?: return json(cikis, 504, """{"error":"metadata"}""")
+            secimYaz(ih, anahtar, f)
+        }
+        val boy = f.boy
+        val m = aralik?.let { Regex("^bytes=(\\d*)-(\\d*)$").find(it.trim()) }
+        var bas = 0L
+        var son = boy - 1
+        if (m != null) {
+            val (a, b) = m.destructured
+            if (a.isEmpty() && b.isNotEmpty()) bas = maxOf(0L, boy - b.toLong())
+            else {
+                bas = a.toLongOrNull() ?: 0L
+                if (b.isNotEmpty()) son = minOf(boy - 1, b.toLong())
+            }
+        }
+        if (bas >= boy || bas > son) {
+            cikis.write("HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */$boy\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+            return
+        }
+        val tur = MIME[f.yol.substringAfterLast('.').lowercase()] ?: "application/octet-stream"
+        val baslik = StringBuilder(if (m != null) "HTTP/1.1 206 Partial Content\r\n" else "HTTP/1.1 200 OK\r\n")
+            .append("Content-Type: $tur\r\nAccept-Ranges: bytes\r\nContent-Length: ${son - bas + 1}\r\n")
+        if (m != null) baslik.append("Content-Range: bytes $bas-$son/$boy\r\n")
+        cikis.write(baslik.append("Connection: close\r\n\r\n").toString().toByteArray())
+        if (yontem == "HEAD") return cikis.flush()
+
+        var konum = bas
+        while (konum <= son) {
+            val no = konum / BLOK
+            val veri = blokOku(ih, f.id, no, boy) ?: break
+            val a = (konum - no * BLOK).toInt()
+            val b = minOf(veri.size.toLong(), son - no * BLOK + 1).toInt()
+            cikis.write(veri, a, b - a)
+            konum = no * BLOK + b
+        }
+        if (konum > son) return cikis.flush()
+
+        val c = URL("$TS/stream?link=$ih&index=${f.id}&play").openConnection() as HttpURLConnection
+        c.connectTimeout = 10_000
+        c.readTimeout = 120_000
+        c.setRequestProperty("Range", "bytes=$konum-$son")
+        try {
+            if (c.responseCode != 206 && c.responseCode != 200) return
+            c.inputStream.use { giris ->
+                val tampon = ByteArray(64 * 1024)
+                var pos = konum
+                var blokNo = (konum + BLOK - 1) / BLOK // ilk tam blok (baştaki yarım blok yazılmaz)
+                var toplanan = java.io.ByteArrayOutputStream(BLOK)
+                while (true) {
+                    val n = giris.read(tampon)
+                    if (n < 0) break
+                    cikis.write(tampon, 0, n)
+                    var off = 0
+                    while (off < n) {
+                        val blokBas = blokNo * BLOK
+                        if (pos + off < blokBas) {
+                            off = minOf(n.toLong(), blokBas - pos).toInt()
+                            continue
+                        }
+                        val blokSon = blokBas + minOf(BLOK.toLong(), boy - blokBas)
+                        val al = minOf((n - off).toLong(), blokSon - (pos + off)).toInt()
+                        toplanan.write(tampon, off, al)
+                        off += al
+                        if (blokBas + toplanan.size() == blokSon) {
+                            blokYaz(ih, f.id, blokNo, toplanan.toByteArray())
+                            toplanan = java.io.ByteArrayOutputStream(BLOK)
+                            blokNo++
+                        }
+                    }
+                    pos += n
+                }
+            }
+            cikis.flush()
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    private fun blokDosyasi(ih: String, id: Int, no: Long) = File(onbellek, "$ih/$id/$no.blk")
+
+    private fun blokOku(ih: String, id: Int, no: Long, boy: Long): ByteArray? = runCatching {
+        val d = blokDosyasi(ih, id, no)
+        if (!d.exists()) return null
+        val veri = d.readBytes()
+        if (veri.size.toLong() != minOf(BLOK.toLong(), boy - no * BLOK)) return null
+        d.setLastModified(System.currentTimeMillis()) // temizlikte en son silinsin
+        veri
+    }.getOrNull()
+
+    // Ayrı iş parçacığında, geçici dosyaya yazıp yeniden adlandırarak (yarım blok "var" görünmesin).
+    private fun blokYaz(ih: String, id: Int, no: Long, veri: ByteArray) {
+        if (sinirBayt <= 0) return
+        yazici.execute {
+            runCatching {
+                val d = blokDosyasi(ih, id, no)
+                d.parentFile?.mkdirs()
+                val gecici = File(d.path + ".yaziliyor")
+                gecici.writeBytes(veri)
+                gecici.renameTo(d)
+                if (++yazilan % 16 == 0) temizle()
+            }
+        }
+    }
+    @Volatile private var yazilan = 0
+
+    private fun secimOku(ih: String, anahtar: String): Dosya? = runCatching {
+        val j = JSONObject(File(onbellek, "$ih/secim.json").readText()).optJSONObject(anahtar) ?: return null
+        Dosya(j.getInt("id"), j.getLong("boy"), j.optString("yol"))
+    }.getOrNull()
+
+    private fun secimYaz(ih: String, anahtar: String, f: Dosya) {
+        runCatching {
+            val d = File(onbellek, "$ih/secim.json")
+            d.parentFile?.mkdirs()
+            val j = runCatching { JSONObject(d.readText()) }.getOrDefault(JSONObject())
+            j.put(anahtar, JSONObject().put("id", f.id).put("boy", f.boy).put("yol", f.yol))
+            d.writeText(j.toString())
+        }
+    }
+
+    // Sınırı aşınca en uzun süredir kullanılmayan bloklar silinir (sınır 0: hepsi).
+    @Synchronized
+    private fun temizle() {
+        val kok = onbellek ?: return
+        val bloklar = kok.walkTopDown().filter { it.isFile && it.name.endsWith(".blk") }.toMutableList()
+        var toplam = bloklar.sumOf { it.length() }
+        if (toplam <= sinirBayt) return
+        bloklar.sortBy { it.lastModified() }
+        for (b in bloklar) {
+            if (toplam <= sinirBayt * 9 / 10) break
+            val boy = b.length()
+            if (b.delete()) toplam -= boy
+        }
     }
 
     private fun torrent(ih: String): JSONObject? = runCatching {
