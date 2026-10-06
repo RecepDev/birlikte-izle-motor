@@ -109,6 +109,48 @@ Hızda Stremio hâlâ önde. Stremio'suz en yakın seçenek TorrServer.
 Muhtemel sebep dosya sırası uyuşmazlığı: TorrServer dolgu (pad) dosyalarını listelemiyor
 olabilir. Bu doğruysa TorrServer'ın sonucu bir torrent kadar haksız yere düşük çıktı.
 
+## Karar ve yapılanlar (2026-10-06)
+
+**libtorrent bırakıldı.** İki tur ayar denemesi yapıldı (`deneme/motor/lt_deneme.py`, varyantlar A–H):
+- `whole_pieces_threshold=0` sarmayı 12 sn'den 4–7 sn'ye indirdi.
+- Ama sıralı okuma hiç dokunulmamış bir yerden ölçülünce 7–9 Mbps; Stremio'da 37 Mbps.
+- Kısa istek kuyruğu ve sarmada iptal de kapatmadı.
+- Stremio düzeyine çıkmak için akış katmanını baştan yazmak gerekir (Elementum'un yıllardır uğraştığı
+  iş). Sonucu belirsiz.
+
+**Motor: TorrServer.** Kuruluşu:
+- Sunucu, masaüstü uygulaması ve telefon, Stremio'nun 11470 adreslerini taklit eden bir ara katmanın
+  arkasında TorrServer çalıştırıyor.
+- Odalar, senkron, oynatıcı, relay ve canlı yayın kodu değişmedi.
+
+Yapılanlar (hepsi bu kopyada, `motor` dalında):
+- **Sunucu (Faz 1):** `src/motor/torrserver.js` ve `src/motor/stremio-taklidi.js`.
+  - Varsayılan motor `MOTOR=torrserver`. 11470 doluysa (Stremio açık) log'a hata yazıp Stremio'yla devam ediyor.
+  - Dosya, ad (`f=`) ile eşleştiriliyor; dolgu (pad) dosyaları sırayı kaydırıyordu.
+  - Yükleme sınırı TorrServer'ın kendi ayarından konuyor, yönetici izni gerekmiyor.
+  - Okuyan kalmayınca torrent 30 sn sonra kapanıyor.
+  - `MOTOR=torrserver MOTOR_URL=http://127.0.0.1:11471 npm run e2e`: 24/24, Stremio açıkken de.
+- **Masaüstü (Faz 2):** `masaustu/electron/motor-baslat.cjs`.
+  - 11470'te yayın sunucusu yoksa uygulama TorrServer'ı kendisi açıyor; TorrServer 8098'de.
+  - Motor kodu güncellemeyle `motor/` klasörüne iniyor; kurulum paketine `motor-kopyala.cjs` koyuyor.
+  - Kurulum: `Kurulumlar/BirlikteIzleMotor-Kurulum-0.7.33.exe`.
+- **Android (Faz 3):** `Motor.kt`.
+  - TorrServer'ın arm64 programı APK içinde (`libtorrserver.so`, derlemede indiriliyor).
+  - Önünde Kotlin'de yazılmış Stremio taklidi var. Telefonda Stremio açıksa devreye girmiyor.
+  - APK: `Kurulumlar/BirlikteIzleMotor-Android-0.31.0.apk`, 30 MB. **Cihazda denenmedi**, telefon bağlı değildi.
+- **Ses (Faz 4'ün telefon kısmı):** ExoPlayer'a FFmpeg ses çözücüsü eklendi
+  (`org.jellyfin.media3:media3-ffmpeg-decoder`). DTS, TrueHD ve AC3'ü telefon kendisi çözüyor; Stremio'nun
+  dönüştürücüsüne gerek kalmadı.
+
+Kalanlar:
+- **Gerçek kullanımda deneme.** Host'ta Stremio kapalıyken kopyanın sunucusu
+  ("Birlikte Izle Motor" kısayolu), telefonda yeni APK.
+- **Tarayıcıdaki misafirler için Uyumlu mod** (`/hlsv2`, ffmpeg ile dönüştürme). TorrServer'da yok,
+  404 dönüyor. Masaüstü uygulaması (mpv) ve telefon (FFmpeg) buna ihtiyaç duymuyor.
+- **Faz 5:** arayüzde 78 yerde "Stremio" yazıyor ("Stremio'yu yeniden başlat" artık TorrServer'ı
+  yeniden başlatıyor). Stremio'ya özgü geçici çözümler (stremio-parca, birikme denetimi) zararsız; yerinde
+  duruyor.
+
 ### Faz 1: Host sunucusunda dahili motor (Opus)
 - `src/motor/`: torrent açma/kapama, istenen dosyayı seçme, okunan yerin parçalarını öne alma,
   bağlantı sınırı (80), yükleme hız sınırı (kendi içinde; QoS'a gerek kalmıyor).

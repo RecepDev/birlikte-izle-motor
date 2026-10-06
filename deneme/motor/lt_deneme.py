@@ -141,7 +141,7 @@ def dene(ih, ad, v):
             alarmlar(100)
         sonuc['metadata'] = round(time.time() - t0, 1)
         ti = h.torrent_file()
-        fs = ti.files()
+        fs = ti.files()  # noqa
         idx = max(range(fs.num_files()), key=fs.file_size)
         h.prioritize_files([1 if i == idx else 0 for i in range(fs.num_files())])
         pl = ti.piece_length()
@@ -153,7 +153,9 @@ def dene(ih, ad, v):
         sonuc['acilis'] = None if s is None else round(time.time() - t0, 1)
         if s is None:
             return sonuc
-        sonuc['izleme_mbps'] = round(o.sirali(ilk + 1, 20), 1)
+        # İzleme hızı açılışta önden inmiş parçalar sayılmasın diye dosyanın %15'inden (dokunulmamış yer).
+        o.birak()
+        sonuc['izleme_mbps'] = round(o.sirali(ilk + int((son - ilk) * 0.15), 20), 1)
         for ad_, oran in (('sarma35', 0.35), ('sarma80', 0.8)):
             o.birak()
             hedef = ilk + int((son - ilk) * oran)

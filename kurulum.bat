@@ -31,12 +31,12 @@ if errorlevel 1 (
 
 echo [3/3] Masaustu kisayolu olusturuluyor...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Birlikte Izle.lnk');" ^
+  "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Birlikte Izle Motor.lnk');" ^
   "$s.TargetPath = 'wscript.exe';" ^
   "$s.Arguments = '\"%~dp0baslat.vbs\"';" ^
   "$s.WorkingDirectory = '%~dp0';" ^
   "$s.IconLocation = 'shell32.dll,238';" ^
-  "$s.Description = 'Birlikte Izle paneli';" ^
+  "$s.Description = 'Birlikte Izle Motor paneli (Stremio-suz deneme kopyasi)';" ^
   "$s.Save()"
 
 echo.
