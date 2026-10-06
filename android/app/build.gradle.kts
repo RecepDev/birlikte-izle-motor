@@ -11,8 +11,8 @@ android {
         applicationId = "xyz.birlikteizle.mobil.motor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 30
-        versionName = "0.30.0"
+        versionCode = 31
+        versionName = "0.31.0"
     }
 
     buildTypes {
@@ -20,6 +20,14 @@ android {
             isMinifyEnabled = false
             // Arkadaşlara dağıtım için: Play Store yok, hata ayıklama anahtarıyla imzalı APK yeterli.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+    // TorrServer (Stremio'suz motor, bkz. Motor.kt) "lib….so" adıyla yerel kütüphane klasörüne
+    // çıkarılmalı (Android yalnızca orayı çalıştırmaya izin veriyor); Go programı, sembolleri ayıklanmasın.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/libtorrserver.so"
         }
     }
     compileOptions {
@@ -30,6 +38,23 @@ android {
         jvmTarget = "17"
     }
 }
+
+// TorrServer'ın Android (arm64) programı derlemeden önce indiriliyor (depoya konmuyor, ~64 MB).
+val torrserverSurum = "MatriX.145.2"
+val torrserverSo = file("src/main/jniLibs/arm64-v8a/libtorrserver.so")
+val torrserverIndir by tasks.registering {
+    outputs.file(torrserverSo)
+    doLast {
+        if (!torrserverSo.exists()) {
+            torrserverSo.parentFile.mkdirs()
+            val gecici = File(torrserverSo.path + ".indiriliyor")
+            uri("https://github.com/YouROK/TorrServer/releases/download/$torrserverSurum/TorrServer-android-arm64")
+                .toURL().openStream().use { giris -> gecici.outputStream().use { giris.copyTo(it) } }
+            gecici.renameTo(torrserverSo)
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(torrserverIndir) }
 
 dependencies {
     val media3 = "1.2.1"

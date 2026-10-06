@@ -175,6 +175,8 @@ class OdaActivity : AppCompatActivity() {
         // uygulamadaki kopya. Sayfa ancak betik hazır olunca yükleniyor (belge başında çalışmalı).
         val sunucu = Uri.parse(odaUrl).let { "${it.scheme}://${it.authority}" }
         thread {
+            // Stremio'suz motor sayfadan önce hazır olsun: sayfa açılırken "telefonda Stremio var mı" bakıyor.
+            Motor.hazirla(applicationContext)
             val uzak = Guncelleme.oku("$sunucu/indir/android/kopru.js")?.takeIf { it.contains("__kopru") }
             runOnUiThread {
                 kopru = cihazBilgisi() + (uzak ?: assets.open("kopru.js").bufferedReader().use { it.readText() })
@@ -563,6 +565,7 @@ class OdaActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (isFinishing) Motor.durdur()
         ana.removeCallbacksAndMessages(null)
         oynatici.release()
         web.destroy()
