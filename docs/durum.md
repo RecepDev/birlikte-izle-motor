@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-06 · Son commit: 9b696ec · Masaüstü 0.7.37 · Android 0.32.0 (versionCode 32)
+Son güncelleme: 2026-10-06 · Son commit: 9b696ec · Masaüstü 0.7.37 · Android 0.33.0 (versionCode 33)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
@@ -25,21 +25,21 @@ Son güncelleme: 2026-10-06 · Son commit: 9b696ec · Masaüstü 0.7.37 · Andro
   - Okuyan kalmayan torrent 30 sn yerine 2 dk sonra kapanıyor (duraklatıp dönünce peer'ler sıfırlanmasın).
   - Günlükte her yeni torrent için "Torrent açılışı" satırı var: `metadataSn` ve `ilkVeriSn`.
   - Oda: video hiç başlamadı ve veri gelmiyorsa, ölçülmüş iyi kaynağa 15 sn'de geçiliyor (eskisi 45 sn).
+  - Önden okuma %95 → %10 (≈51 MB). Ölçümde sıralı izleme 25.5 → 44.8 Mbps (`docs/stremiosuz-plan.md` "üçüncü tur"). uTP açık kaldı.
+  - Telefon (APK 0.33.0): önden okuma ≈51 MB, boşta kapanma 2 dk, güncel tracker listesi.
 - **Düzeltme:** TorrServer'da ayar yazmak bütün torrent'leri kapatıyor (`SetSettings` → `dropAllTorrent`).
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.
   - TorrServer modunda "Windows onayı" uyarısı çıkmıyor.
 - `npm test` 214/214 (yeni: `test/motor-yonetim.test.js`; `html-kimlik.test.js` sayfalardaki gömülü kodu derliyor). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
-- Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.36.exe`, `BirlikteIzleMotor-Android-0.32.0.apk`. 0.7.37 masaüstüne sunucudan otomatik güncellemeyle gidiyor.
+- Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.36.exe`, `BirlikteIzleMotor-Android-0.33.0.apk`. Masaüstü 0.7.37 sunucudan otomatik güncellemeyle gidiyor.
 
 ## Bekleyen
-- APK gerçek telefonda denenmedi. Telefonun motorunda (`Motor.kt`) sabit port ve tracker listesi yok.
+- APK gerçek telefonda denenmedi. Telefonda sabit peer portu yok (mobil ağda UPnP işe yaramıyor).
 - Kullanıcıyla Stremio kapalıyken gerçek izleme denemesi yapılmadı.
 - Tarayıcı uyumluluk modu (Stremio hlsv2 dönüştürücüsü) TorrServer modunda yok.
 - Arayüzde ~78 kullanıcıya görünen "Stremio" yazısı kaldı (Faz 5).
-- Açılış hızı ölçümde Stremio'nun gerisinde (medyan 12.9 sn, Stremio 4.1 sn).
-  - Yeni ölçüm `deneme/motor/olc5.out` / `sonuc5.json`. Varyantlar: ts-uretim, ts-kucuk-ra (ReaderReadAHead 10), ts-utp-yok.
-  - Ölçüm kullanıcı izlerken bekliyor. Sonuca göre `AYARLAR` güncellenecek.
+- Açılış: TorrServer medyanı 7.6 sn (önceki tur 12.9; Stremio o turda 4.1). Bunun 4–5 sn'si metadata.
 - Film bilgisini (metadata) diskte saklama ve itorrents gibi bir siteden isteme yapılmadı. İkincisi gizlilik yüzünden kullanıcı onayı bekliyor.
 - Windows güvenlik duvarı açık olan bilgisayarlarda TorrServer'a gelen bağlantı kuralı yok (bu bilgisayarda duvar kapalı).
 

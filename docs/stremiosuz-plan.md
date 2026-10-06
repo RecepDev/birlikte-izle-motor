@@ -206,6 +206,29 @@ Kalanlar:
   - ya da kopya asılın yerine geçer.
 - Portlar, uygulama adları ve paket kimliği geri alınıyor.
 
+## TorrServer ayar ölçümü (2026-10-06, üçüncü tur)
+
+`deneme/motor/olc2.mjs`, `MOTORLAR=ts-uretim,ts-kucuk-ra,ts-utp-yok TORRENT_SAYISI=6 IZLE_SN=15`.
+Çıktı `olc5.out`, `sonuc5.json`. Hat 64.8 Mbps; 6 yeni torrent (1080p çok, 4K çok, 1080p az kaynak, ikişer).
+
+| Varyant | Başarılı | Metadata | Açılış | İzleme | Sarma (%35 / %80) | Peer |
+|---|---|---|---|---|---|---|
+| ts-uretim (o günkü ürün: önden okuma %95 ≈ 486 MB) | 6/6 | 4.9 sn | 7.6 sn | 25.5 Mbps | 1.2 / 1.4 sn | 8.5 |
+| ts-kucuk-ra (önden okuma %10 ≈ 51 MB) | 6/6 | 3.9 sn | 10 sn | 44.8 Mbps | 1.4 / 1.4 sn | 8.5 |
+| ts-utp-yok (uTP kapalı) | 6/6 | 4.3 sn | 9.1 sn | 23.6 Mbps | 1.3 / 1.8 sn | 6.5 |
+
+Sonuçlar:
+- **Önden okuma %10'a indi.** Sıralı izleme hızı 6 torrent'in 4'ünde belirgin arttı (21.9 → 60.3,
+  8.9 → 44, 19.8 → 26.7 Mbps), ötekilerde aynı. Geniş pencerede hız çok parçaya dağılıyor.
+- Açılış farkı gürültü içinde: az kaynaklı tek torrent 80.8 sn sürdü (ötekiler 22.5 / 8.8 sn).
+  Medyanlar 7.6 / 10 / 9.1 sn.
+- **uTP açık kalıyor:** kapatmak hızı artırmadı, peer sayısını düşürdü.
+- Açılışın yarıdan fazlası metadata (medyan 4–5 sn). Sıradaki kazanç burada: metadata'yı
+  saklamak ya da bir HTTP önbelleğinden (itorrents vb.) almak.
+- Önceki turlara göre TorrServer'ın açılışı 12.9 sn'den 7.6 sn'ye indi (farklı torrent'ler, kesin
+  kıyas değil). Tracker listesi, sabit port ve 100 ms yoklama bu sürümde vardı.
+- Telefonda (`Motor.kt`) önden okuma %40 (128 MB önbellekte ≈ 51 MB), aynı tracker listesi.
+
 ## Riskler
 
 - **torrent-stream eski bir kütüphane:** son sürümü yıllar önce çıktı. Stremio hâlâ kullandığı

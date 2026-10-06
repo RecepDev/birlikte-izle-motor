@@ -11,8 +11,8 @@ android {
         applicationId = "xyz.birlikteizle.mobil.motor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 32
-        versionName = "0.32.0"
+        versionCode = 33
+        versionName = "0.33.0"
         // Telefonlar: FFmpeg ses çözücüsünün yerel kütüphaneleri yalnız bunlar için (APK şişmesin).
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }

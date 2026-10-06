@@ -30,6 +30,18 @@ object Motor {
     private const val TS_PORT = 8097
     private const val TS = "http://127.0.0.1:$TS_PORT"
     private const val ETIKET = "Motor"
+    private val IYI_TRACKERLAR = listOf(
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://open.demonii.com:1337/announce",
+        "udp://open.stealth.si:80/announce",
+        "udp://tracker.torrent.eu.org:451/announce",
+        "udp://exodus.desync.com:6969/announce",
+        "udp://explodie.org:6969/announce",
+        "udp://tracker.qu.ax:6969/announce",
+        "udp://tracker.dler.org:6969/announce",
+        "https://tracker.tamersunion.org:443/announce",
+        "http://tracker.opentrackr.org:1337/announce",
+    )
     private val VIDEO = Regex("\\.(mkv|mp4|avi|m4v|mov|wmv|ts|m2ts|webm|mpg|mpeg)$", RegexOption.IGNORE_CASE)
     private val DOSYA = Regex("^/([0-9a-fA-F]{40})/(-1|\\d+)$")
     private val ISLEM = Regex("^/([0-9a-fA-F]{40})/(stats\\.json|remove)$")
@@ -105,12 +117,16 @@ object Motor {
         secilen.clear()
     }
 
-    // Telefona göre: bağlantı 60, RAM önbelleği 128 MB; okuyan kalmayınca torrent 30 sn sonra kapanıyor.
+    // Telefona göre: bağlantı 60, RAM önbelleği 128 MB; okuyan kalmayınca torrent 2 dk sonra kapanıyor
+    // (duraklatıp dönünce peer'ler sıfırdan aranmasın). Önden okuma ~51 MB: bilgisayarda %95'lik pencere
+    // hızı çok parçaya dağıtıp sıralı okumayı yavaşlatıyordu (sunucu src/motor/torrserver.js, olc5.out).
+    // TorrServer'ın kendi tracker listesi eski: güncel liste (sunucudaki IYI_TRACKERLAR ile aynı).
     private fun ayarla() {
         val simdiki = JSONObject(oku("$TS/settings", """{"action":"get"}""") ?: "{}")
-        simdiki.put("ConnectionsLimit", 60).put("CacheSize", 128L * 1024 * 1024).put("ReaderReadAHead", 95)
-            .put("TorrentDisconnectTimeout", 30).put("RemoveCacheOnDrop", true)
+        simdiki.put("ConnectionsLimit", 60).put("CacheSize", 128L * 1024 * 1024).put("ReaderReadAHead", 40)
+            .put("TorrentDisconnectTimeout", 120).put("RemoveCacheOnDrop", true)
             .put("EnableDLNA", false).put("EnableBonjour", false)
+            .put("RetrackersMode", 1).put("DefaultTrackers", IYI_TRACKERLAR.joinToString("\n"))
         oku("$TS/settings", JSONObject().put("action", "set").put("sets", simdiki).toString())
     }
 
