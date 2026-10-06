@@ -34,6 +34,35 @@
       </ul>
     </section>
 
+    <section class="card" id="motor-kart">
+      <h2>Motor</h2>
+      <p id="motor-ozet" class="muted small">…</p>
+      <div class="row">
+        <button id="motor-yeniden" type="button" hidden>🔄 Motoru yeniden başlat</button>
+      </div>
+      <div id="motor-onbellek" class="motor-blok" hidden>
+        <div class="row" style="justify-content: space-between; margin-top: 0">
+          <span>💾 Önbellek <span id="motor-ob-yazi" class="muted"></span></span>
+          <button id="motor-ob-bosalt" type="button">Önbelleği temizle</button>
+        </div>
+        <div class="cubuk"><div id="motor-ob-dolu"></div></div>
+      </div>
+      <div class="motor-blok">
+        <span>Açık torrent'ler</span>
+        <ul id="motor-torrentler" class="addons motor-liste"></ul>
+      </div>
+      <form id="motor-ayar" class="form motor-blok">
+        <label class="field inline"><span>Motor</span>
+          <select id="motor-sec">
+            <option value="torrserver">TorrServer (Stremio'suz)</option>
+            <option value="stremio">Stremio</option>
+          </select>
+        </label>
+        <p id="motor-sec-not" class="muted small" hidden></p>
+        <label class="check"><input type="checkbox" id="motor-bekci"> <span>TorrServer çökerse kendini yeniden açsın <small class="muted">(10 dakikada en çok 3 kez)</small></span></label>
+      </form>
+    </section>
+
     <section class="card">
       <h2>Stremio'ya eklentiyi kur</h2>
       <p class="muted">Bir kere yapman yeterli. Sonra Stremio'da bir film açınca stream listesinde <b>👥 Birlikte İzle</b> çıkar.</p>

@@ -1,4 +1,4 @@
-import { api, el, $, copy } from './api.js';
+import { api, el, $, copy, formatSize } from './api.js';
 
 const STATE_TEXT = {
   ready: '▶ hazır', loading: '⏳ yükleniyor', buffering: '⏳ donuyor', error: '⚠️ hata',
@@ -294,12 +294,98 @@ async function refreshLogs() {
 
 // ---- start ----------------------------------------------------------------------------
 
+// ---- motor -------------------------------------------------------------------------
+
+const MOTOR_ADI = { torrserver: 'TorrServer', stremio: 'Stremio' };
+let motor = null;
+
+async function refreshMotor() {
+  try {
+    motor = await api('/api/motor');
+  } catch {
+    $('#motor-ozet').textContent = 'Motor bilgisi alınamadı';
+    return;
+  }
+  const ts = motor.kullanilan === 'torrserver';
+  const parcalar = [ts ? `TorrServer ${motor.ts?.surum || ''}`.trim() : 'Stremio (asıl Birlikte İzle ile ortak)'];
+  if (ts) {
+    parcalar.push(motor.ts?.calisiyor ? 'çalışıyor' : 'kapalı');
+    if (motor.ts?.peerPort) parcalar.push(`peer portu ${motor.ts.peerPort}`);
+    if (motor.ts?.yenidenAcilis) parcalar.push(`bekçi son 10 dk'da ${motor.ts.yenidenAcilis} kez yeniden açtı`);
+  }
+  $('#motor-ozet').textContent = parcalar.join(' · ');
+  $('#motor-yeniden').hidden = !ts;
+
+  const ob = motor.onbellek;
+  $('#motor-onbellek').hidden = !ob;
+  if (ob) {
+    const sinir = ob.sinir > 0 ? formatSize(ob.sinir) : 'kapalı';
+    $('#motor-ob-yazi').textContent = `${formatSize(ob.bayt) || '0 MB'} / ${sinir} · ${ob.film} film`;
+    $('#motor-ob-dolu').style.width = ob.sinir > 0 ? `${Math.min(100, (ob.bayt / ob.sinir) * 100)}%` : '0';
+    $('#motor-ob-bosalt').disabled = !ob.bayt;
+  }
+
+  const liste = $('#motor-torrentler');
+  liste.replaceChildren(...(motor.torrentler.length ? motor.torrentler.map((t) => el('li', {},
+    el('div', { class: 'name' },
+      t.ad || t.infoHash.slice(0, 12),
+      el('small', { text: `👤 ${t.peers}${t.bulunan ? ` / ${t.bulunan}` : ''} peer · ↓ ${t.indirmeMbps} Mbps · ↑ ${t.yuklemeMbps} Mbps` })),
+    t.izleniyor ? el('span', { class: 'tag', text: 'odada izleniyor' }) : null,
+    // Stremio motorunda torrent'ler asıl Birlikte İzle'yle ortak: buradan kapatılmaz.
+    ts && !t.izleniyor ? el('button', { type: 'button', text: 'Kapat', onclick: (e) => torrentKapat(t, e.target) }) : null,
+  )) : [el('li', { class: 'muted small', text: 'Açık torrent yok.' })]));
+
+  const sec = $('#motor-sec');
+  if (document.activeElement !== sec) sec.value = motor.secim || motor.istenen;
+  const not = [];
+  if (motor.ortam) not.push(`MOTOR=${motor.ortam} ortam değişkeni var: o geçerli.`);
+  else if ((motor.secim || motor.istenen) !== motor.istenen) not.push(`Sunucu yeniden başlayınca ${MOTOR_ADI[motor.secim]} kullanılacak.`);
+  if (motor.istenen === 'torrserver' && !ts) not.push("TorrServer istendi ama 11470 dolu (Stremio açık): Stremio'yu kapatıp sunucuyu yeniden başlat.");
+  $('#motor-sec-not').textContent = not.join(' ');
+  $('#motor-sec-not').hidden = !not.length;
+  $('#motor-bekci').checked = motor.bekci;
+}
+
+async function torrentKapat(t, btn) {
+  btn.disabled = true;
+  await api('/api/torrent-kapat', { method: 'POST', body: { infoHash: t.infoHash } }).catch((err) => alert(err.message));
+  refreshMotor();
+}
+
+$('#motor-yeniden').addEventListener('click', async (e) => {
+  const rooms = await api('/api/rooms').catch(() => []);
+  if (rooms.length && !confirm(`${rooms.length} odada oynatma birkaç saniye duracak. Motor yeniden başlatılsın mı?`)) return;
+  e.target.disabled = true;
+  e.target.textContent = 'Yeniden başlatılıyor…';
+  const r = await api('/api/motor/yeniden-baslat', { method: 'POST' }).catch((err) => ({ error: err.message }));
+  e.target.disabled = false;
+  e.target.textContent = '🔄 Motoru yeniden başlat';
+  if (r?.error) alert(`Yeniden başlatılamadı: ${r.error}`);
+  refreshMotor();
+});
+$('#motor-ob-bosalt').addEventListener('click', async (e) => {
+  if (!confirm('Önbellekteki bütün filmler silinsin mi? Sonraki açılışlar yeniden internetten gelir.')) return;
+  e.target.disabled = true;
+  await api('/api/motor/onbellek-bosalt', { method: 'POST' }).catch((err) => alert(err.message));
+  refreshMotor();
+});
+$('#motor-sec').addEventListener('change', async (e) => {
+  await api('/api/motor/ayar', { method: 'PUT', body: { motor: e.target.value } }).catch((err) => alert(err.message));
+  refreshMotor();
+});
+$('#motor-bekci').addEventListener('change', async (e) => {
+  await api('/api/motor/ayar', { method: 'PUT', body: { bekci: e.target.checked } }).catch((err) => alert(err.message));
+  refreshMotor();
+});
+
 config = await api('/api/config');
 renderAddons();
 fillDefaults();
 await refreshStatus();
 refreshRooms();
 refreshLogs();
+refreshMotor();
 setInterval(refreshStatus, 3000);
+setInterval(refreshMotor, 3000);
 setInterval(refreshRooms, 2000);
 setInterval(refreshLogs, 5000);

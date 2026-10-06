@@ -20,6 +20,8 @@ window.kabuk = {
   // Video önbelleği boyutu (GB, elle): { motor, gb } ve yazınca { ok, gb } ya da { error }.
   videoOnbellek: () => ipcRenderer.invoke('kabuk:video-onbellek'),
   videoOnbellekYaz: (gb) => ipcRenderer.invoke('kabuk:video-onbellek-yaz', gb),
+  motor: () => ipcRenderer.invoke('kabuk:motor'),
+  motorBekciYaz: (acik) => ipcRenderer.invoke('kabuk:motor-bekci-yaz', acik),
   // Canlı yayın: oynatıcı penceresi yakalanabilir durumda mı (bkz. ana.cjs)
   yayinHazir: () => ipcRenderer.invoke('kabuk:yayin-hazir'),
   // Canlı yayın sesi: yalnız oynatıcının (mpv) sesi bir ses izi olarak; olmazsa null.

@@ -92,7 +92,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     const son = Date.now() + METADATA_MS;
     while (!t?.file_stats?.length) {
       if (Date.now() > son) return null;
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 100)); // metadata gelir gelmez başlasın
       t = await ts.torrent(ih);
     }
     const f = dosyaSec(t.file_stats, idx, ad || dosyaAdi(ih, idx));

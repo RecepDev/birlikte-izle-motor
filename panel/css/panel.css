@@ -133,3 +133,12 @@ body.oto-mod .card > .row,
 body.oto-mod #errors,
 body.oto-mod #streams { display: none; }
 body.oto-mod .oto-bar { font-size: 17px; padding: 22px 18px; justify-content: center; text-align: center; }
+
+/* Motor kartı */
+.motor-blok { margin-top: 14px; }
+.cubuk { height: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-top: 6px; }
+.cubuk > div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+.motor-liste { margin-top: 6px; }
+.motor-liste .name small { white-space: normal; }
+select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+#motor-ayar .field.inline { grid-template-columns: auto 1fr; }

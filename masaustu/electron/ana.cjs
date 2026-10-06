@@ -627,10 +627,27 @@ async function yerelMotor() {
 }
 ipcMain.handle('kabuk:video-onbellek', async () => {
   if (typeof motor !== 'undefined' && motor) return { motor: 'torrserver', gb: motor.onbellekGb() };
+  // Kendi motorumuz açılırken 11470'teki taklit "torrserver" der ama sunucununki değil: bekle.
+  if (typeof motorAciliyor !== 'undefined' && motorAciliyor) return { motor: 'aciliyor' };
   const v = await yerelMotor();
   if (!v) return { motor: null };
   if (v.motor === 'torrserver') return { motor: 'sunucu' };
   return { motor: 'stremio', gb: v.cacheSize === null ? null : Math.round((Number(v.cacheSize) / GB) * 10) / 10 };
+});
+// Açılış ekranındaki motor rozeti: bu bilgisayarda videoyu hangi motor indiriyor.
+// kendi: uygulamanın TorrServer'ı · sunucu: aynı bilgisayardaki Birlikte İzle sunucusunun motoru ·
+// stremio: Stremio · aciliyor · yok (11470'te kimse yok, motor da açılamadı).
+ipcMain.handle('kabuk:motor', async () => {
+  const bekci = ayarOku().motorBekci === true;
+  if (motor) return { tur: 'kendi', bekci, ...(await motor.durum().catch(() => ({}))) };
+  if (motorAciliyor) return { tur: 'aciliyor', bekci };
+  const v = await yerelMotor();
+  if (!v) return { tur: 'yok', bekci, hata: motorHatasi };
+  return { tur: v.motor === 'torrserver' ? 'sunucu' : 'stremio', bekci };
+});
+ipcMain.handle('kabuk:motor-bekci-yaz', (_e, acik) => {
+  ayarYaz({ motorBekci: acik === true });
+  return { ok: true };
 });
 ipcMain.handle('kabuk:video-onbellek-yaz', async (_e, gb) => {
   gb = Number(gb);
@@ -721,16 +738,27 @@ if (app.isPackaged) app.setAsDefaultProtocolClient(SEMA);
 
 // Stremio'suz çalışma: 11470'te yayın sunucusu yoksa TorrServer motoru açılıyor (bkz. motor-baslat.cjs).
 let motor = null;
+let motorAciliyor = true;
+let motorHatasi = null;
 app.on('will-quit', () => motor?.durdur());
 
 app.whenReady().then(() => {
   if (!tekOrnek) return; // pencere açmadan kapanıyoruz
-  motoruHazirla({ klasor: app.getPath('userData'), gunluk, onbellekGb: ayarOku().videoOnbellekGb ?? 5 })
+  motoruHazirla({
+    klasor: app.getPath('userData'),
+    gunluk,
+    onbellekGb: ayarOku().videoOnbellekGb ?? 5,
+    bekci: () => ayarOku().motorBekci === true,
+  })
     .then((m) => {
       motor = m;
       if (m) gunluk('motor: TorrServer açıldı (Stremio yok)');
     })
-    .catch((err) => gunluk(`motor açılamadı: ${err.message}`));
+    .catch((err) => {
+      motorHatasi = err.message;
+      gunluk(`motor açılamadı: ${err.message}`);
+    })
+    .finally(() => { motorAciliyor = false; });
   ana = new BrowserWindow({
     width: 1280, height: 800, backgroundColor: '#0e0f13', title: 'Birlikte İzle',
     webPreferences: {

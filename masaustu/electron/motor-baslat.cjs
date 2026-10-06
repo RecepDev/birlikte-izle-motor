@@ -27,7 +27,8 @@ async function acikMi(port) {
 // Motor açıldıysa { durdur }, gerek yoksa ya da açılamadıysa null.
 // tsPort: sunucunun TorrServer'ı (8097) aynı bilgisayarda olsa da çakışmasın diye ayrı.
 // onbellekGb: video önbelleği boyutu (açılış ekranından elle; 0 = kapalı).
-async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbellekGb = 5 }) {
+// bekci: true dönerse TorrServer çökünce kendini yeniden açar (açılış ekranından; varsayılan kapalı).
+async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbellekGb = 5, bekci = () => false }) {
   if (await acikMi(port)) return null;
   const kok = motorKlasoru();
   if (!kok) {
@@ -39,7 +40,7 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbe
   const { createTorrServer } = await import(pathToFileURL(path.join(kok, 'torrserver.js')).href);
   const { createStremioTaklidi } = await import(pathToFileURL(path.join(kok, 'stremio-taklidi.js')).href);
   const { createOnbellek } = await import(pathToFileURL(path.join(kok, 'onbellek.js')).href);
-  const ts = createTorrServer({ klasor, port: tsPort, log });
+  const ts = createTorrServer({ klasor, port: tsPort, log, bekci });
   // Video önbelleği: izlenen yerler kullanıcı klasöründe kalıyor.
   let gb = onbellekGb;
   const onbellek = createOnbellek({ klasor: path.join(klasor, 'onbellek'), sinirBayt: gb * 1024 ** 3, log });
@@ -55,6 +56,7 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbe
     throw err;
   }
   return {
+    durum: () => ts.durum(),
     onbellekGb: () => gb,
     onbellekAyarla(yeni) {
       gb = yeni;

@@ -49,6 +49,10 @@
   .anahtar input:checked + span { background:#7b5cff; }
   .anahtar input:checked + span::after { transform:translateX(20px); }
   .surum { text-align:center; font-size:12px; }
+  .rozet { display:inline-block; font-size:12px; border-radius:999px; padding:3px 10px; background:#232633; color:#e8e9ee; white-space:nowrap; }
+  .rozet.iyi { background:#173b2a; color:#7be0a8; }
+  .rozet.uyari { background:#3b3217; color:#f0c96a; }
+  .rozet.kotu { background:#3b1a1f; color:#ff8a98; }
 </style>
 </head>
 <body>
@@ -72,6 +76,14 @@
       <label class="ayar">
         <div>Görüntü kalitesi<small>Önce bu kalitenin kaynakları aranır</small></div>
         <select id="kalite"><option value="2160p">4K (2160p)</option><option value="1080p">1080p</option><option value="720p">720p</option></select>
+      </label>
+      <div class="ayar">
+        <div>⚙️ Torrent motoru<small id="motor-ipucu">Videoyu bu bilgisayarda indiren program</small></div>
+        <span id="motor-rozet" class="rozet">…</span>
+      </div>
+      <label class="ayar" id="motor-bekci-satir" hidden>
+        <div>🛟 Motor çökerse yeniden aç<small>Kendi TorrServer'ı kapanırsa 2 sn sonra açılır (10 dakikada en çok 3 kez)</small></div>
+        <span class="anahtar"><input type="checkbox" id="motor-bekci"><span></span></span>
       </label>
       <label class="ayar">
         <div>💾 Önbellek (GB)<small id="video-onbellek-ipucu">İzlenen yerler diskte kalır, yeniden açınca hemen gelir. 0 = kapalı</small></div>
@@ -116,18 +128,51 @@
   const vo = document.getElementById('video-onbellek');
   const voIpucu = document.getElementById('video-onbellek-ipucu');
   const voVarsayilan = voIpucu.textContent;
-  window.kabuk.videoOnbellek?.().then((d) => {
-    if (!d || d.motor === null) {
+  const videoOnbellekGoster = () => window.kabuk.videoOnbellek?.().then((d) => {
+    if (d?.motor === 'aciliyor') {
+      vo.disabled = true;
+      voIpucu.textContent = 'Motor açılıyor…';
+    } else if (!d || d.motor === null) {
       vo.disabled = true;
       voIpucu.textContent = 'Stremio açık değil: açınca buradan ayarlanır';
     } else if (d.motor === 'sunucu') {
       vo.disabled = true;
       voIpucu.textContent = 'Bu bilgisayardaki sunucunun önbelleği: odada Ayarlar\'dan (host)';
     } else {
+      vo.disabled = false;
+      voIpucu.textContent = voVarsayilan;
       vo.value = d.gb === null ? '' : String(d.gb);
       if (d.motor === 'stremio') voIpucu.textContent = `${voVarsayilan} (Stremio'nun ayarı)`;
     }
   });
+  videoOnbellekGoster();
+  // Motor rozeti: hangi motor indiriyor. Kendi motoru açılırken (ilk açılışta TorrServer indiriliyor) bekler.
+  const MOTOR_ROZET = {
+    kendi: ['iyi', 'TorrServer · Stremio gerekmiyor'],
+    sunucu: ['iyi', 'Bu bilgisayardaki sunucunun motoru'],
+    stremio: ['', 'Stremio'],
+    aciliyor: ['uyari', 'Açılıyor…'],
+    yok: ['kotu', 'Yok'],
+  };
+  const motorRozet = document.getElementById('motor-rozet');
+  const motorIpucu = document.getElementById('motor-ipucu');
+  const motorBekci = document.getElementById('motor-bekci');
+  async function motorGoster() {
+    const m = await window.kabuk.motor?.().catch(() => null);
+    if (!m) return;
+    const [sinif, yazi] = MOTOR_ROZET[m.tur] || ['', m.tur];
+    motorRozet.className = `rozet ${sinif}`;
+    motorRozet.textContent = yazi;
+    if (m.tur === 'kendi') motorIpucu.textContent = `Kendi TorrServer'ı${m.surum ? ` ${m.surum}` : ''}${m.peerPort ? ` · peer portu ${m.peerPort}` : ''}`;
+    else if (m.tur === 'yok') motorIpucu.textContent = m.hata ? `Açılamadı: ${m.hata}` : 'Uygulamayı yeniden aç ya da Stremio'yu başlat';
+    else if (m.tur === 'aciliyor') motorIpucu.textContent = 'İlk açılışta TorrServer indiriliyor (yaklaşık 64 MB)';
+    document.getElementById('motor-bekci-satir').hidden = m.tur !== 'kendi';
+    motorBekci.checked = m.bekci === true;
+    if (m.tur === 'aciliyor') setTimeout(motorGoster, 1500);
+    else videoOnbellekGoster();
+  }
+  motorGoster();
+  motorBekci.addEventListener('change', () => window.kabuk.motorBekciYaz?.(motorBekci.checked));
   vo.addEventListener('change', async () => {
     const r = await window.kabuk.videoOnbellekYaz?.(Number(vo.value));
     voIpucu.textContent = r?.ok ? (r.gb ? `Önbellek: ${r.gb} GB` : 'Önbellek kapalı') : 'Ayarlanamadı (0-1000 GB)';

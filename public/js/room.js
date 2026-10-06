@@ -3300,6 +3300,7 @@ $('#open-settings').addEventListener('click', () => {
   if (isHost()) {
     request('yuklemeSiniriOku').then((res) => {
       if (!res?.error) $('#set-upload').value = res.mbps ? String(res.mbps) : '';
+      yuklemeMotoru = res?.motor || null;
     });
     request('onbellekOku').then((res) => {
       $('#set-video-onbellek').disabled = Boolean(res?.error);
@@ -3318,9 +3319,11 @@ $('#set-video-onbellek').addEventListener('change', async (e) => {
   if (res?.error) toast(res.error === 'stremioDown' ? 'Stremio\'ya ulaşılamadı, önbellek değişmedi.' : errorText(res.error));
   else toast(res.gb ? `Önbellek: ${res.gb} GB` : 'Önbellek kapatıldı');
 });
+// TorrServer motorunda sınır kendi ayarı (Windows onayı yok); Stremio'da Windows QoS kuralı.
+let yuklemeMotoru = null;
 $('#set-upload').addEventListener('change', async (e) => {
   const mbps = e.target.value ? Number(e.target.value) : null;
-  toast('Windows onay penceresi açılıyor: "Evet" de.', 6000);
+  if (yuklemeMotoru !== 'torrserver') toast('Windows onay penceresi açılıyor: "Evet" de.', 6000);
   e.target.disabled = true;
   const res = await request('yuklemeSiniri', { mbps }, 130_000);
   e.target.disabled = false;
@@ -3328,7 +3331,12 @@ $('#set-upload').addEventListener('change', async (e) => {
     toast(res.error === 'izinYok' ? 'Onay verilmedi, sınır değişmedi.' : errorText(res.error));
     const now = await request('yuklemeSiniriOku');
     e.target.value = now?.mbps ? String(now.mbps) : '';
-  } else toast(res.mbps ? `Stremio yükleme sınırı: ${res.mbps} Mbps` : 'Yükleme sınırı kaldırıldı');
+  } else if (res.bekliyor) {
+    toast("Sınır izleme bitince uygulanacak (şimdi uygulamak torrent'leri kapatıp oynatmayı keserdi).", 7000);
+  } else {
+    const ad = yuklemeMotoru === 'torrserver' ? 'Yükleme sınırı' : 'Stremio yükleme sınırı';
+    toast(res.mbps ? `${ad}: ${res.mbps} Mbps` : 'Yükleme sınırı kaldırıldı');
+  }
 });
 dialog.addEventListener('change', async (e) => {
   // Bu cihazın ayarları (kalite, donanım) kendi dinleyicilerinde; burası yalnızca oda ayarları.

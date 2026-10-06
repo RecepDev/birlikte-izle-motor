@@ -34,6 +34,7 @@ export function createPanelApp({
   gecmis = { liste: () => [], izlenenler: () => [] },
   tercih = { kalite: () => null },
   motorBilgisi = null,
+  motorPanel = null,
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -106,6 +107,38 @@ export function createPanelApp({
       addonUrl: `${publicBase}/manifest.json`,
     });
   }));
+
+  // Motor kartı: motor durumu, önbellek, açık torrent'ler (hız, peer, odada izleniyor mu).
+  const izlenenler = () => new Set(rooms.list().flatMap((r) => r.streams
+    .filter((s) => s.streamId === r.hostStreamId && s.infoHash).map((s) => s.infoHash.toLowerCase())));
+  app.get('/api/motor', wrap(async (req, res) => {
+    if (!motorPanel) return res.status(404).json({ error: 'yok' });
+    let stats = {};
+    try {
+      stats = await (await fetch(`${STREMIO_BASE}/stats.json`, { signal: AbortSignal.timeout(4000) })).json();
+    } catch { /* motor kapalı */ }
+    const izlenen = izlenenler();
+    const mbps = (bps) => Math.round(((Number(bps) || 0) * 8) / 1e5) / 10;
+    const torrentler = Object.values(stats || {}).filter((t) => t?.infoHash).map((t) => ({
+      infoHash: t.infoHash,
+      ad: t.name || null,
+      peers: t.peers || 0,
+      bulunan: t.swarmSize || 0,
+      indirmeMbps: mbps(t.downloadSpeed),
+      yuklemeMbps: mbps(t.uploadSpeed),
+      izleniyor: izlenen.has(String(t.infoHash).toLowerCase()),
+    }));
+    res.json({ ...(await motorPanel.durum()), torrentler });
+  }));
+  app.post('/api/motor/yeniden-baslat', wrap(async (req, res) => res.json(await motorPanel.yenidenBaslat())));
+  app.post('/api/motor/onbellek-bosalt', wrap(async (req, res) => res.json(await motorPanel.onbellekBosalt())));
+  app.put('/api/motor/ayar', (req, res) => {
+    const yeni = {};
+    if (req.body?.motor !== undefined) yeni.motor = req.body.motor;
+    if (req.body?.bekci !== undefined) yeni.bekci = req.body.bekci;
+    const r = motorPanel.ayarla(yeni);
+    res.status(r.error ? 400 : 200).json(r);
+  });
 
   app.post('/api/tunnel/restart', (req, res) => {
     tunnel.restart();

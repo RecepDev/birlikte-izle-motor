@@ -36,6 +36,7 @@ import { createGiris } from './src/giris.js';
 import { createTercih } from './src/tercih.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun, kapatilacaklar, bizimMi } from './src/bizim-torrentler.js';
 import { createTorrentHiz } from './src/torrent-hiz.js';
+import { createMotorSecim } from './src/motor-secim.js';
 import { createTani } from './src/tani.js';
 import { masaustuAc } from './src/masaustu-baslat.js';
 import { stremioTakildiMi } from './src/takilma.js';
@@ -72,7 +73,11 @@ const stremioLocal = createStremioLocal();
 // olarak açılıyor; önüne Stremio'nun adreslerini taklit eden ara katman 11470'te oturuyor, böylece
 // relay, masaüstü uygulaması ve tarayıcı hiç değişmeden çalışıyor. Stremio açıksa 11470 dolu:
 // TorrServer kullanılamıyor, Stremio'yla devam ediliyor (kapatıp sunucuyu yeniden başlatmak gerek).
-const MOTOR = TEST ? (process.env.MOTOR || 'stremio') : (process.env.MOTOR || 'torrserver');
+// Panelden seçilebiliyor (data/motor.json, yeniden açılınca geçerli); ortam değişkeni varsa o kazanıyor.
+const motorSecim = createMotorSecim({ file: path.join(DATA, 'motor.json'), log });
+const MOTOR = TEST ? (process.env.MOTOR || 'stremio') : (process.env.MOTOR || motorSecim.motor() || 'torrserver');
+// Güncel tracker listesi (ngosang, günde bir): torrent'lere ve TorrServer'ın varsayılan listesine ekleniyor.
+const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), log });
 let torrServer = null;
 let stremioTaklidi = null;
 let onbellek = null;
@@ -80,7 +85,13 @@ let onbellek = null;
 const onbellekAyar = createOnbellekAyar({ file: path.join(DATA, 'onbellek.json'), varsayilanGb: Number(process.env.ONBELLEK_GB) || 10, log });
 let motorAyri = false; // TorrServer çalışıyor (Stremio asıl sunucuyla ortak değil)
 if (MOTOR === 'torrserver') {
-  torrServer = createTorrServer({ klasor: DATA, port: Number(process.env.TORRSERVER_PORT) || 8097, log });
+  torrServer = createTorrServer({
+    klasor: DATA,
+    port: Number(process.env.TORRSERVER_PORT) || 8097,
+    log,
+    trackerlar: () => torrentHiz.kaynaklar().map((t) => t.slice('tracker:'.length)),
+    bekci: () => motorSecim.bekci(),
+  });
   process.on('exit', () => torrServer?.durdur());
   // Video önbelleği (Stremio'nun disk önbelleği gibi): izlenen yerler diskte kalıyor; aynı film / yarım
   // kalan yer yeniden açılınca internete gitmeden geliyor. Sınır oda ayarlarından (onbellekAyar).
@@ -130,7 +141,6 @@ const giris = createGiris({ file: path.join(DATA, 'giris.json'), log });
 const tani = createTani({ dir: path.join(DATA, 'tani'), log });
 const kaynakHafiza = createKaynakHafiza({ file: path.join(DATA, 'kaynak-hafiza.json'), log });
 const tercih = createTercih({ file: path.join(DATA, 'tercih.json'), log });
-const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), log });
 // Ek tracker'lar yeni açılan torrent'lere ekleniyor; Stremio'nun peer arama sınırı yükseltiliyor.
 setInterval(() => setExtraSources(torrentHiz.kaynaklar()), 60_000).unref();
 setExtraSources(torrentHiz.kaynaklar());
@@ -252,7 +262,7 @@ socketCtl = attachSocket(io, {
       yuklemeSiniriOku: async (room, uid) => {
         if (uid !== room.hostUserId) return { error: 'notHost' };
         const mbps = torrServer ? await torrServer.yuklemeSiniri() : await yuklemeSiniriOku();
-        return { reply: { ok: true, mbps }, msgs: [] };
+        return { reply: { ok: true, mbps, motor: torrServer ? 'torrserver' : 'stremio' }, msgs: [] };
       },
       yuklemeSiniri: async (room, uid, p) => {
         if (uid !== room.hostUserId) return { error: 'notHost' };
@@ -261,8 +271,8 @@ socketCtl = attachSocket(io, {
         // TorrServer'da kendi ayarı (yönetici izni gerekmiyor); Stremio'da Windows QoS kuralı.
         const res = torrServer ? await torrServer.yuklemeSiniriKoy(mbps) : await yuklemeSiniriKoy(mbps);
         if (res.error) return { error: res.error };
-        log.info(torrServer ? 'TorrServer yükleme sınırı' : 'Stremio yükleme sınırı', { mbps: res.mbps });
-        return { reply: { ok: true, mbps: res.mbps }, msgs: [] };
+        log.info(torrServer ? 'TorrServer yükleme sınırı' : 'Stremio yükleme sınırı', { mbps: res.mbps, bekliyor: res.bekliyor || undefined });
+        return { reply: { ok: true, mbps: res.mbps, bekliyor: res.bekliyor === true }, msgs: [] };
       },
       // Önbellek boyutu (GB, elle): TorrServer motorunda bizim önbelleğimiz, Stremio'da Stremio'nun ayarı.
       onbellekOku: async (room, uid) => {
@@ -793,6 +803,40 @@ cleanupTimer.unref();
 
 // ---- panel server (:7301) -------------------------------------------------
 
+// Paneldeki "Motor" kartı. Stremio motorunda Stremio asıl sunucuyla (canlı kopya) ortak: yeniden
+// başlatma ve torrent kapatma yalnız kendi TorrServer'ımızda.
+let onbellekKullanim = null; // { at, v }: klasör taraması 15 sn'de birden sık yapılmasın
+const motorPanel = {
+  async durum() {
+    let ob = null;
+    if (motorAyri && onbellek) {
+      if (!onbellekKullanim || Date.now() - onbellekKullanim.at > 15_000) {
+        onbellekKullanim = { at: Date.now(), v: await onbellek.kullanim() };
+      }
+      ob = { ...onbellekKullanim.v, sinir: onbellek.sinir() };
+    }
+    return {
+      istenen: MOTOR,
+      kullanilan: motorAyri ? 'torrserver' : 'stremio',
+      secim: motorSecim.motor(),
+      bekci: motorSecim.bekci(),
+      ortam: process.env.MOTOR || null,
+      ts: torrServer ? await torrServer.durum() : null,
+      onbellek: ob,
+    };
+  },
+  async yenidenBaslat() {
+    if (!motorAyri) return { error: 'stremio' };
+    return stremioRestarter.restart('panel');
+  },
+  async onbellekBosalt() {
+    if (!motorAyri || !onbellek) return { error: 'yok' };
+    onbellekKullanim = null;
+    return { ok: true, ...(await onbellek.bosalt()) };
+  },
+  ayarla: (yeni) => motorSecim.yaz(yeni),
+};
+
 const panelServer = http.createServer(
   createPanelApp({
     kaynakHafiza,
@@ -807,6 +851,7 @@ const panelServer = http.createServer(
     stremioLocal,
     log,
     motorBilgisi: () => ({ istenen: MOTOR, kullanilan: motorAyri ? 'torrserver' : 'stremio' }),
+    motorPanel,
     onShutdown: shutdown,
     installCloudflared: () => installCloudflared({ log }),
     onRoomCreated: (room) => {

@@ -34,22 +34,28 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
     return Math.min(blok, boy - no * blok);
   }
 
-  async function temizle() {
-    try {
-      const dosyalar = [];
-      for (const ih of await fs.promises.readdir(klasor)) {
-        const d = path.join(klasor, ih);
-        for (const id of await fs.promises.readdir(d).catch(() => [])) {
-          const dd = path.join(d, id);
-          if (!(await fs.promises.stat(dd)).isDirectory()) continue;
-          for (const ad of await fs.promises.readdir(dd)) {
-            if (!ad.endsWith('.blk')) continue;
-            const yol = path.join(dd, ad);
-            const st = await fs.promises.stat(yol).catch(() => null);
-            if (st) dosyalar.push({ yol, boy: st.size, zaman: st.mtimeMs });
-          }
+  // Diskteki bütün bloklar: [{ yol, boy, zaman }]
+  async function tara() {
+    const dosyalar = [];
+    for (const ih of await fs.promises.readdir(klasor).catch(() => [])) {
+      const d = path.join(klasor, ih);
+      for (const id of await fs.promises.readdir(d).catch(() => [])) {
+        const dd = path.join(d, id);
+        if (!(await fs.promises.stat(dd).catch(() => null))?.isDirectory()) continue;
+        for (const ad of await fs.promises.readdir(dd).catch(() => [])) {
+          if (!ad.endsWith('.blk')) continue;
+          const yol = path.join(dd, ad);
+          const st = await fs.promises.stat(yol).catch(() => null);
+          if (st) dosyalar.push({ yol, boy: st.size, zaman: st.mtimeMs });
         }
       }
+    }
+    return dosyalar;
+  }
+
+  async function temizle() {
+    try {
+      const dosyalar = await tara();
       let toplam = dosyalar.reduce((a, f) => a + f.boy, 0);
       if (toplam <= sinir) return { toplam, silinen: 0 };
       dosyalar.sort((a, b) => a.zaman - b.zaman);
@@ -73,6 +79,23 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
     blokBoyu,
     temizle,
     acik: () => sinir > 0,
+    sinir: () => sinir,
+    // Panel için: diskteki toplam bayt ve film (torrent) sayısı.
+    async kullanim() {
+      const dosyalar = await tara();
+      const filmler = new Set(dosyalar.map((f) => path.basename(path.dirname(path.dirname(f.yol)))));
+      return { bayt: dosyalar.reduce((a, f) => a + f.boy, 0), film: filmler.size };
+    },
+    // Hepsini sil (panelden). O an okunan blok yoksa oynatma TorrServer'dan devam eder.
+    async bosalt() {
+      let silinen = 0;
+      for (const ih of await fs.promises.readdir(klasor).catch(() => [])) {
+        await fs.promises.rm(path.join(klasor, ih), { recursive: true, force: true }).catch(() => {});
+        silinen++;
+      }
+      log?.info?.('Önbellek boşaltıldı', { film: silinen });
+      return { silinen };
+    },
     // Elle girilen boyut (bkz. src/onbellek-ayar.js); küçülünce fazlası hemen siliniyor.
     sinirAyarla(bayt) {
       sinir = Math.max(0, bayt);
