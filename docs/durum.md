@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-06 · Son commit: "feat(motor): panelde Motor karti..." (git log -1) · Masaüstü 0.7.37 · Android 0.32.0 (versionCode 32)
+Son güncelleme: 2026-10-06 · Son commit: d72779e · Masaüstü 0.7.37 · Android 0.32.0 (versionCode 32)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
