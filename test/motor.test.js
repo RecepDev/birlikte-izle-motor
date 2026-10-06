@@ -69,7 +69,8 @@ test('Stremio taklidi: stats, akış (Range), kapatma, ekleme', async () => {
     async kapat(ih) { olaylar.push(['kapat', ih]); acik = false; },
     akisAdresi: (ih, id) => `http://127.0.0.1:${kaynak.address().port}/stream?link=${ih}&index=${id}`,
   };
-  const taklit = createStremioTaklidi({ ts, port: 0, log: sessiz });
+  const kayitlar = [];
+  const taklit = createStremioTaklidi({ ts, port: 0, log: { ...sessiz, info: (m, ek) => kayitlar.push([m, ek]) } });
   await taklit.baslat();
   const adres = `http://127.0.0.1:${taklit.port()}`;
   try {
@@ -82,6 +83,10 @@ test('Stremio taklidi: stats, akış (Range), kapatma, ekleme', async () => {
     assert.equal(res.headers.get('content-range'), 'bytes 5-9/20');
     assert.equal(await res.text(), '56789');
     assert.deepEqual(olaylar[0], ['ekle', IH, ['udp://t:1']]);
+    // Yeni açılan torrent'in açılış süresi günlüğe (metadata ve ilk veri ayrı).
+    const acilis = kayitlar.find(([m]) => m === 'Torrent açılışı')?.[1];
+    assert.equal(acilis?.infoHash, IH);
+    assert.ok(acilis.metadataSn >= 0 && acilis.ilkVeriSn >= acilis.metadataSn);
     const st = await (await fetch(`${adres}/${IH}/stats.json`)).json();
     assert.equal(st.peers, 3);
     assert.deepEqual(Object.keys(await (await fetch(`${adres}/stats.json`)).json()), [IH]);

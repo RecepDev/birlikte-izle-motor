@@ -19,13 +19,14 @@ const INDIRME = `https://github.com/YouROK/TorrServer/releases/download/${SURUM}
 // Bizim kullanımımıza göre ayarlar (gerisi TorrServer'ın varsayılanı):
 // - Bağlantı sınırı Stremio'daki gibi 80 (varsayılan 25; ev modeminin bağlantı tablosu da düşünülerek).
 // - Önbellek RAM'de 512 MB: host'un oynatıcısı ve relay'deki misafirler farklı yerleri okuyabiliyor.
-// - Okuyan kalmayınca torrent 30 sn sonra kapanıyor (arkada torrent kalmasın kuralı).
+// - Okuyan kalmayınca torrent 2 dk sonra kapanıyor. 30 sn'de duraklatıp dönünce peer'ler sıfırdan
+//   bulunuyordu. Sunucuda odası kalmayan torrent'i zaten sunucu kapatıyor (bizim-torrentler.js).
 // - Kapanınca önbelleği silinsin.
 export const AYARLAR = {
   ConnectionsLimit: 80,
   CacheSize: 512 * 1024 * 1024,
   ReaderReadAHead: 95,
-  TorrentDisconnectTimeout: 30,
+  TorrentDisconnectTimeout: 120,
   RemoveCacheOnDrop: true,
   EnableDLNA: false,
   EnableBonjour: false,

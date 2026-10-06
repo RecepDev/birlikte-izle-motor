@@ -72,13 +72,29 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
   const kimlik = crypto.randomBytes(8).toString('hex'); // 127.0.0.1'e cevap verenin biz olduğunu doğrulamak için
   const ekleniyor = new Map(); // hash -> ekleme sözü (aynı torrent iki kez eklenmesin)
   const secilen = new Map(); // `${hash}/${sıra}` -> { id, length }
+  // Açılış ölçümü (yeni eklenen torrent): eklenme, metadata ve TorrServer'dan ilk veri anları.
+  // Günlüğe "Torrent açılışı" olarak yazılıyor: yavaşlık metadata'da mı, ilk parçada mı görülsün.
+  const acilis = new Map(); // hash -> { t0, meta, kaynak }
   let sunucu = null;
+
+  function acilisMeta(ih) {
+    const a = acilis.get(ih);
+    if (a && !a.meta) a.meta = Date.now();
+  }
+  function acilisIlkVeri(ih) {
+    const a = acilis.get(ih);
+    if (!a) return;
+    acilis.delete(ih);
+    const sn = (t) => Math.round((t - a.t0) / 100) / 10;
+    log.info('Torrent açılışı', { infoHash: ih, metadataSn: a.meta ? sn(a.meta) : null, ilkVeriSn: sn(Date.now()), tracker: a.tracker });
+  }
 
   const trackerlar = (kaynaklar) => kaynaklar
     .filter((s) => typeof s === 'string' && s.startsWith('tracker:'))
     .map((s) => s.slice('tracker:'.length));
 
   async function ekle(ih, tr) {
+    if (!acilis.has(ih)) acilis.set(ih, { t0: Date.now(), meta: null, tracker: tr.length });
     if (!ekleniyor.has(ih)) ekleniyor.set(ih, ts.ekle(ih, tr).finally(() => ekleniyor.delete(ih)));
     return ekleniyor.get(ih);
   }
@@ -95,6 +111,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
       await new Promise((r) => setTimeout(r, 100)); // metadata gelir gelmez başlasın
       t = await ts.torrent(ih);
     }
+    acilisMeta(ih);
     const f = dosyaSec(t.file_stats, idx, ad || dosyaAdi(ih, idx));
     secilen.set(anahtar, f);
     return f;
@@ -118,6 +135,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
       const giden = {};
       for (const b of AKTARILAN) if (up.headers[b]) giden[b] = up.headers[b];
       res.writeHead(up.statusCode || 502, giden);
+      up.once('data', () => acilisIlkVeri(ih));
       up.pipe(res);
     });
     ust.on('error', (err) => {
@@ -199,6 +217,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
         let blokNo = Math.ceil(konum / B); // önbelleğe yazılacak ilk tam blok (baştaki yarım blok yazılmaz)
         let parcalar = [];
         let toplanan = 0;
+        up.once('data', () => acilisIlkVeri(ih));
         up.on('data', (p) => {
           if (!res.write(p)) {
             up.pause();
@@ -278,6 +297,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
       if (m[2] === 'stats.json') return json(res, 200, istatistik(await ts.torrent(ih).catch(() => null)));
       if (m[2] === 'remove') {
         await ts.kapat(ih);
+        acilis.delete(ih);
         for (const k of secilen.keys()) if (k.startsWith(`${ih}/`)) secilen.delete(k);
         return json(res, 200, {});
       }

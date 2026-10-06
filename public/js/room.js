@@ -2312,6 +2312,25 @@ video.addEventListener('dblclick', toggleFullscreen);
 let weakSince = null;
 let weakCheckedFor = null;
 let weakSuggestion = null;
+let hizliDenenen = null;
+// Açılışta ölü kaynak: video hiç başlamadı ve hiç veri gelmiyor. Son 15 dakikada ölçülüp veri verdiği
+// bilinen bir kaynak varsa 45 sn beklemeden ona geçilir (yeniden ölçüm yok, oda aynı yerden açılır).
+async function oluKaynaktanGec(s) {
+  hizliDenenen = s.streamId;
+  const bilinen = await request('olcumler');
+  const iyi = (bilinen?.list || [])
+    .filter((x) => x.streamId !== s.streamId && x.alive && x.yasSn < 900 && x.downMbps >= 5 && streamById(x.streamId)
+      && streamById(x.streamId).infoHash !== s.infoHash)
+    .sort((a, b) => b.downMbps - a.downMbps)[0];
+  if (!iyi || state.room?.hostStreamId !== s.streamId || player.status().state !== 'loading') return false;
+  const hedef = streamById(iyi.streamId);
+  const res = await request('setHostStream', { streamId: hedef.streamId });
+  if (res?.error) return false;
+  tani.kaydet('oto-gecis', { from: s.quality, to: hedef.quality, mbps: iyi.downMbps, cur: 0, neden: 'acilmadi' });
+  toast(`Kaynak açılmadı; veri verdiği bilinen kaynağa geçildi (${hedef.quality || '?'} · ${iyi.downMbps.toFixed(0)} Mbps).`, 6000);
+  playAfterSwitch();
+  return true;
+}
 async function checkWeakSource() {
   const s = myStream();
   if (!isHost() || s?.kind !== 'torrent' || state.room?.hostStreamId !== s.streamId) {
@@ -2329,6 +2348,8 @@ async function checkWeakSource() {
     return;
   }
   weakSince ||= Date.now();
+  const olu = st.state === 'loading' && (video.currentTime || 0) < 2 && (Number(ts?.downMbps) || 0) < 0.5;
+  if (olu && Date.now() - weakSince >= 15_000 && hizliDenenen !== s.streamId && await oluKaynaktanGec(s)) return;
   // Önce seçilen kaynağa süre tanı: 45 sn boyunca zayıf kalırsa diğerlerini ara.
   if (Date.now() - weakSince < 45_000 || weakCheckedFor === s.streamId) return;
   weakCheckedFor = s.streamId;

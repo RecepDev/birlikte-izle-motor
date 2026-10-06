@@ -27,6 +27,7 @@ import torrentStream from 'torrent-stream';
 import WebTorrent from 'webtorrent';
 import DHT from 'bittorrent-dht';
 import { dosyaSec } from '../../src/motor/stremio-taklidi.js';
+import { AYARLAR, IYI_TRACKERLAR } from '../../src/motor/torrserver.js';
 
 const BURASI = path.dirname(new URL(import.meta.url).pathname.slice(1));
 const STREMIO = 'http://127.0.0.1:11470';
@@ -136,13 +137,14 @@ function olcOku(motor, bas, son, { hedef = Infinity, sureMs }) {
 }
 
 async function olc(motor, d) {
-  const sonuc = { acilis: null, izlemeMbps: null, sarma35: null, sarma80: null, peer: 0, hata: null };
+  const sonuc = { metadata: null, acilis: null, izlemeMbps: null, sarma35: null, sarma80: null, peer: 0, hata: null };
   const peerTakip = setInterval(async () => {
     try { sonuc.peer = Math.max(sonuc.peer, (await motor.peer()) || 0); } catch { /* */ }
   }, 1000);
   try {
     const t0 = Date.now();
     await Promise.race([motor.ac(d), bekle(ACILIS_MS).then(() => { throw new Error('metadata zaman aşımı'); })]);
+    sonuc.metadata = yuvarla((Date.now() - t0) / 1000);
     const kalan = ACILIS_MS - (Date.now() - t0);
     const a = await olcOku(motor, 0, ILK - 1, { hedef: ILK, sureMs: Math.max(kalan, 1000) });
     if (!a.tamam) throw new Error('açılış zaman aşımı');
@@ -342,9 +344,10 @@ function rqbitMotor() {
 }
 
 // TorrServer (Go, anacrolix/torrent). Akış için yapılmış: RAM önbelleği (varsayılan 64 MB) + önden okuma.
-// Bağlantı sınırı 25'ten 80'e çıkarılıyor (ötekilerle eşit).
-function torrserverMotor() {
-  const API = 'http://127.0.0.1:8097';
+// Bağlantı sınırı 25'ten 80'e çıkarılıyor (ötekilerle eşit). ek: denenecek ayarlar (ts-* varyantları).
+// Port 8097 değil: o, motor kopyasının canlı sunucusunun TorrServer'ı (ayar yazmak onun torrent'lerini kapatır).
+function torrserverMotor({ port = 8300, ek = {} } = {}) {
+  const API = `http://127.0.0.1:${port}`;
   let ih = null;
   let id = null;
   let boy = null;
@@ -352,9 +355,9 @@ function torrserverMotor() {
   return {
     async hazirla() {
       const klasor = fs.mkdtempSync(path.join(os.tmpdir(), 'olc-tsv-'));
-      await surecBaslat(path.join(BURASI, 'araclar', 'TorrServer.exe'), ['-p', '8097', '-d', klasor], `${API}/echo`);
+      await surecBaslat(path.join(BURASI, 'araclar', 'TorrServer.exe'), ['-p', String(port), '-d', klasor], `${API}/echo`);
       const ayar = await (await fetch(`${API}/settings`, { method: 'POST', body: JSON.stringify({ action: 'get' }) })).json();
-      await fetch(`${API}/settings`, { method: 'POST', body: JSON.stringify({ action: 'set', sets: { ...ayar, ConnectionsLimit: 80 } }) });
+      await fetch(`${API}/settings`, { method: 'POST', body: JSON.stringify({ action: 'set', sets: { ...ayar, ConnectionsLimit: 80, ...ek } }) });
     },
     async ac(d) {
       ih = d.ih;
@@ -410,10 +413,29 @@ function ltMotor() {
   };
 }
 
+// Üründeki TorrServer ayarları (src/motor/torrserver.js) ve onlardan tek farkla denemeler.
+const URETIM = { ...AYARLAR, RetrackersMode: 1, DefaultTrackers: IYI_TRACKERLAR.join('\n') };
 const MOTORLAR = {
   stremio: stremioMotor, 'torrent-stream': tsMotor, webtorrent: wtMotor,
   rqbit: rqbitMotor, torrserver: torrserverMotor, libtorrent: ltMotor,
+  'ts-uretim': () => torrserverMotor({ port: 8301, ek: URETIM }),
+  'ts-kucuk-ra': () => torrserverMotor({ port: 8302, ek: { ...URETIM, ReaderReadAHead: 10 } }),
+  'ts-utp-yok': () => torrserverMotor({ port: 8303, ek: { ...URETIM, DisableUTP: true } }),
 };
+
+// Kullanıcı izliyorsa (11470'te indiren torrent var) bekle: ölçüm hattı doldurup izlemesini bozar.
+async function kullaniciBekle() {
+  for (let ilk = true; ; ilk = false) {
+    let hiz = 0;
+    try {
+      const st = await (await fetch(`${STREMIO}/stats.json`, { signal: AbortSignal.timeout(3000) })).json();
+      hiz = Object.values(st || {}).reduce((a, t) => a + (Number(t?.downloadSpeed) || 0), 0);
+    } catch { /* 11470 kapalı: kimse izlemiyor */ }
+    if (hiz < 300 * 1024) return;
+    if (ilk) log(`  (kullanıcı izliyor, ${yuvarla((hiz * 8) / 1e6)} Mbps: bitene kadar bekleniyor)`);
+    await bekle(30_000);
+  }
+}
 
 // ---- hat hızı ---------------------------------------------------------------------------
 // Cloudflare'den 4 paralel 25 MB (100 MB'lık istek 403 dönüyor). Motorların hattı doldurup doldurmadığı görülsün.
@@ -440,6 +462,7 @@ const medyan = (a) => {
 };
 
 const tr = trackerlar();
+await kullaniciBekle();
 log(`Hat hızı: ${await hatHizi()} Mbps`);
 const tekTorrent = process.env.TORRENT?.split(':');
 const torrentler = (tekTorrent
@@ -464,11 +487,12 @@ for (let i = 0; i < torrentler.length; i++) {
   log(`\n== ${d.ad}`);
   const sira = SECILI.map((_, k) => SECILI[(k + i) % SECILI.length]);
   for (const ad of sira) {
+    await kullaniciBekle();
     const t0 = Date.now();
     const s = await olc(motorlar[ad], d);
-    log(`  ${ad.padEnd(15)} açılış ${s.acilis ?? '-'} sn | izleme ${s.izlemeMbps ?? '-'} Mbps | sarma %35 ${s.sarma35 ?? '-'} sn, %80 ${s.sarma80 ?? '-'} sn | peer ${s.peer}${s.hata ? ` | HATA ${s.hata}` : ''} (${yuvarla((Date.now() - t0) / 1000)} sn)`);
+    log(`  ${ad.padEnd(15)} metadata ${s.metadata ?? '-'} sn | açılış ${s.acilis ?? '-'} sn | izleme ${s.izlemeMbps ?? '-'} Mbps | sarma %35 ${s.sarma35 ?? '-'} sn, %80 ${s.sarma80 ?? '-'} sn | peer ${s.peer}${s.hata ? ` | HATA ${s.hata}` : ''} (${yuvarla((Date.now() - t0) / 1000)} sn)`);
     tablo.push({ torrent: d.ad, kategori: d.kategori, ih: d.ih, motor: ad, ...s });
-    if (!tekTorrent) fs.writeFileSync(path.join(BURASI, 'sonuc2.json'), JSON.stringify(tablo, null, 1));
+    if (!tekTorrent) fs.writeFileSync(path.join(BURASI, process.env.SONUC || 'sonuc2.json'), JSON.stringify(tablo, null, 1));
     await bekle(5000);
   }
 }
@@ -477,7 +501,7 @@ log('\n== Özet (medyan)');
 for (const ad of SECILI) {
   const r = tablo.filter((x) => x.motor === ad);
   const ok = r.filter((x) => x.acilis !== null);
-  log(`  ${ad.padEnd(15)} başarılı ${ok.length}/${r.length} | açılış ${medyan(ok.map((x) => x.acilis))} sn | izleme ${medyan(ok.map((x) => x.izlemeMbps))} Mbps | sarma %35 ${medyan(ok.map((x) => x.sarma35))} sn, %80 ${medyan(ok.map((x) => x.sarma80))} sn | peer ${medyan(ok.map((x) => x.peer))}`);
+  log(`  ${ad.padEnd(15)} başarılı ${ok.length}/${r.length} | metadata ${medyan(ok.map((x) => x.metadata))} sn | açılış ${medyan(ok.map((x) => x.acilis))} sn | izleme ${medyan(ok.map((x) => x.izlemeMbps))} Mbps | sarma %35 ${medyan(ok.map((x) => x.sarma35))} sn, %80 ${medyan(ok.map((x) => x.sarma80))} sn | peer ${medyan(ok.map((x) => x.peer))}`);
 }
 for (const m of Object.values(motorlar)) await Promise.race([m.bitir().catch(() => {}), bekle(5000)]);
 process.exit(0);
