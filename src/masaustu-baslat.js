@@ -27,27 +27,34 @@ function kayittanBul() {
   }
 }
 
+// { exe, args } ya da null. Kurulu uygulama yoksa (kurulum hiç açılmadıysa şema kaydı da yok) kaynak
+// klasöründen açılıyor: masaustu/node_modules'teki Electron ile ("Kurulumsuz" kısayolunun yaptığı gibi).
 export function masaustuYolu() {
   const adaylar = [
     process.env.BIRLIKTE_MOTOR_MASAUSTU,
     kayittanBul(),
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'birlikte-izle-motor-masaustu', 'Birlikte Izle Motor.exe'),
     path.join(BURASI, '..', 'masaustu', 'dagitim', 'Birlikte Izle Motor-win32-x64', 'Birlikte Izle Motor.exe'),
   ].filter(Boolean);
-  for (const aday of adaylar) if (fs.existsSync(aday)) return aday;
+  for (const aday of adaylar) if (fs.existsSync(aday)) return { exe: aday, args: [] };
+  const kaynak = path.join(BURASI, '..', 'masaustu');
+  const electron = path.join(kaynak, 'node_modules', 'electron', 'dist', 'electron.exe');
+  if (fs.existsSync(electron)) return { exe: electron, args: [kaynak] };
   return null;
 }
 
 // Uygulamayı verilen adresle açar. Açıksa ikinci örnek kapanıp çalışan pencereyi
 // o adrese yolluyor (bkz. masaustu/electron/ana.cjs).
 export function masaustuAc(url) {
-  const exe = masaustuYolu();
-  if (!exe) return { error: 'yok' };
+  const yer = masaustuYolu();
+  if (!yer) return { error: 'yok' };
+  const { exe, args } = yer;
   // ELECTRON_RUN_AS_NODE ortamda kalmışsa uygulama Electron yerine düz Node gibi
   // açılıp hemen kapanıyor; miras almasını engelliyoruz.
   const ortam = { ...process.env };
   delete ortam.ELECTRON_RUN_AS_NODE;
   // Adres yoksa uygulama açılış ekranıyla (açık odalar, film ara) başlıyor.
-  const cocuk = spawn(exe, url ? [url] : [], { detached: true, stdio: 'ignore', windowsHide: false, env: ortam });
+  const cocuk = spawn(exe, [...args, ...(url ? [url] : [])], { detached: true, stdio: 'ignore', windowsHide: false, env: ortam });
   cocuk.unref();
   return { ok: true, exe };
 }

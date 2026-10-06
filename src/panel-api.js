@@ -33,6 +33,7 @@ export function createPanelApp({
   relayStats = () => null,
   gecmis = { liste: () => [], izlenenler: () => [] },
   tercih = { kalite: () => null },
+  motorBilgisi = null,
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -100,6 +101,8 @@ export function createPanelApp({
     res.json({
       tunnel: tunnel.status(),
       stremio: await stremioLocal.isUp(),
+      // Motor: "torrserver" ya da "stremio"; istenen torrserver olup Stremio'ya düşüldüyse panel uyarıyor.
+      motor: motorBilgisi?.() ?? null,
       addonUrl: `${publicBase}/manifest.json`,
     });
   }));

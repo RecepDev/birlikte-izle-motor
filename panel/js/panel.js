@@ -22,7 +22,19 @@ async function refreshStatus() {
     return;
   }
   $('#st-stremio-dot').className = `dot ${status.stremio ? 'ok' : 'warn'}`;
-  $('#st-stremio').textContent = status.stremio ? 'açık' : 'kapalı (senin videon için Stremio açık olmalı)';
+  const motor = status.motor;
+  if (motor?.kullanilan === 'torrserver') {
+    $('#st-motor-ad').textContent = 'Torrent motoru';
+    $('#st-stremio').textContent = status.stremio ? 'TorrServer · açık (Stremio gerekmiyor)' : 'TorrServer kapalı';
+  } else if (motor?.istenen === 'torrserver') {
+    // Kopya TorrServer'la açılmak istedi ama 11470 doluydu (Stremio açık): Stremio'yla çalışıyor.
+    $('#st-motor-ad').textContent = 'Stremio';
+    $('#st-stremio-dot').className = 'dot warn';
+    $('#st-stremio').textContent = "açık. TorrServer yerine Stremio kullanılıyor: Stremio'yu kapatıp sunucuyu yeniden başlat";
+  } else {
+    $('#st-motor-ad').textContent = 'Stremio';
+    $('#st-stremio').textContent = status.stremio ? 'açık' : 'kapalı (senin videon için Stremio açık olmalı)';
+  }
 
   const [cls, text] = TUNNEL_TEXT[status.tunnel.state] || ['', status.tunnel.state];
   $('#st-tunnel-dot').className = `dot ${cls}`;
@@ -162,7 +174,9 @@ async function refreshRooms() {
     if (box.dataset.bos === '1') return;
     box.dataset.bos = '1';
     box.replaceChildren(
-      el('p', { class: 'muted' }, 'Henüz oda yok. Stremio\'da bir film aç ve ', el('b', { text: '👥 Birlikte İzle' }), '\'yi seç ya da uygulamadan film ara.'),
+      status?.motor?.kullanilan === 'torrserver'
+        ? el('p', { class: 'muted' }, 'Henüz oda yok. Uygulamadan film ara ve oda aç.')
+        : el('p', { class: 'muted' }, 'Henüz oda yok. Stremio\'da bir film aç ve ', el('b', { text: '👥 Birlikte İzle' }), '\'yi seç ya da uygulamadan film ara.'),
       el('button', { type: 'button', text: '🖥️ Birlikte İzle uygulamasını aç', onclick: uygulamayiAc }),
     );
     return;

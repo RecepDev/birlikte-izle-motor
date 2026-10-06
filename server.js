@@ -134,7 +134,8 @@ const torrentHiz = createTorrentHiz({ file: path.join(DATA, 'trackerlar.json'), 
 // Ek tracker'lar yeni açılan torrent'lere ekleniyor; Stremio'nun peer arama sınırı yükseltiliyor.
 setInterval(() => setExtraSources(torrentHiz.kaynaklar()), 60_000).unref();
 setExtraSources(torrentHiz.kaynaklar());
-if (!TEST) setTimeout(() => torrentHiz.stremioAyarla(), 15_000).unref();
+// TorrServer'da kendi ayarları var (src/motor/torrserver.js); Stremio'nun sınırları yalnız Stremio motorunda.
+if (!TEST && !motorAyri) setTimeout(() => torrentHiz.stremioAyarla(), 15_000).unref();
 const subtitles = createSubtitleService({
   addons,
   getAddons: () => config.get().addons,
@@ -805,6 +806,7 @@ const panelServer = http.createServer(
     tunnel,
     stremioLocal,
     log,
+    motorBilgisi: () => ({ istenen: MOTOR, kullanilan: motorAyri ? 'torrserver' : 'stremio' }),
     onShutdown: shutdown,
     installCloudflared: () => installCloudflared({ log }),
     onRoomCreated: (room) => {
