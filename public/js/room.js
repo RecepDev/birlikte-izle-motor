@@ -2430,6 +2430,28 @@ async function checkWeakSource() {
   $('#weak-src').hidden = false;
 }
 setInterval(checkWeakSource, 5000);
+
+// İyi kaynak: host 2 dakika takılmadan izlediyse kaynak (ve yayın grubu) hatırlanıyor (src/kaynak-hafiza.js).
+// Yalnız sunucunun torrent istatistiğine (8+ Mbps) bakılıyordu: önbellekten oynarken düşük kaldığı için
+// sorunsuz izlenen Silo hiç kaydedilmemişti.
+let iyiSure = 0;
+let iyiFor = null;
+let iyiBildirilen = null;
+setInterval(() => {
+  const s = myStream();
+  if (!isHost() || s?.kind !== 'torrent' || state.room?.hostStreamId !== s.streamId) return;
+  if (iyiFor !== s.streamId) {
+    iyiFor = s.streamId;
+    iyiSure = 0;
+  }
+  const st = player.status();
+  if (st.state === 'buffering') iyiSure = 0;
+  else if (st.state === 'ready' && !video.paused) iyiSure += 5;
+  if (iyiSure >= 120 && iyiBildirilen !== s.streamId) {
+    iyiBildirilen = s.streamId;
+    request('kaynakIyi', { streamId: s.streamId });
+  }
+}, 5000);
 $('#weak-src-go').addEventListener('click', async () => {
   $('#weak-src').hidden = true;
   if (!weakSuggestion) return;
