@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-07 · Son commit: d9b5a41 · Masaüstü 0.7.38 · Android 0.33.0 (versionCode 33)
+Son güncelleme: 2026-10-07 · Son commit: 6f92097 · Masaüstü 0.7.39 · Android 0.33.0 (versionCode 33)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
