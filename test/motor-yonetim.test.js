@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createMotorSecim } from '../src/motor-secim.js';
-import { createOnbellek } from '../src/motor/onbellek.js';
+import { createOnbellek, onbellekYeri, ALT_KLASOR } from '../src/motor/onbellek.js';
+import { createOnbellekAyar } from '../src/onbellek-ayar.js';
 import { createTorrServer, AYARLAR } from '../src/motor/torrserver.js';
 
 const sessiz = { info() {}, warn() {}, error() {} };
@@ -38,6 +39,53 @@ test('Önbellek: kullanım toplam bayt ve film sayısını verir, boşalt hepsin
   assert.equal(ob.sinir(), 1000);
   await ob.bosalt();
   assert.deepEqual(await ob.kullanim(), { bayt: 0, film: 0 });
+});
+
+test('Önbellek yeri: seçilen klasörün içinde kendi klasörü; taşıma filmleri götürür, başka dosyalara dokunmaz', async () => {
+  const kok = gecici('onbellek-yer');
+  const eski = path.join(kok, 'eski');
+  const ob = createOnbellek({ klasor: eski, sinirBayt: 1000, blok: 4, log: sessiz });
+  fs.mkdirSync(path.join(eski, 'c'.repeat(40), '1'), { recursive: true });
+  fs.writeFileSync(path.join(eski, 'c'.repeat(40), '1', '0.blk'), 'abcd');
+  fs.writeFileSync(path.join(eski, 'benim.txt'), 'dokunma');
+  const secilen = path.join(kok, 'disk');
+  fs.mkdirSync(secilen);
+  fs.writeFileSync(path.join(secilen, 'baska.txt'), 'x');
+  const yeni = onbellekYeri(secilen, null);
+  assert.equal(yeni, path.join(secilen, ALT_KLASOR));
+  assert.equal(onbellekYeri(yeni, null), yeni, 'kendi klasörü seçilince iç içe açılmaz');
+  assert.equal(onbellekYeri(null, eski), eski);
+  assert.equal((await ob.tasi('goreli/yol')).error, 'yol');
+  const r = await ob.tasi(yeni);
+  assert.equal(r.ok, true);
+  assert.equal(r.tasinan, 1);
+  assert.equal(ob.klasor(), yeni);
+  assert.deepEqual(await ob.kullanim(), { bayt: 4, film: 1 });
+  assert.equal(fs.readFileSync(path.join(eski, 'benim.txt'), 'utf8'), 'dokunma');
+  // Boşaltma yalnız film (torrent kimliği adlı) klasörlerini siler.
+  fs.writeFileSync(path.join(yeni, 'not.txt'), 'kalsın');
+  await ob.bosalt();
+  assert.deepEqual(await ob.kullanim(), { bayt: 0, film: 0 });
+  assert.ok(fs.existsSync(path.join(yeni, 'not.txt')));
+  assert.ok(fs.existsSync(path.join(secilen, 'baska.txt')));
+  fs.rmSync(kok, { recursive: true, force: true });
+});
+
+test('Önbellek ayarı: boyut ve yer dosyaya yazılır, geri okunur; göreli yol reddedilir', () => {
+  const klasor = gecici('onbellek-ayar');
+  const file = path.join(klasor, 'onbellek.json');
+  const a = createOnbellekAyar({ file, varsayilanGb: 10, log: sessiz });
+  assert.equal(a.klasor(), null);
+  const yer = path.join(klasor, 'bir-yer');
+  assert.equal(a.klasorAyarla(yer), true);
+  assert.equal(a.ayarla(25), true);
+  assert.equal(a.klasorAyarla('goreli'), false);
+  const b = createOnbellekAyar({ file, varsayilanGb: 10, log: sessiz });
+  assert.equal(b.gb(), 25);
+  assert.equal(b.klasor(), yer);
+  assert.equal(b.klasorAyarla(''), true);
+  assert.equal(createOnbellekAyar({ file, log: sessiz }).klasor(), null);
+  fs.rmSync(klasor, { recursive: true, force: true });
 });
 
 // Sahte TorrServer: /echo, /settings (get/set), /torrents (list). spawn sahte süreç döndürür.

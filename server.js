@@ -25,8 +25,8 @@ import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
 import { createTorrServer } from './src/motor/torrserver.js';
 import { createStremioTaklidi } from './src/motor/stremio-taklidi.js';
-import { createOnbellek } from './src/motor/onbellek.js';
-import { GB, createOnbellekAyar, gecerliGb, stremioOnbellekOku, stremioOnbellekKoy } from './src/onbellek-ayar.js';
+import { createOnbellek, onbellekYeri } from './src/motor/onbellek.js';
+import { GB, createOnbellekAyar, gecerliGb, gecerliKlasor, stremioOnbellekOku, stremioOnbellekKoy } from './src/onbellek-ayar.js';
 import { dosyaAdi } from './src/motor/dosya-adlari.js';
 import { STREMIO_BASE } from './public/js/shared/stream-url.js';
 import { createIndirRouter } from './src/indir.js';
@@ -96,7 +96,15 @@ if (MOTOR === 'torrserver') {
   process.on('exit', () => torrServer?.durdur());
   // Video önbelleği (Stremio'nun disk önbelleği gibi): izlenen yerler diskte kalıyor; aynı film / yarım
   // kalan yer yeniden açılınca internete gitmeden geliyor. Sınır oda ayarlarından (onbellekAyar).
-  onbellek = createOnbellek({ klasor: path.join(DATA, 'onbellek'), sinirBayt: onbellekAyar.gb() * GB, log });
+  // Yer panelden seçilebiliyor; seçilen yer yoksa (çıkarılmış disk) varsayılan yer.
+  let onbellekKlasor = onbellekYeri(onbellekAyar.klasor(), path.join(DATA, 'onbellek'));
+  try {
+    fs.mkdirSync(onbellekKlasor, { recursive: true });
+  } catch (err) {
+    log.warn('Önbellek yeri kullanılamıyor, varsayılan yer kullanılıyor', { klasor: onbellekKlasor, error: err.code || err.message });
+    onbellekKlasor = path.join(DATA, 'onbellek');
+  }
+  onbellek = createOnbellek({ klasor: onbellekKlasor, sinirBayt: onbellekAyar.gb() * GB, log });
   onbellek.temizle();
   setInterval(() => onbellek.temizle(), 10 * 60_000).unref();
   const taklitPort = Number(new URL(STREMIO_BASE).port) || 11470;
@@ -853,7 +861,7 @@ const motorPanel = {
       if (!onbellekKullanim || Date.now() - onbellekKullanim.at > 15_000) {
         onbellekKullanim = { at: Date.now(), v: await onbellek.kullanim() };
       }
-      ob = { ...onbellekKullanim.v, sinir: onbellek.sinir() };
+      ob = { ...onbellekKullanim.v, sinir: onbellek.sinir(), gb: onbellekAyar.gb(), klasor: onbellek.klasor(), secilen: onbellekAyar.klasor() };
     }
     return {
       istenen: MOTOR,
@@ -874,6 +882,25 @@ const motorPanel = {
     if (!motorAyri || !onbellek) return { error: 'yok' };
     onbellekKullanim = null;
     return { ok: true, ...(await onbellek.bosalt()) };
+  },
+  // Panelden boyut (GB) ve yer. klasor null/'' = varsayılan (data/onbellek).
+  async onbellekAyarla({ gb, klasor } = {}) {
+    if (!motorAyri || !onbellek) return { error: 'yok' };
+    if (gb !== undefined && !gecerliGb(Number(gb))) return { error: 'badValue' };
+    if (klasor !== undefined && !gecerliKlasor(klasor || null)) return { error: 'yol' };
+    onbellekKullanim = null;
+    let tasima = null;
+    if (klasor !== undefined) {
+      tasima = await onbellek.tasi(onbellekYeri(klasor || null, path.join(DATA, 'onbellek')));
+      if (tasima.error) return tasima;
+      onbellekAyar.klasorAyarla(klasor || null);
+    }
+    if (gb !== undefined) {
+      onbellekAyar.ayarla(Number(gb));
+      await onbellek.sinirAyarla(Number(gb) * GB);
+      log.info('Önbellek boyutu', { gb: Number(gb), motor: 'torrserver' });
+    }
+    return { ok: true, gb: onbellekAyar.gb(), klasor: onbellek.klasor(), tasinan: tasima?.tasinan, silinen: tasima?.silinen };
   },
   ayarla: (yeni) => motorSecim.yaz(yeni),
 };

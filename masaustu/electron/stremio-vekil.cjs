@@ -31,6 +31,12 @@ function ayarla({ sure, onbellek } = {}) {
   if (Number.isFinite(onbellek) && onbellek > 0) onbellekSn = onbellek;
 }
 const ACIK_ARALIK = /^bytes=(\d+)-$/;
+// Bağlantıya ait başlıklar mpv'ye aktarılmaz. Motorun "connection: keep-alive" cevabı mpv'ye
+// geçince mpv'nin FFmpeg'i (2026 sürümü) sarmada yeni bağlantı açmak yerine bu cevabın kalanını
+// indirip atıyordu ("Soft-seeking ... by draining"): MKV'nin sonundaki dizine (Cues) giderken
+// dosyanın tamamı (ör. 6.7 GB) sırayla iniyor, veri 60 Mbps gelirken video 00:00'da kalıyordu.
+const BAGLANTI_BASLIKLARI = new Set(['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'te', 'trailer', 'upgrade']);
+const aktarilan = (basliklar) => Object.fromEntries(Object.entries(basliklar).filter(([k]) => !BAGLANTI_BASLIKLARI.has(k.toLowerCase())));
 
 let sunucu = null;
 let port = null;
@@ -58,7 +64,7 @@ async function isle(req, res) {
   if (req.method !== 'GET' || !dosyaYolu(yol) || (aralik && !eslesme) || !gorulen.has(anahtar)) {
     if (dosyaYolu(yol) && req.method === 'GET') gorulen.add(anahtar);
     const cevap = await yukari(yol, aralik, req.method);
-    res.writeHead(cevap.statusCode, cevap.headers);
+    res.writeHead(cevap.statusCode, aktarilan(cevap.headers));
     cevap.pipe(res);
     res.on('close', () => cevap.destroy());
     return;
@@ -81,7 +87,7 @@ async function isle(req, res) {
       ilk = false;
       if (cevap.statusCode !== 206) {
         // Beklenmedik cevap: olduğu gibi ilet.
-        res.writeHead(cevap.statusCode, cevap.headers);
+        res.writeHead(cevap.statusCode, aktarilan(cevap.headers));
         cevap.pipe(res);
         return;
       }
@@ -134,4 +140,4 @@ async function vekilAdres(url) {
   return url.replace(/^http:\/\/(127\.0\.0\.1|localhost):11470/, `http://127.0.0.1:${port}`);
 }
 
-module.exports = { vekilAdres, ayarla, parcaBoyu };
+module.exports = { vekilAdres, ayarla, parcaBoyu, aktarilan };

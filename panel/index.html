@@ -41,11 +41,19 @@
         <button id="motor-yeniden" type="button" hidden>🔄 Motoru yeniden başlat</button>
       </div>
       <div id="motor-onbellek" class="motor-blok" hidden>
-        <div class="row" style="justify-content: space-between; margin-top: 0">
+        <div class="row ob-ust">
           <span>💾 Önbellek <span id="motor-ob-yazi" class="muted"></span></span>
           <button id="motor-ob-bosalt" type="button">Önbelleği temizle</button>
         </div>
         <div class="cubuk"><div id="motor-ob-dolu"></div></div>
+        <label class="field inline ob-gb"><span>Boyut (GB) <small class="muted">0 = kapalı</small></span>
+          <input type="number" id="motor-ob-gb" min="0" max="1000" step="1"></label>
+        <div class="row ob-yer">
+          <span class="muted small">📁 <code id="motor-ob-yer"></code></span>
+          <button id="motor-ob-sec" type="button">Klasör seç</button>
+          <button id="motor-ob-varsayilan" type="button" hidden>Varsayılan yer</button>
+        </div>
+        <p id="motor-ob-not" class="muted small" hidden></p>
       </div>
       <div class="motor-blok">
         <span>Açık torrent'ler</span>

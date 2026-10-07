@@ -421,6 +421,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
 .ctl.active-pop { color: var(--accent-2); }
 #pop-info .pic-info { font-size: 13px; line-height: 1.6; color: var(--text); }
 #pop-info .pic-info b { color: var(--text); }
+#pop-info .pi-satir { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; }
+#pop-info .pi-ad { color: var(--muted); }
+#pop-info .pi-deger { overflow-wrap: anywhere; }
 #picture-info:not([hidden]) + #pic-info-bos { display: none; }
 .pop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .pop-list button { width: 100%; text-align: left; padding: 8px 10px; background: transparent; border: 1px solid transparent; border-radius: 8px; }

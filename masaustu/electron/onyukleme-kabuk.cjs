@@ -27,6 +27,9 @@ window.kabuk = {
   // Video önbelleği boyutu (GB, elle): { motor, gb } ve yazınca { ok, gb } ya da { error }.
   videoOnbellek: () => ipcRenderer.invoke('kabuk:video-onbellek'),
   videoOnbellekYaz: (gb) => ipcRenderer.invoke('kabuk:video-onbellek-yaz', gb),
+  // Önbellek yeri: klasör seçme penceresi (yol ya da null) ve kendi motorunun önbelleğini taşıma.
+  klasorSec: (baslik) => ipcRenderer.invoke('kabuk:klasor-sec', baslik),
+  videoOnbellekYer: (secilen) => ipcRenderer.invoke('kabuk:video-onbellek-yer', secilen),
   motor: () => ipcRenderer.invoke('kabuk:motor'),
   motorBekciYaz: (acik) => ipcRenderer.invoke('kabuk:motor-bekci-yaz', acik),
   // Canlı yayın: oynatıcı penceresi yakalanabilir durumda mı (bkz. ana.cjs)

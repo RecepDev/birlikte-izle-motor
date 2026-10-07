@@ -12,6 +12,29 @@ import path from 'node:path';
 
 export const BLOK = 4 * 1024 * 1024;
 
+// Kullanıcı önbellek için bir yer seçince (ör. D:\) önbellek doğrudan oraya değil, içindeki bu klasöre
+// yazılıyor: boşaltma ve taşıma yalnız kendi klasörümüze dokunsun. Seçilen klasörün adı zaten buysa o.
+export const ALT_KLASOR = 'BirlikteIzle-onbellek';
+export const onbellekYeri = (secilen, varsayilan) => {
+  if (!secilen) return varsayilan;
+  return path.basename(path.resolve(secilen)) === ALT_KLASOR ? path.resolve(secilen) : path.join(path.resolve(secilen), ALT_KLASOR);
+};
+// Önbellek klasöründe yalnız torrent kimliği adlı klasörler bizim (temizlik/boşaltma/taşıma başka şeye dokunmaz).
+const BIZIM = /^[0-9a-f]{40}$/;
+
+// Klasör yazılabilir mi (yoksa oluşturulur): hata mesajı ya da null.
+export async function yazilabilirMi(klasor) {
+  try {
+    await fs.promises.mkdir(klasor, { recursive: true });
+    const deneme = path.join(klasor, `.yazma-denemesi-${process.pid}`);
+    await fs.promises.writeFile(deneme, 'x');
+    await fs.promises.unlink(deneme);
+    return null;
+  } catch (err) {
+    return err.code || err.message;
+  }
+}
+
 // sinirBayt 0: önbellek kapalı (yazılmıyor, okunmuyor; temizlikte hepsi siliniyor).
 export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK, log }) {
   fs.mkdirSync(klasor, { recursive: true });
@@ -38,6 +61,7 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
   async function tara() {
     const dosyalar = [];
     for (const ih of await fs.promises.readdir(klasor).catch(() => [])) {
+      if (!BIZIM.test(ih)) continue;
       const d = path.join(klasor, ih);
       for (const id of await fs.promises.readdir(d).catch(() => [])) {
         const dd = path.join(d, id);
@@ -80,6 +104,36 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
     temizle,
     acik: () => sinir > 0,
     sinir: () => sinir,
+    klasor: () => klasor,
+    // Önbelleği başka klasöre al (elle seçilen yer). Aynı diskteyse filmler taşınıyor (anında); başka
+    // diske taşınamayanlar siliniyor (önbellek: yeniden iner). Eski klasör boş kaldıysa o da siliniyor.
+    async tasi(yeni) {
+      if (!yeni || !path.isAbsolute(yeni)) return { error: 'yol' };
+      yeni = path.resolve(yeni);
+      if (yeni === path.resolve(klasor)) return { ok: true, klasor, tasinan: 0, silinen: 0 };
+      const hata = await yazilabilirMi(yeni);
+      if (hata) return { error: 'yazilamiyor', ayrinti: hata };
+      const eski = klasor;
+      klasor = yeni;
+      let tasinan = 0;
+      let silinen = 0;
+      for (const ih of await fs.promises.readdir(eski).catch(() => [])) {
+        if (!BIZIM.test(ih)) continue;
+        const hedef = path.join(yeni, ih);
+        try {
+          if (await fs.promises.stat(hedef).catch(() => null)) throw new Error('var');
+          await fs.promises.rename(path.join(eski, ih), hedef);
+          tasinan++;
+        } catch {
+          await fs.promises.rm(path.join(eski, ih), { recursive: true, force: true }).catch(() => {});
+          silinen++;
+        }
+      }
+      await fs.promises.rmdir(eski).catch(() => {});
+      log?.info?.('Önbellek yeri değişti', { eski, yeni, tasinan, silinen });
+      await temizle();
+      return { ok: true, klasor, tasinan, silinen };
+    },
     // Panel için: diskteki toplam bayt ve film (torrent) sayısı.
     async kullanim() {
       const dosyalar = await tara();
@@ -90,6 +144,7 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
     async bosalt() {
       let silinen = 0;
       for (const ih of await fs.promises.readdir(klasor).catch(() => [])) {
+        if (!BIZIM.test(ih)) continue;
         await fs.promises.rm(path.join(klasor, ih), { recursive: true, force: true }).catch(() => {});
         silinen++;
       }

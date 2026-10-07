@@ -51,6 +51,10 @@
   .ayar select, .ayar input[type=number] { background:#0e0f13; color:inherit; border:1px solid #2a2e39; border-radius:6px; padding:6px 8px; font:inherit; }
   .ayar input[type=number] { width:90px; text-align:right; }
   .ayar input:disabled { opacity:.5; }
+  .ob-yer-yazi { min-width:0; }
+  .ob-yer-yazi small { overflow-wrap:anywhere; }
+  .ob-yer-dugmeler { display:flex; gap:6px; flex-shrink:0; }
+  button.kucuk { padding:6px 10px; font-size:13px; }
   .anahtar { position:relative; width:44px; height:24px; flex:none; }
   .anahtar input { opacity:0; width:0; height:0; position:absolute; }
   .anahtar span { position:absolute; inset:0; background:#2f3344; border-radius:999px; cursor:pointer; transition:.15s; }
@@ -113,6 +117,13 @@
         <div>💾 Önbellek (GB)<small id="video-onbellek-ipucu">İzlenen yerler diskte kalır, yeniden açınca hemen gelir. 0 = kapalı</small></div>
         <input type="number" id="video-onbellek" min="0" max="1000" step="1" placeholder="sınırsız">
       </label>
+      <div class="ayar" id="ob-yer-satir" hidden>
+        <div class="ob-yer-yazi">📁 Önbellek yeri<small id="ob-yer">…</small></div>
+        <span class="ob-yer-dugmeler">
+          <button type="button" id="ob-yer-degistir" class="ikincil kucuk">Değiştir</button>
+          <button type="button" id="ob-yer-varsayilan" class="ikincil kucuk" hidden>Varsayılan</button>
+        </span>
+      </div>
     </div>
     <p id="surum" class="ipucu surum"></p>
   </form>
@@ -161,13 +172,38 @@
       voIpucu.textContent = 'Stremio açık değil: açınca buradan ayarlanır';
     } else if (d.motor === 'sunucu') {
       vo.disabled = true;
-      voIpucu.textContent = 'Bu bilgisayardaki sunucunun önbelleği: odada Ayarlar\'dan (host)';
+      voIpucu.textContent = 'Bu bilgisayardaki sunucunun önbelleği: Sunucu paneli → Motor kartından';
     } else {
       vo.disabled = false;
       voIpucu.textContent = voVarsayilan;
       vo.value = d.gb === null ? '' : String(d.gb);
       if (d.motor === 'stremio') voIpucu.textContent = `${voVarsayilan} (Stremio'nun ayarı)`;
     }
+    // Yer yalnız kendi motorunda seçilebiliyor (Stremio'nun yeri Stremio'nun ayarı).
+    obYerSatir.hidden = !(d?.motor === 'torrserver' && d.klasor && window.kabuk.videoOnbellekYer);
+    if (!obYerSatir.hidden) {
+      obYer.textContent = d.klasor;
+      obYerVarsayilan.hidden = !d.secilen;
+    }
+  });
+  const obYerSatir = document.getElementById('ob-yer-satir');
+  const obYer = document.getElementById('ob-yer');
+  const obYerVarsayilan = document.getElementById('ob-yer-varsayilan');
+  async function obYerTasi(secilen) {
+    obYer.textContent = 'Taşınıyor…';
+    const r = await window.kabuk.videoOnbellekYer(secilen);
+    await videoOnbellekGoster();
+    if (r?.error) obYer.textContent = `${obYer.textContent} · bu klasöre yazılamıyor, başka yer seç`;
+    else if (r?.silinen) obYer.textContent = `${obYer.textContent} · ${r.silinen} film başka diske taşınamadığı için silindi`;
+  }
+  document.getElementById('ob-yer-degistir').addEventListener('click', async () => {
+    const secilen = await window.kabuk.klasorSec?.('Önbellek için klasör seç');
+    if (!secilen) return;
+    if (!confirm(`Önbellek "${secilen}" içine alınsın mı? Aynı diskteyse filmler taşınır, başka diskteyse eski önbellek silinir.`)) return;
+    obYerTasi(secilen);
+  });
+  obYerVarsayilan.addEventListener('click', () => {
+    if (confirm('Önbellek varsayılan yerine alınsın mı?')) obYerTasi(null);
   });
   videoOnbellekGoster();
   // Motor rozeti: hangi motor indiriyor. Kendi motoru açılırken (ilk açılışta TorrServer indiriliyor) bekler.

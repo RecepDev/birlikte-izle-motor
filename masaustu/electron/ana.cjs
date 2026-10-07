@@ -131,17 +131,21 @@ let oranDegerleri = { 'video-aspect-override': '-1', panscan: 0, keepaspect: tru
 let sonOnbellekSn = 0;
 // İzlenen torrent'in Stremio'daki gerçek indirme hızı (Mbps), 2 sn'de bir.
 let torrentHizi = null;
+let torrentKisi = null; // bağlı peer sayısı (bilgi kutusu)
 setInterval(async () => {
   const hash = /\/([0-9a-f]{40})\//i.exec(sonYuklenen || '')?.[1];
   if (!hash) {
     torrentHizi = null;
+    torrentKisi = null;
     return;
   }
   try {
     const t = await (await fetch(`http://127.0.0.1:11470/${hash}/stats.json`, { signal: AbortSignal.timeout(1500) })).json();
     torrentHizi = Number.isFinite(t?.downloadSpeed) ? Math.round((t.downloadSpeed * 8) / 1e5) / 10 : null;
+    torrentKisi = Number.isFinite(t?.peers) ? t.peers : null;
   } catch {
     torrentHizi = null;
+    torrentKisi = null;
   }
 }, 2000).unref?.();
 // Dosyanın içindeki altyazılar (dışarıdan eklediğimiz .vtt'ler hariç).
@@ -437,10 +441,26 @@ async function durumDongusu() {
       // kısmı 1000+ Mbps okuyor); o zaman Stremio'nun gerçek torrent indirme hızı.
       netMbps: torrentHizi !== null && /:\/\/127\.0\.0\.1:\d+\/[0-9a-f]{40}\//i.test(sonYuklenen || '')
         ? torrentHizi : Number.isFinite(netSpeed) ? (netSpeed * 8) / 1e6 : null,
+      // Bilgi kutusu: oynatıcının okuduğu hız (torrent'in indirdiğinden ayrı) ve bağlı kişi.
+      okumaMbps: Number.isFinite(netSpeed) ? Math.round((netSpeed * 8) / 1e5) / 10 : null,
+      torrentKisi,
       cacheStalled: Boolean(stalled),
       loaded: Number.isFinite(duration),
     });
   } catch { /* mpv kapanmış olabilir */ }
+}
+
+// mpv'nin diskteki geçici tamponu (4K'da birkaç GB): önbellek yeri seçildiyse onun yanında, yoksa Temp'te.
+function oynaticiTamponKlasoru() {
+  const secilen = ayarOku().videoOnbellekKlasor;
+  if (secilen) {
+    const yer = path.join(secilen, 'BirlikteIzle-oynatici');
+    try {
+      fs.mkdirSync(yer, { recursive: true });
+      return yer;
+    } catch { /* disk yoksa Temp */ }
+  }
+  return path.join(os.tmpdir(), 'birlikte-izle-onbellek');
 }
 
 async function mpvBaslat() {
@@ -460,7 +480,7 @@ async function mpvBaslat() {
       // Torrent akışı dalgalı: önden daha çok tamponla, kısa kesintiler görünmesin.
       // Önü ne kadar hazırlansın: Ayarlar'dan (varsayılan 3 dk). Önbellek diskte tutuluyor:
       // 4K'da 10-20 dakika birkaç GB ediyor, bellekte tutulamaz.
-      '--cache=yes', '--cache-on-disk=yes', `--demuxer-cache-dir=${path.join(os.tmpdir(), 'birlikte-izle-onbellek')}`,
+      '--cache=yes', '--cache-on-disk=yes', `--demuxer-cache-dir=${oynaticiTamponKlasoru()}`,
       '--demuxer-max-bytes=6GiB', `--demuxer-readahead-secs=${onbellekSn()}`,
       // Önbellek biterse saniyelik kesik kesik oynamak yerine 30 sn doldurup öyle devam et.
       // Hız yetiyorsa tamponAyarla() bunu 5-10 sn'ye indiriyor (hızlı başlat).
@@ -689,7 +709,9 @@ async function yerelMotor() {
   }
 }
 ipcMain.handle('kabuk:video-onbellek', async () => {
-  if (typeof motor !== 'undefined' && motor) return { motor: 'torrserver', gb: motor.onbellekGb() };
+  if (typeof motor !== 'undefined' && motor) {
+    return { motor: 'torrserver', gb: motor.onbellekGb(), klasor: motor.onbellekKlasoru?.() || null, secilen: ayarOku().videoOnbellekKlasor || null };
+  }
   // Kendi motorumuz açılırken 11470'teki taklit "torrserver" der ama sunucununki değil: bekle.
   if (typeof motorAciliyor !== 'undefined' && motorAciliyor) return { motor: 'aciliyor' };
   const v = await yerelMotor();
@@ -732,6 +754,25 @@ ipcMain.handle('kabuk:video-onbellek-yaz', async (_e, gb) => {
   }
   const v = await yerelMotor();
   return { ok: true, gb: v?.cacheSize === null ? null : Math.round((Number(v?.cacheSize) / GB) * 10) / 10 };
+});
+// Klasör seçme penceresi (açılış ekranı ve sunucu paneli: önbellek yeri). Seçilen yol aşağıda
+// önbellek yeri olarak kabul ediliyor; başka bir sayfa kendi uydurduğu yolu veremesin.
+let sonSecilenKlasor = null;
+ipcMain.handle('kabuk:klasor-sec', async (e, baslik) => {
+  const { dialog } = require('electron');
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
+    title: String(baslik || 'Klasör seç').slice(0, 80), properties: ['openDirectory', 'createDirectory'],
+  });
+  sonSecilenKlasor = r.canceled ? null : r.filePaths[0] || null;
+  return sonSecilenKlasor;
+});
+// Kendi motorunun video önbelleğinin yeri: seçilen klasörün içinde "BirlikteIzle-onbellek" (null = varsayılan).
+ipcMain.handle('kabuk:video-onbellek-yer', async (_e, secilen) => {
+  if (!motor?.onbellekTasi) return { error: 'motor' };
+  if (secilen !== null && secilen !== sonSecilenKlasor) return { error: 'yol' };
+  const r = await motor.onbellekTasi(secilen);
+  if (r.ok) ayarYaz({ videoOnbellekKlasor: secilen });
+  return r;
 });
 ipcMain.on('kabuk:oto-yaz', (_e, acik) => ayarYaz({ otoKaynak: Boolean(acik) }));
 // Ad: ilk açılışta soruluyor, odalara bu adla sorulmadan giriliyor.
@@ -899,6 +940,7 @@ app.whenReady().then(() => {
     klasor: app.getPath('userData'),
     gunluk,
     onbellekGb: ayarOku().videoOnbellekGb ?? 5,
+    onbellekKlasor: ayarOku().videoOnbellekKlasor || null,
     bekci: () => ayarOku().motorBekci === true,
     onBirak: () => {
       motor = null;

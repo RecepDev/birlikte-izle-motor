@@ -323,6 +323,10 @@ async function refreshMotor() {
     $('#motor-ob-yazi').textContent = `${formatSize(ob.bayt) || '0 MB'} / ${sinir} · ${ob.film} film`;
     $('#motor-ob-dolu').style.width = ob.sinir > 0 ? `${Math.min(100, (ob.bayt / ob.sinir) * 100)}%` : '0';
     $('#motor-ob-bosalt').disabled = !ob.bayt;
+    const gbKutu = $('#motor-ob-gb');
+    if (document.activeElement !== gbKutu) gbKutu.value = String(ob.gb ?? '');
+    $('#motor-ob-yer').textContent = ob.klasor || '';
+    $('#motor-ob-varsayilan').hidden = !ob.secilen;
   }
 
   const liste = $('#motor-torrentler');
@@ -369,6 +373,33 @@ $('#motor-ob-bosalt').addEventListener('click', async (e) => {
   e.target.disabled = true;
   await api('/api/motor/onbellek-bosalt', { method: 'POST' }).catch((err) => alert(err.message));
   refreshMotor();
+});
+// Önbellek boyutu ve yeri (TorrServer motorunda bizim önbelleğimiz; bkz. server.js motorPanel).
+async function onbellekAyarla(govde, not) {
+  const r = await api('/api/motor/onbellek', { method: 'POST', body: govde }).catch((err) => ({ error: err.message }));
+  const n = $('#motor-ob-not');
+  n.hidden = false;
+  if (r.error) n.textContent = r.error === 'yazilamiyor' || r.error === 'yol' ? 'Bu klasöre yazılamıyor, başka bir yer seç.' : `Ayarlanamadı: ${r.error}`;
+  else n.textContent = not(r);
+  refreshMotor();
+}
+$('#motor-ob-gb').addEventListener('change', (e) => {
+  const gb = Number(e.target.value);
+  if (!(e.target.value !== '' && gb >= 0 && gb <= 1000)) return;
+  onbellekAyarla({ gb }, (r) => (r.gb ? `Önbellek sınırı ${r.gb} GB.` : 'Önbellek kapalı.'));
+});
+const tasimaNotu = (r) => `Önbellek yeri: ${r.klasor}${r.tasinan ? ` · ${r.tasinan} film taşındı` : ''}${r.silinen ? ` · ${r.silinen} film taşınamadığı için silindi` : ''}`;
+$('#motor-ob-sec').addEventListener('click', async () => {
+  // Masaüstü uygulamasında klasör seçme penceresi; tarayıcıda yol elle yazılıyor.
+  const klasor = window.kabuk?.klasorSec ? await window.kabuk.klasorSec('Önbellek için klasör seç') : prompt('Önbellek klasörü (ör. D:\\Onbellek). İçinde "BirlikteIzle-onbellek" klasörü açılır.');
+  if (!klasor) return;
+  if (!confirm(`Önbellek "${klasor}" klasörüne alınsın mı?
+Aynı diskteyse filmler taşınır; başka diskteyse eski önbellek silinir.`)) return;
+  onbellekAyarla({ klasor }, tasimaNotu);
+});
+$('#motor-ob-varsayilan').addEventListener('click', () => {
+  if (!confirm('Önbellek varsayılan yerine (sunucunun data klasörü) alınsın mı?')) return;
+  onbellekAyarla({ klasor: null }, tasimaNotu);
 });
 $('#motor-sec').addEventListener('change', async (e) => {
   await api('/api/motor/ayar', { method: 'PUT', body: { motor: e.target.value } }).catch((err) => alert(err.message));

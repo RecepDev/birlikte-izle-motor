@@ -1,6 +1,7 @@
 // Önbellek boyutu (GB, elle giriliyor; 0 = kapalı). TorrServer motorunda bizim video önbelleğimizin
 // sınırı (src/motor/onbellek.js), Stremio'da Stremio'nun kendi önbellek ayarı (cacheSize, bayt;
-// Stremio'da null = sınırsız). data/onbellek.json: { "gb": 10 }
+// Stremio'da null = sınırsız). klasor: elle seçilen yer (null = varsayılan data/onbellek; bkz.
+// onbellekYeri). data/onbellek.json: { "gb": 10, "klasor": "D:\Onbellek" }
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,23 +11,39 @@ export const EN_COK_GB = 1000;
 
 export const gecerliGb = (gb) => Number.isFinite(gb) && gb >= 0 && gb <= EN_COK_GB;
 
+export const gecerliKlasor = (k) => k === null || (typeof k === 'string' && k.length < 500 && path.isAbsolute(k));
+
 export function createOnbellekAyar({ file, varsayilanGb = 10, log }) {
   let gb = varsayilanGb;
+  let klasor = null;
   try {
-    const kayitli = Number(JSON.parse(fs.readFileSync(file, 'utf8')).gb);
+    const kayit = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const kayitli = Number(kayit.gb);
     if (gecerliGb(kayitli)) gb = kayitli;
+    if (kayit.klasor && gecerliKlasor(kayit.klasor)) klasor = kayit.klasor;
   } catch { /* ilk çalıştırma */ }
+  function kaydet() {
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify({ gb, ...(klasor ? { klasor } : {}) }));
+    } catch (err) {
+      log.warn('Önbellek ayarı yazılamadı', { error: err.message });
+    }
+  }
   return {
     gb: () => gb,
+    klasor: () => klasor,
     ayarla(yeni) {
       if (!gecerliGb(yeni)) return false;
       gb = yeni;
-      try {
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, JSON.stringify({ gb }));
-      } catch (err) {
-        log.warn('Önbellek ayarı yazılamadı', { error: err.message });
-      }
+      kaydet();
+      return true;
+    },
+    klasorAyarla(yeni) {
+      if (yeni === '') yeni = null;
+      if (!gecerliKlasor(yeni)) return false;
+      klasor = yeni;
+      kaydet();
       return true;
     },
   };

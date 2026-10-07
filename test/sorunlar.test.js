@@ -89,6 +89,15 @@ test('Modem boğuluyordu: Stremio bağlantı sınırı 80\'e (250\'den) iniyor',
   assert.equal(gonderilen.at(-1)?.btMaxConnections, 80);
 });
 
+test('Ara katman motorun bağlantı başlıklarını mpv’ye aktarmaz (keep-alive görünce mpv sarmada dosyanın kalanını indiriyordu)', () => {
+  const vekil = require('../masaustu/electron/stremio-vekil.cjs');
+  const giden = vekil.aktarilan({
+    'content-type': 'video/x-matroska', 'accept-ranges': 'bytes', 'content-length': '6685592673',
+    'content-range': 'bytes 0-6685592672/6685592673', connection: 'keep-alive', 'keep-alive': 'timeout=5', 'transfer-encoding': 'chunked',
+  });
+  assert.deepEqual(Object.keys(giden).sort(), ['accept-ranges', 'content-length', 'content-range', 'content-type']);
+});
+
 test('Masaüstü 4 GB istiyordu: parça boyu "Önünü hazırla" süresine göre', () => {
   const vekil = require('../masaustu/electron/stremio-vekil.cjs');
   const GB = 1024 ** 3;

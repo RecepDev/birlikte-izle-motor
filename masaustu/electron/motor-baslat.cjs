@@ -32,7 +32,7 @@ async function acikMi(port) {
 // bekci: true dönerse TorrServer çökünce kendini yeniden açar (açılış ekranından; varsayılan kapalı).
 // onBirak: aynı bilgisayardaki sunucu sonradan açılıp 11470'i isteyince motor kapanır, sonra bu çağrılır.
 // Uygulama 11470'i kullanmaya devam eder, artık sunucunun motoruna gider.
-async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbellekGb = 5, bekci = () => false, onBirak = () => {} }) {
+async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbellekGb = 5, onbellekKlasor = null, bekci = () => false, onBirak = () => {} }) {
   if (await acikMi(port)) return null;
   const kok = motorKlasoru();
   if (!kok) {
@@ -43,11 +43,22 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbe
   const log = { info: yaz('bilgi'), warn: yaz('uyarı'), error: yaz('hata') };
   const { createTorrServer } = await import(pathToFileURL(path.join(kok, 'torrserver.js')).href);
   const { createStremioTaklidi } = await import(pathToFileURL(path.join(kok, 'stremio-taklidi.js')).href);
-  const { createOnbellek } = await import(pathToFileURL(path.join(kok, 'onbellek.js')).href);
+  const onbellekModulu = await import(pathToFileURL(path.join(kok, 'onbellek.js')).href);
+  const { createOnbellek } = onbellekModulu;
   const ts = createTorrServer({ klasor, port: tsPort, log, bekci });
-  // Video önbelleği: izlenen yerler kullanıcı klasöründe kalıyor.
+  // Video önbelleği: izlenen yerler kullanıcı klasöründe ya da açılış ekranından seçilen yerde
+  // (onbellekKlasor; içinde "BirlikteIzle-onbellek"). Seçilen yer yoksa (çıkarılmış disk) varsayılan.
   let gb = onbellekGb;
-  const onbellek = createOnbellek({ klasor: path.join(klasor, 'onbellek'), sinirBayt: gb * 1024 ** 3, log });
+  const varsayilanYer = path.join(klasor, 'onbellek');
+  const yerBul = (secilen) => (onbellekModulu.onbellekYeri ? onbellekModulu.onbellekYeri(secilen, varsayilanYer) : varsayilanYer);
+  let yer = yerBul(onbellekKlasor);
+  try {
+    fs.mkdirSync(yer, { recursive: true });
+  } catch (err) {
+    log.warn('Önbellek yeri kullanılamıyor, varsayılan yer', { yer, error: err.code || err.message });
+    yer = varsayilanYer;
+  }
+  const onbellek = createOnbellek({ klasor: yer, sinirBayt: gb * 1024 ** 3, log });
   onbellek.temizle();
   const temizlik = setInterval(() => onbellek.temizle(), 10 * 60_000);
   function durdur() {
@@ -74,6 +85,9 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbe
   return {
     durum: () => ts.durum(),
     onbellekGb: () => gb,
+    onbellekKlasoru: () => onbellek.klasor?.() || null,
+    // null = varsayılan yer. { ok, klasor, tasinan, silinen } | { error }
+    onbellekTasi: (secilen) => (onbellek.tasi ? onbellek.tasi(yerBul(secilen)) : { error: 'eski' }),
     onbellekAyarla(yeni) {
       gb = yeni;
       return onbellek.sinirAyarla(yeni * 1024 ** 3);

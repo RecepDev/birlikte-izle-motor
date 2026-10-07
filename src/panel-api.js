@@ -132,6 +132,12 @@ export function createPanelApp({
   }));
   app.post('/api/motor/yeniden-baslat', wrap(async (req, res) => res.json(await motorPanel.yenidenBaslat())));
   app.post('/api/motor/onbellek-bosalt', wrap(async (req, res) => res.json(await motorPanel.onbellekBosalt())));
+  app.post('/api/motor/onbellek', wrap(async (req, res) => {
+    if (!motorPanel) return res.status(404).json({ error: 'yok' });
+    const { gb, klasor } = req.body || {};
+    const r = await motorPanel.onbellekAyarla({ gb, klasor });
+    res.status(r.error ? 400 : 200).json(r);
+  }));
   app.put('/api/motor/ayar', (req, res) => {
     const yeni = {};
     if (req.body?.motor !== undefined) yeni.motor = req.body.motor;

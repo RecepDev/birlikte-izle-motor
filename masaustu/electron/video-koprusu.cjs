@@ -224,6 +224,13 @@ ipcRenderer.on('mpv:sesler', (_e, liste) => {
 // Önündeki hazır veri (sn): bilgi kutusunda gösteriliyor.
 window.masaustuOnbellek = () => durum.cacheSec || 0;
 window.masaustuHiz = () => (Number.isFinite(durum.netMbps) ? durum.netMbps : null);
+// Bilgi kutusu için: bağlı kişi, oynatıcının okuduğu hız, bekliyor mu (sarma / tampon dolduruluyor).
+window.masaustuTorrent = () => ({
+  kisi: Number.isFinite(durum.torrentKisi) ? durum.torrentKisi : null,
+  okumaMbps: Number.isFinite(durum.okumaMbps) ? durum.okumaMbps : null,
+  sariliyor: Boolean(durum.seeking),
+  dolduruluyor: Boolean(durum.cacheStalled),
+});
 window.masaustuBilgi = (metin) => ipcRenderer.send('mpv:bilgi', String(metin));
 
 // Dosyanın içindeki (gömülü) altyazılar: mpv listeliyor, kişi seçerse mpv çiziyor.

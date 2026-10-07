@@ -507,65 +507,104 @@ function speedLabel(st, ts = null, relayMbps = null) {
   return parts.join(' · ');
 }
 
-// What is actually on screen: resolution, codec path, file bitrate, dropped frames.
-function resolutionLabel(h) {
-  if (h >= 2000) return '2160p (4K)';
-  if (h >= 1400) return '1440p';
-  if (h >= 1000) return '1080p';
-  if (h >= 700) return '720p';
+// "Hız ve kaynak" kutusu: satır satır, adlı (görüntü, indirme, hazır, kaynak, dosya). Eskiden tek
+// satırda "↓ 62 Mbps şu an · gereken ~6.9 Mbps · 0 sn hazır" yazıyordu, ne olduğu anlaşılmıyordu.
+// Çözünürlük genişlikten de bakılıyor: sinema oranlı 4K (3840×1600) yüksekliğe göre "1440p" çıkıyordu.
+function resolutionLabel(w, h) {
+  if (w >= 3200 || h >= 2000) return '4K';
+  if (w >= 2300 || h >= 1400) return '1440p';
+  if (w >= 1700 || h >= 1000) return '1080p';
+  if (w >= 1100 || h >= 700) return '720p';
   return `${h}p`;
+}
+
+function sureYazisi(sn) {
+  const dk = Math.round(sn / 60);
+  return dk >= 60 ? `${Math.floor(dk / 60)} sa ${dk % 60} dk` : `${dk} dk`;
 }
 
 function renderPictureInfo() {
   const box = $('#picture-info');
   const s = myStream();
-  const h = video.videoHeight;
   if (!s) {
     box.hidden = true;
     return;
   }
-  // Second line: torrent sources and file size (from the addon's listing).
-  const extra = [];
-  if (Number.isFinite(s.seeders)) extra.push(`👤 ${s.seeders} kaynak`);
-  if (s.sizeBytes) extra.push(`💾 ${formatSize(s.sizeBytes)}`);
+  const satirlar = [];
+  const satir = (ad, ipucu, ...deger) => satirlar.push(el('div', { class: 'pi-satir', title: ipucu || null },
+    el('span', { class: 'pi-ad', text: ad }), el('span', { class: 'pi-deger' }, ...deger)));
+
+  // Görüntü: ekranda oynayan (dönüştürülüyorsa iki ucu), codec, HDR, kare kaybı.
+  const w = video.videoWidth;
+  const h = video.videoHeight;
+  const fileRes = s.quality === '2160p' ? '4K' : s.quality || null;
+  const srcCodec = s.videoRisk || null;
+  if (h) {
+    const res = resolutionLabel(w, h);
+    const parca = [];
+    if (loaded.compat && compatQuality()?.reencoded) {
+      parca.push(el('b', { text: `${fileRes || '?'}${srcCodec ? ` ${srcCodec}` : ''} → ${res} H.264` }), ' · uyumlu mod, dönüştürülüyor');
+    } else {
+      parca.push(el('b', { text: res }), ` ${w}×${h}${srcCodec ? ` · ${srcCodec}` : ''}`);
+      if (fileRes && fileRes !== res) parca.push(` · dosya ${fileRes}`);
+      if (loaded.compat) parca.push(' · uyumlu mod');
+    }
+    if (s.hdr) parca.push(` · ${s.hdr}`);
+    const q = video.getVideoPlaybackQuality?.();
+    if (q && q.totalVideoFrames > 100) {
+      const lost = (q.droppedVideoFrames / q.totalVideoFrames) * 100;
+      if (lost >= 1) parca.push(` · %${Math.round(lost)} kare kaybı`);
+    }
+    satir('Görüntü', 'Ekranda oynayan görüntü', ...parca);
+  } else if (fileRes || s.hdr) {
+    satir('Görüntü', 'Dosyanın kalitesi (video yükleniyor)', [fileRes, s.hdr].filter(Boolean).join(' · '));
+  }
+
+  // İndirme: host bilgisayarında torrent'in gerçek hızı, değilse oynatıcının ölçtüğü. Videonun
+  // ortalama ihtiyacıyla (boyut / süre) karşılaştırılıyor.
   const ts = state.room?.torrentStats?.[s.streamId];
   const hostPc = ts && (isHost() || player.status().source === 'relay');
-  if (hostPc) extra.push(`🧲 ${ts.peers} bağlı`);
-  // Live download: real torrent speed on the host PC, the browser's estimate otherwise.
-  const down = hostPc ? ts.downMbps : liveDownload().downMbps;
-  if (Number.isFinite(down)) extra.push(`↓ ${formatMbps(down)} Mbps şu an`);
+  const masaustu = window.masaustuTorrent?.() || null;
+  const canli = liveDownload();
+  const down = hostPc ? ts.downMbps : canli.downMbps;
   const need = requiredMbps(s.sizeBytes, player.duration());
-  if (need) extra.push(`gereken ~${formatMbps(need)} Mbps`);
-  if (s.hdr) extra.push(`🌗 ${s.hdr}`);
-  // Masaüstünde önündeki hazır veri: azalıyorsa takılma ağdan, çoksa çözmeden.
-  if (window.masaustuOnbellek) extra.push(`⏩ ${Math.round(window.masaustuOnbellek())} sn hazır`);
-  const extraLine = extra.length ? el('div', { text: extra.join(' · ') }) : null;
-  if (!h) {
-    box.replaceChildren(...[extraLine].filter(Boolean));
-    box.hidden = !extraLine;
-    return;
+  if (Number.isFinite(down) || need) {
+    const parca = [];
+    if (Number.isFinite(down)) parca.push(el('b', { text: `${formatMbps(down)} Mbps` }));
+    if (need) {
+      parca.push(`${parca.length ? ' · ' : ''}video ~${formatMbps(need)} Mbps istiyor`);
+      if (Number.isFinite(down)) {
+        const oran = down / need;
+        if (oran >= 1.5) parca.push(` · ✓ yetiyor (${oran >= 10 ? Math.round(oran) : oran.toFixed(1)} kat)`);
+        else if (oran >= 1) parca.push(' · sınırda');
+        else parca.push(' · ⚠️ yetmiyor');
+      }
+    }
+    satir('İndirme', "Torrent'in şu anki indirme hızı ve videonun ortalama ihtiyacı (dosya boyu / süre)", ...parca);
   }
-  const parts = [];
-  const res = resolutionLabel(h);
-  const fileRes = s.quality === '2160p' ? '2160p (4K)' : s.quality;
-  const srcCodec = s.videoRisk || null;
-  const reencoded = loaded.compat && compatQuality()?.reencoded;
-  if (reencoded) {
-    // Converted: show both ends, e.g. "2160p (4K) HEVC → 1080p H.264".
-    parts.push(el('b', { text: `🎞 ${fileRes || '?'}${srcCodec ? ` ${srcCodec}` : ''} → ${res} H.264` }));
-    parts.push('uyumlu mod, dönüştürülüyor');
-  } else {
-    parts.push(el('b', { text: `🎞 ${res}${srcCodec ? ` ${srcCodec}` : ''}` }));
-    if (fileRes && fileRes !== res) parts.push(`dosya ${fileRes}`);
-    if (loaded.compat) parts.push('uyumlu mod, orijinal görüntü');
+
+  // Hazır: videonun önünde inmiş kısım (bu kadar saniye veri gelmese de oynar).
+  if (canli.complete) satir('Hazır', '', el('b', { text: 'tamamı indi' }));
+  else {
+    const hazir = window.masaustuOnbellek ? window.masaustuOnbellek() : canli.ahead;
+    if (Number.isFinite(hazir)) {
+      const not = masaustu?.sariliyor ? ' · atlanan yere gidiliyor' : masaustu?.dolduruluyor ? ' · dolduruluyor, video bekliyor' : '';
+      satir('Hazır', 'Videonun önünde inmiş kısım: bu kadar saniye veri gelmese de oynar', el('b', { text: `${Math.round(hazir)} sn` }), not);
+    }
   }
-  const q = video.getVideoPlaybackQuality?.();
-  if (q && q.totalVideoFrames > 100) {
-    const lost = (q.droppedVideoFrames / q.totalVideoFrames) * 100;
-    if (lost >= 1) parts.push(`%${Math.round(lost)} kare kaybı`);
-  }
-  box.replaceChildren(el('div', {}, ...parts.flatMap((p, i) => (i ? [' · ', p] : [p]))), extraLine);
-  box.hidden = false;
+
+  // Kaynak: şu an bağlı kişi (motorun) ve eklentinin bildirdiği paylaşan (seed) sayısı.
+  const kisi = hostPc ? ts.peers : masaustu?.kisi;
+  const kaynak = [];
+  if (Number.isFinite(kisi)) kaynak.push(el('b', { text: `${kisi} kişiye bağlı` }));
+  if (Number.isFinite(s.seeders)) kaynak.push(`${kaynak.length ? ' · ' : ''}eklentiye göre ${s.seeders} paylaşan`);
+  if (kaynak.length) satir('Kaynak', 'Bağlı: şu an veri alınan kişiler. Paylaşan: eklentinin bildirdiği seed sayısı', ...kaynak);
+
+  const dosya = [formatSize(s.sizeBytes), player.duration() ? sureYazisi(player.duration()) : ''].filter(Boolean);
+  if (dosya.length) satir('Dosya', '', dosya.join(' · '));
+
+  box.replaceChildren(...satirlar);
+  box.hidden = !satirlar.length;
 }
 video.addEventListener('resize', renderPictureInfo);
 video.addEventListener('emptied', renderPictureInfo);

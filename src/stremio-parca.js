@@ -68,7 +68,8 @@ export async function parcaliAkit(target, bas, acik, res, { onBytes = () => {} }
     if (!basladi) {
       basladi = true;
       if (up.statusCode !== 206) {
-        res.writeHead(up.statusCode || 502, up.headers);
+        const { connection, 'keep-alive': _ka, 'transfer-encoding': _te, ...baslik } = up.headers;
+        res.writeHead(up.statusCode || 502, baslik);
         up.pipe(res);
         return;
       }

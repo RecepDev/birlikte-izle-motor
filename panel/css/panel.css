@@ -166,3 +166,7 @@ body.oto-mod .oto-liste { font-size: 13px; }
 #gecmis .poster-kart { scroll-snap-align: start; }
 .poster-kart .poster-ad, .poster-kart .poster-yil { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #gecmis { scrollbar-width: thin; scrollbar-color: #3a3f4d transparent; }
+#motor-onbellek .ob-gb { grid-template-columns: auto 90px; justify-content: start; gap: 10px; margin-top: 10px; }
+#motor-onbellek .ob-yer { margin-top: 8px; flex-wrap: wrap; }
+#motor-onbellek .ob-yer > span { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+#motor-onbellek .ob-ust { justify-content: space-between; margin-top: 0; } /* satır içi stil CSP yüzünden uygulanmıyordu */
