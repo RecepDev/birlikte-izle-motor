@@ -50,6 +50,19 @@ let yukleniyor = false;
 // kaynak yüklenmiş, pencere simge durumunda değil.
 // Oda sayfasında mıyız? Değilsek (açılış, arama, kaynak listesi) video penceresi hiç görünmez.
 let odadaMi = false;
+// Diyalog açılınca mpv penceresi gizleniyor (sayfanın üstünde ayrı pencere, diyaloğu örterdi): video alanı
+// siyah kalmasın diye o anki kare (altyazısıyla) alınıp sayfadaki <video>'ya kapak resmi olarak konuyor;
+// diyalog kapanınca kalkıyor (onyukleme-kabuk.cjs, 'kabuk:kare').
+async function kareGoster() {
+  if (!mpv || !odadaMi || yukleniyor) return;
+  const dosya = path.join(os.tmpdir(), `birlikte-izle-kare-${process.pid}.jpg`);
+  try {
+    await mpv.command('screenshot-to-file', dosya, 'subtitles');
+    const veri = await fs.promises.readFile(dosya);
+    if (!ortuluMu) return; // diyalog bu arada kapandı
+    ana?.webContents.send('kabuk:kare', `data:image/jpeg;base64,${veri.toString('base64')}`);
+  } catch { /* kare alınamazsa eskisi gibi siyah */ }
+}
 function videoGorunurluk() {
   if (!videoPenceresi || videoPenceresi.isDestroyed() || !ana) return;
   if (!mpv || !odadaMi || ortuluMu || yukleniyor || ana.isMinimized()) {
@@ -980,8 +993,11 @@ app.whenReady().then(() => {
   });
   // Diyalog açıkken mpv penceresi gizlenir; yoksa diyaloğun üstünü örter.
   ipcMain.on('kabuk:ortu', (_e, ortulu) => {
+    const once = ortuluMu;
     ortuluMu = ortulu;
     videoGorunurluk();
+    if (ortulu && !once) kareGoster();
+    else if (!ortulu && once) ana?.webContents.send('kabuk:kare', null);
   });
   ipcMain.on('kabuk:yukleniyor', (_e, deger) => {
     yukleniyor = deger;

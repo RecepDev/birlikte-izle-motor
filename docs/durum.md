@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-07 · Son commit: ec4c87b · Masaüstü 0.7.43 · Android 0.33.0 (versionCode 33)
+Son güncelleme: 2026-10-07 · Son commit: ec4c87b · Masaüstü 0.7.44 · Android 0.33.0 (versionCode 33)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
@@ -34,6 +34,7 @@ Son güncelleme: 2026-10-07 · Son commit: ec4c87b · Masaüstü 0.7.43 · Andro
   - **Film bilgisi siteden** (`src/motor/torrent-dosyasi.js`, varsayılan açık, kullanıcı istedi): itorrents.net'ten .torrent, kimlik doğrulanıp TorrServer'a yükleniyor, diskte de saklanıyor. Metadata 9.4 sn → 0.26 sn (yeni açılmış TorrServer); itorrents 13 torrent'in 12'sinde vardı. Yalnız sunucuda; masaüstünün kendi motorunda ve telefonda yok.
   - **Hızlı başlat** (masaüstü, varsayılan açık, açılış ekranından kapatılır): mpv 30 sn biriktirmek yerine hız/ihtiyaç ≥2 → 5 sn, ≥1.5 → 10 sn. Gerçek odada veri 36-61 Mbps gelirken video 25 sn sonra başlıyordu. Canlı oynatmada henüz denenmedi.
 - Açılış ekranı: oda linki alanı ve "Odaya gir" sağ üstteki ⋮ menüsünde (telefondaki gibi).
+- Oda: diyalog açılınca mpv penceresi gizleniyor (sayfanın üstündeki ayrı pencere, diyaloğu örterdi). Video alanı siyah kalmasın diye o anki kare (`screenshot-to-file`, altyazıyla) `<video>`'ya kapak resmi olarak konuyor, diyalog kapanınca kalkıyor (`ana.cjs` `kareGoster`, `onyukleme-kabuk.cjs` `kabuk:kare`). Tuzak: video köprüsü `video.removeAttribute`'u yalnız `src` için tanımlıyor; asıl DOM işlevi `Element.prototype` ile çağrılıyor. Test sunucusu + gerçek kabukla doğrulandı.
 - **Sunucu uygulamanın içinde (Kurulumsuz):**
   - Açılış ekranında "🖥️ Sunucuyu başlat" / "🛠️ Sunucu paneli". Sunucu kapalıysa uygulama `node server.js`'i arka planda açar (uygulama kapansa da çalışır; panelde ⏻ Kapat).
   - Panel aynı pencerede açılıyor. Sunucu sayfalarında başlık çubuğunun solunda "← Ana ekran" düğmesi, ayrıca Alt+←.

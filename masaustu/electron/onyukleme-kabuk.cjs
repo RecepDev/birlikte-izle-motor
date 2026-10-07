@@ -180,6 +180,15 @@ function kontrolAynasi() {
 // ya da tam ekran kaplayan bir katman açıkken mpv penceresini gizliyoruz.
 // .yayin-katman: canli yayini izlerken (public/js/yayin.js) mpv onun ustunu ortmesin.
 const ORTU = 'dialog[open], .overlay:not([hidden]), .compat-screen:not([hidden]), .yayin-katman:not([hidden])';
+// Diyalog açıkken mpv gizli: o anki kare video alanında kapak resmi olarak duruyor (bkz. ana.cjs kareGoster).
+ipcRenderer.on('kabuk:kare', (_e, veri) => {
+  const v = document.getElementById('video');
+  if (!v) return;
+  // Asıl DOM işlevleriyle: video köprüsü (video-koprusu.cjs) video.removeAttribute'u yalnız "src" için
+  // tanımlıyor, kapak resmi kalkmıyordu.
+  if (veri) Element.prototype.setAttribute.call(v, 'poster', veri);
+  else Element.prototype.removeAttribute.call(v, 'poster');
+});
 function ortuKur() {
   const bak = () => ipcRenderer.send('kabuk:ortu', Boolean(document.querySelector(ORTU)));
   new MutationObserver(bak).observe(document.body, {
