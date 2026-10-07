@@ -2324,9 +2324,10 @@ const OTO_GECIS_ARASI_MS = 60_000;
 async function oluKaynaktanGec(s) {
   hizliDenenen = s.streamId;
   const bilinen = await request('olcumler');
+  const kalite = preferredQuality || s.quality;
   const iyi = (bilinen?.list || [])
     .filter((x) => x.streamId !== s.streamId && x.alive && x.yasSn < 900 && x.downMbps >= 5 && streamById(x.streamId)
-      && streamById(x.streamId).infoHash !== s.infoHash)
+      && streamById(x.streamId).infoHash !== s.infoHash && streamById(x.streamId).quality === kalite)
     .sort((a, b) => b.downMbps - a.downMbps)[0];
   if (!iyi || state.room?.hostStreamId !== s.streamId || player.status().state !== 'loading') return false;
   const hedef = streamById(iyi.streamId);
@@ -2376,9 +2377,12 @@ async function checkWeakSource() {
   weakCheckedFor = s.streamId;
   // Adaylar: aynı kalite önce, sezon paketi sona, çok kaynaklı önce.
   const hedefKalite = preferredQuality || s.quality;
-  const score = (x) => (Number(x.seeders) || 0) * (x.pack ? 0.35 : 1) * (x.quality === hedefKalite ? 3 : 1);
-  const candidates = state.room.streams
-    .filter((x) => x.kind === 'torrent' && x.streamId !== s.streamId && x.infoHash !== s.infoHash)
+  const score = (x) => (Number(x.seeders) || 0) * (x.pack ? 0.35 : 1);
+  // Aynı kaliteden çıkılmıyor: 4K izlenirken 1080p'ye geçilmiyor (kullanıcı, 2026-10-07). O kalitede
+  // başka kaynak yoksa eskisi gibi hepsi.
+  const torrentler = state.room.streams.filter((x) => x.kind === 'torrent' && x.streamId !== s.streamId && x.infoHash !== s.infoHash);
+  const ayniKalite = torrentler.filter((x) => x.quality === hedefKalite);
+  const candidates = (ayniKalite.length ? ayniKalite : torrentler)
     .sort((a, b) => score(b) - score(a))
     .slice(0, 8);
   const cur0 = gelen;
@@ -2387,7 +2391,8 @@ async function checkWeakSource() {
   // yeterince hızlısı varsa yeniden ölçmeden hemen ona.
   const bilinen = await request('olcumler');
   const hazir = (bilinen?.list || [])
-    .filter((x) => x.streamId !== s.streamId && x.alive && x.yasSn < 900 && x.downMbps >= esik(cur0) && streamById(x.streamId))
+    .filter((x) => x.streamId !== s.streamId && x.alive && x.yasSn < 900 && x.downMbps >= esik(cur0) && streamById(x.streamId)
+      && (!ayniKalite.length || streamById(x.streamId).quality === hedefKalite))
     .sort((a, b) => b.downMbps - a.downMbps)[0];
   let best = hazir ? { s: streamById(hazir.streamId), r: hazir } : null;
   if (!best) {

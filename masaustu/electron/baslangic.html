@@ -35,6 +35,14 @@
   .ust { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .isim-dugme { background:#232633; padding:6px 12px; border-radius:999px; font-weight:500; font-size:13px; color:#e8e9ee; }
   .isim-dugme:hover { background:#2f3344; }
+  /* Sağ üstte ⋮: oda linkiyle girme (telefondaki gibi menüde) */
+  .ust-sag { position:relative; display:flex; align-items:center; gap:8px; }
+  .menu-dugme { background:#232633; width:34px; height:34px; padding:0; border-radius:999px; font-size:20px; line-height:1; color:#e8e9ee; }
+  .menu-dugme:hover, .menu-dugme[aria-expanded="true"] { background:#2f3344; }
+  .menu { position:absolute; right:0; top:42px; width:min(380px,85vw); z-index:10; background:#171920;
+          border:1px solid #2a2e39; border-radius:12px; padding:14px; display:grid; gap:10px; box-shadow:0 12px 32px rgba(0,0,0,.55); }
+  .menu[hidden] { display:none; }
+  .menu h2 { margin:0; font-size:15px; }
   .ayarlar { display:grid; gap:0; border:1px solid #2a2e39; border-radius:12px; overflow:hidden; }
   .ayar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; font-size:14px; }
   .ayar + .ayar { border-top:1px solid #2a2e39; }
@@ -60,12 +68,18 @@
   <form class="kart" id="form">
     <div class="ust">
       <h1>Birlikte İzle</h1>
-      <button type="button" id="isim-degis" class="isim-dugme" title="Adını değiştir">👤 <span id="isim-yazi">—</span> ✎</button>
+      <div class="ust-sag">
+        <button type="button" id="isim-degis" class="isim-dugme" title="Adını değiştir">👤 <span id="isim-yazi">—</span> ✎</button>
+        <button type="button" id="menu-dugme" class="menu-dugme" title="Oda linkiyle gir" aria-haspopup="true" aria-expanded="false">⋮</button>
+        <div id="menu" class="menu" hidden>
+          <h2>Oda linkiyle gir</h2>
+          <p class="ipucu">Oda linkini yapıştır. Video, tarayıcı yerine mpv ile oynatılır: gerçek HDR, tüm ses dilleri, donanım çözme.</p>
+          <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
+          <button type="submit">Odaya gir</button>
+        </div>
+      </div>
     </div>
     <div id="odalar" class="odalar" hidden></div>
-    <p>Oda linkini yapıştır. Video, tarayıcı yerine mpv ile oynatılır: gerçek HDR, tüm ses dilleri, donanım çözme.</p>
-    <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
-    <button type="submit">Odaya gir</button>
     <button id="panel" type="button" class="ikincil" hidden>Film ara ve oda aç</button>
     <button id="sunucu-paneli" type="button" class="ikincil" hidden>🛠️ Sunucu paneli</button>
     <p id="panel-ipucu" class="ipucu" hidden>Sunucu bu bilgisayarda çalışıyor: Stremio'ya girmeden ara, seç, oda aç.</p>
@@ -211,6 +225,21 @@
   });
   if (window.kabuk.isim && !window.kabuk.isim()) isimSor.showModal();
   else if (!kayitliKalite && window.kabuk.kalite) sor.showModal();
+  // ⋮ menüsü: oda linkiyle girme. Dışına tıklayınca ya da Esc ile kapanır.
+  const menu = document.getElementById('menu');
+  const menuDugme = document.getElementById('menu-dugme');
+  const menuAc = (acik) => {
+    menu.hidden = !acik;
+    menuDugme.setAttribute('aria-expanded', String(acik));
+    if (acik) document.getElementById('link').focus();
+  };
+  menuDugme.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menuAc(menu.hidden);
+  });
+  menu.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', () => menuAc(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) menuAc(false); });
   document.getElementById('form').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = document.getElementById('link').value.trim();

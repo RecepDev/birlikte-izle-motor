@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-07 · Son commit: 84dad24 · Masaüstü 0.7.41 · Android 0.33.0 (versionCode 33)
+Son güncelleme: 2026-10-07 · Son commit: 84dad24 · Masaüstü 0.7.42 · Android 0.33.0 (versionCode 33)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
@@ -33,6 +33,7 @@ Son güncelleme: 2026-10-07 · Son commit: 84dad24 · Masaüstü 0.7.41 · Andro
   - Telefon (APK 0.33.0): önden okuma ≈51 MB, boşta kapanma 2 dk, güncel tracker listesi.
   - **Film bilgisi siteden** (`src/motor/torrent-dosyasi.js`, varsayılan açık, kullanıcı istedi): itorrents.net'ten .torrent, kimlik doğrulanıp TorrServer'a yükleniyor, diskte de saklanıyor. Metadata 9.4 sn → 0.26 sn (yeni açılmış TorrServer); itorrents 13 torrent'in 12'sinde vardı. Yalnız sunucuda; masaüstünün kendi motorunda ve telefonda yok.
   - **Hızlı başlat** (masaüstü, varsayılan açık, açılış ekranından kapatılır): mpv 30 sn biriktirmek yerine hız/ihtiyaç ≥2 → 5 sn, ≥1.5 → 10 sn. Gerçek odada veri 36-61 Mbps gelirken video 25 sn sonra başlıyordu. Canlı oynatmada henüz denenmedi.
+- Açılış ekranı: oda linki alanı ve "Odaya gir" sağ üstteki ⋮ menüsünde (telefondaki gibi).
 - **Sunucu uygulamanın içinde (Kurulumsuz):**
   - Açılış ekranında "🖥️ Sunucuyu başlat" / "🛠️ Sunucu paneli". Sunucu kapalıysa uygulama `node server.js`'i arka planda açar (uygulama kapansa da çalışır; panelde ⏻ Kapat).
   - Panel aynı pencerede açılıyor. Sunucu sayfalarında başlık çubuğunun solunda "← Ana ekran" düğmesi, ayrıca Alt+←.
@@ -50,6 +51,7 @@ Son güncelleme: 2026-10-07 · Son commit: 84dad24 · Masaüstü 0.7.41 · Andro
   - Ölçüm (tek TorrServer): tek tek açılan torrent'te film bilgisi medyan 1.6 sn. 8'i birden açılınca 10 sn, 8'in 2'si 20 sn'de gelmedi.
   - Yalıtılmış denemede (Matrix 4K, soğuk motor) ölçüm 4.3 yerine ~2.5 sn'de başladı, karar 43 yerine 39 sn'de verildi. O anki 4K adaylar zaten çok kötü bağlanıyordu (çoğu 0 kişi).
   - **İzlenebilir bulunana kadar arama** (kullanıcı istedi): 12 sınırı yok; 6'şar aday, yeten bulunana ya da adaylar bitene kadar.
+    - **Yalnız tercih edilen kalite** (kullanıcı): 4K seçiliyken yalnız 4K'lar aranıyor, en iyi 4K seçiliyor. Alt kaliteye geçiş elle: 30 sn'de yeten çıkmazsa ya da adaylar biterse "1080p'ye geç" düğmesi. Hiçbiri veri vermediyse oda açılmıyor, uyarı + düğme. Odadaki otomatik geçiş de aynı kaliteden çıkmıyor.
     - Çıta ihtiyaç × 1.5; 30 sn'den sonra × 1.25, 60 sn'den sonra × 1.1. İhtiyacın altına inmiyor.
     - Yetenlerden: tercih edilen kalite > dosyada Türkçe altyazı > hız. Hiçbiri yetmezse hız/ihtiyaç oranı en iyi olan; kalitesi bilinmeyen en sonda (502 MB "?" seçilmişti).
     - Sıralama puanı: seed × grup geçmişi (0.3-3 kat) × Türkçe altyazı (1.5) × yalnız Dolby Vision (0.5). Odada bırakılan torrent'ler en sonda.

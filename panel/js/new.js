@@ -369,17 +369,31 @@ function grupCarpani(s) {
   return g ? Math.min(3, Math.max(0.3, (g.iyi + 1) / (g.kotu + 1))) : 1;
 }
 const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1) * grupCarpani(s) * (trAltyazi(s) ? 1.5 : 1) * (dvYalniz(s) ? 0.5 : 1);
+// Aranan kalite: yalnız tercih edilen kalite. 4K seçiliyken 4K'lar arasından en iyisi bulunuyor, kendiliğinden
+// 1080p'ye inilmiyor (kullanıcı, 2026-10-07). Alt kaliteye geçiş elle: "1080p'ye geç" düğmesi (otoKaliteZorla).
+// O kalitede hiç kaynak yoksa otomatik seçimin kalitesi (bir alt, sonra üst).
+const KALITE_SIRA = ['2160p', '1080p', '720p', '480p'];
+const kaliteAdi = (q) => (q === '2160p' ? '4K' : q || '?');
+let otoKaliteZorla = null;
+function otoArananKalite() {
+  if (otoKaliteZorla) return otoKaliteZorla;
+  const secilen = otomatikSec(streams, tercihKalite, { hafiza: kaynakHafiza });
+  if (!secilen) return null;
+  return tercihKalite && streams.some((s) => s.kind === 'torrent' && s.quality === tercihKalite) ? tercihKalite : secilen.quality;
+}
+function altKalite() {
+  const i = KALITE_SIRA.indexOf(otoArananKalite());
+  if (i < 0) return null;
+  return KALITE_SIRA.slice(i + 1).find((q) => streams.some((s) => s.kind === 'torrent' && s.quality === q)) || null;
+}
 function otoAdayBul() {
   const torrents = streams.filter((s) => s.kind === 'torrent');
-  const secilen = otomatikSec(streams, tercihKalite, { hafiza: kaynakHafiza });
-  if (!secilen) return [];
-  // Seçilen kalitedeki adaylar (puana göre), sonra başka kaliteler. Sınır yok: videoya yetecek hızda
-  // kaynak bulunana kadar 6'şarlı dalgalarla ölçülüyor. Odada daha önce bırakılan kaynaklar en sonda.
-  const ayni = hafizaOnce(torrents.filter((s) => s.quality === secilen.quality).sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
-  const diger = torrents.filter((s) => s.quality !== secilen.quality && (Number(s.seeders) || 0) >= 3)
-    .sort((a, b) => otoPuan(b) - otoPuan(a));
+  const kalite = otoArananKalite();
+  if (!kalite) return [];
+  // Sınır yok: videoya yetecek hızda kaynak bulunana kadar 6'şarlı dalgalarla ölçülüyor. Odada daha önce
+  // bırakılan kaynaklar en sonda.
+  const hepsi = hafizaOnce(torrents.filter((s) => s.quality === kalite).sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
   const kotu = new Set(kaynakOzet.kotu || []);
-  const hepsi = [...ayni, ...diger];
   return [...hepsi.filter((s) => !kotu.has(s.infoHash)), ...hepsi.filter((s) => kotu.has(s.infoHash))];
 }
 // Dalga 6 (kullanıcı istedi, 2026-10-07; önce 4). Ölçüm başlamak için 4 aday yetiyor (OTO_ERKEN).
@@ -479,15 +493,27 @@ function otoDene() {
   const yeterliler = sonuc.filter((x) => (x.o?.downMbps || 0) >= yeterliMbps(x.s));
   const hizli = yeterliler.length > 0;
   const bitti = otoAdaylar.every((s) => sonuclar.has(s.infoHash));
+  const kalanVar = otoHavuz().length > 0;
+  // Alt kaliteye geçiş elle: 30 sn'de yeten çıkmadıysa ya da adaylar bittiyse "1080p'ye geç" düğmesi.
+  const alt = altKalite();
+  $('#oto-kalite').hidden = !(alt && !hizli && (Date.now() - otoBaslangic > 30_000 || !kalanVar));
+  if (alt) $('#oto-kalite').textContent = `${kaliteAdi(alt)}'ye geç`;
   // Bu dalga bitti, hızlı kaynak yok ve sırada aday var: sonraki 6'yı ölç.
-  if (!hizli && (bitti || Date.now() - otoOlcumBasi >= OTO_OLCUM_MS) && otoHavuz().length) {
+  if (!hizli && (bitti || Date.now() - otoOlcumBasi >= OTO_OLCUM_MS) && kalanVar) {
     otoDalgaBaslat();
     return;
   }
   if (!hizli && !bitti && Date.now() - otoOlcumBasi < OTO_OLCUM_MS) {
     const olculen = sonuc.filter((x) => x.o?.peers).length;
-    otoYaz(`🤖 İzlenebilir kaynak aranıyor… (${otoAdaylar.length}/${otoTumAdaylar.length} aday, ${olculen} tanesi bağlandı, `
-      + `çıta videonun ihtiyacının ${payKatsayisi()} katı, ${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
+    otoYaz(`🤖 İzlenebilir ${kaliteAdi(otoArananKalite())} kaynak aranıyor… (${otoAdaylar.length}/${otoTumAdaylar.length} aday, `
+      + `${olculen} tanesi bağlandı, çıta videonun ihtiyacının ${payKatsayisi()} katı, `
+      + `${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
+    return;
+  }
+  // Adaylar bitti ve hiçbiri veri vermedi: oda açılmıyor (0 Mbps'lik kaynak izlenemez). Kalite elle.
+  if (!hizli && !sonuc.some((x) => (x.o?.downMbps || 0) >= 0.5)) {
+    otoYaz(`⚠️ ${kaliteAdi(otoArananKalite())} kaynakların hiçbiri veri vermedi (${otoAdaylar.length} aday denendi). `
+      + `${alt ? `${kaliteAdi(alt)}'ye geçebilir ya da ` : ''}listeden seçebilirsin.`);
     return;
   }
   const ilkKalite = otoAdaylar[0]?.quality;
@@ -496,7 +522,7 @@ function otoDene() {
     // Yetenler arasında: tercih edilen kalite, sonra dosyada Türkçe altyazı, sonra hız.
     ? yeterliler.sort((a, b) => (b.s.quality === ilkKalite) - (a.s.quality === ilkKalite)
       || trAltyazi(b.s) - trAltyazi(a.s) || (b.o?.downMbps || 0) - (a.o?.downMbps || 0))
-    // Hiçbiri yetmedi, adaylar bitti: hızın ihtiyaca oranı en iyi olan (çoğunlukla daha düşük kalite).
+    // Hiçbiri yetmedi, aynı kalitedeki adaylar bitti: hızın ihtiyaca oranı en iyi olan (o kalitenin en iyisi).
     // Kalitesi bilinmeyenler (örnek/bozuk dosya olabiliyor: 502 MB "?" seçilmişti) en sonda.
     : sonuc.sort((a, b) => Boolean(b.s.quality) - Boolean(a.s.quality) || oran(b) - oran(a)
       || (b.o?.peers || 0) - (a.o?.peers || 0) || otoPuan(b.s) - otoPuan(a.s));
@@ -511,6 +537,7 @@ function otoDene() {
   yaz();
   $('#oto-bar').hidden = false;
   $('#oto-simdi').hidden = false;
+  $('#oto-kalite').hidden = true;
   otoSayac = setInterval(() => {
     kalan -= 1;
     if (kalan > 0) return yaz();
@@ -524,6 +551,23 @@ function otoAc() {
   createRoom(otoSecim, button, { oto: true });
 }
 $('#oto-simdi').addEventListener('click', () => { otoDurdur(); otoAc(); });
+// Elle alt kaliteye geçiş: o kalitenin adayları kapanır, arama yeni kaliteyle baştan.
+$('#oto-kalite').addEventListener('click', () => {
+  const alt = altKalite();
+  if (!alt || otoSayac) return;
+  otoKaliteZorla = alt;
+  for (const s of otoAdaylar) {
+    if (otoKapatilan.has(s.infoHash)) continue;
+    otoKapatilan.add(s.infoHash);
+    api('/api/torrent-kapat', { method: 'POST', body: { infoHash: s.infoHash } }).catch(() => {});
+  }
+  otoAdaylar = [];
+  otoTumAdaylar = [];
+  otoBaslangic = 0;
+  otoOlcumBasi = 0;
+  $('#oto-kalite').hidden = true;
+  otoDene();
+});
 $('#oto-iptal').addEventListener('click', () => { otoIptal = true; otoDurdur(); $('#oto-bar').hidden = true; });
 setInterval(otoDene, 1000);
 otoDene();
