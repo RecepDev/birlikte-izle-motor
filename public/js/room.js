@@ -2333,6 +2333,8 @@ async function oluKaynaktanGec(s) {
   const res = await request('setHostStream', { streamId: hedef.streamId });
   if (res?.error) return false;
   sonOtoGecis = Date.now();
+  // Bırakılan kaynak hatırlansın: otomatik seçim bir daha önce denemesin (src/kaynak-hafiza.js).
+  request('kaynakKotu', { streamId: s.streamId, neden: 'acilmadi' }).catch(() => {});
   tani.kaydet('oto-gecis', { from: s.quality, to: hedef.quality, mbps: iyi.downMbps, cur: 0, neden: 'acilmadi' });
   toast(`Kaynak açılmadı; veri verdiği bilinen kaynağa geçildi (${hedef.quality || '?'} · ${iyi.downMbps.toFixed(0)} Mbps).`, 6000);
   playAfterSwitch();
@@ -2411,6 +2413,7 @@ async function checkWeakSource() {
     const res = await request('setHostStream', { streamId: best.s.streamId });
     if (!res?.error) {
       sonOtoGecis = Date.now();
+      request('kaynakKotu', { streamId: s.streamId, neden: 'zayif' }).catch(() => {});
       tani.kaydet('oto-gecis', { from: s.quality, to: best.s.quality, mbps: best.r.downMbps, cur });
       toast(`Kaynak zayıftı; daha hızlısına geçildi (${best.s.quality || '?'} · ${best.r.downMbps.toFixed(0)} Mbps).`, 6000);
       playAfterSwitch();
@@ -2426,10 +2429,15 @@ $('#weak-src-go').addEventListener('click', async () => {
   $('#weak-src').hidden = true;
   if (!weakSuggestion) return;
   const { streamId, own } = weakSuggestion;
+  const eski = myStream();
   tani.kaydet('kaynak-oneri-kabul', { streamId, own });
   const res = await request(own ? 'setOwnStream' : 'setHostStream', { streamId });
   if (res?.error) toast(errorText(res.error));
-  else if (!own) playAfterSwitch();
+  else if (!own) {
+    // Zayıf olduğu için bırakılan kaynak hatırlansın (otomatik seçim bir daha önce denemesin).
+    if (eski?.kind === 'torrent') request('kaynakKotu', { streamId: eski.streamId, neden: 'oneri' });
+    playAfterSwitch();
+  }
 });
 
 // ---- Misafir için kaynak önerisi (host'unki yukarıda). Kendi kaynağını değiştirir, oda aynı

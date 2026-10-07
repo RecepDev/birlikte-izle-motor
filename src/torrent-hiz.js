@@ -27,7 +27,9 @@ export function createTorrentHiz({ file, log, fetchImpl = fetch }) {
   tazele();
   return api();
 
-  async function tazele() {
+  // Alınamazsa 1 dk sonra yeniden (5 kez): eskiden bir kez denenip bırakılıyordu, dosyası olmayan yeni
+  // kurulumda torrent'ler bütün oturum tracker'sız açılıyordu (Torrentio kaynakla tracker göndermiyor).
+  async function tazele(deneme = 1) {
     try {
       const metin = await (await fetchImpl(LISTE_URL, { signal: AbortSignal.timeout(10_000) })).text();
       const yeni = metin.split(/\s+/).filter((t) => /^(udp|https?):\/\/\S+$/.test(t)).slice(0, 20);
@@ -37,7 +39,8 @@ export function createTorrentHiz({ file, log, fetchImpl = fetch }) {
       fs.writeFileSync(file, JSON.stringify({ at: Date.now(), liste }));
       log.info('Ek tracker listesi alındı', { adet: liste.length });
     } catch (err) {
-      log.warn('Ek tracker listesi alınamadı', { error: err.message });
+      log.warn('Ek tracker listesi alınamadı', { error: err.message, deneme });
+      if (deneme < 5) setTimeout(() => tazele(deneme + 1), 60_000).unref?.();
     }
   }
 

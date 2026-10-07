@@ -49,6 +49,15 @@ Son güncelleme: 2026-10-07 · Son commit: cac4d2e · Masaüstü 0.7.40 · Andro
   - Film seçilince önceden açılan aday sayısı 6/10'dan 3/5'e indi (`src/panel-api.js`).
   - Ölçüm (tek TorrServer): tek tek açılan torrent'te film bilgisi medyan 1.6 sn. 8'i birden açılınca 10 sn, 8'in 2'si 20 sn'de gelmedi.
   - Yalıtılmış denemede (Matrix 4K, soğuk motor) ölçüm 4.3 yerine ~2.5 sn'de başladı, karar 43 yerine 39 sn'de verildi. O anki 4K adaylar zaten çok kötü bağlanıyordu (çoğu 0 kişi).
+  - **İzlenebilir bulunana kadar arama** (kullanıcı istedi): 12 sınırı yok; 6'şar aday, yeten bulunana ya da adaylar bitene kadar.
+    - Çıta ihtiyaç × 1.5; 30 sn'den sonra × 1.25, 60 sn'den sonra × 1.1. İhtiyacın altına inmiyor.
+    - Yetenlerden: tercih edilen kalite > dosyada Türkçe altyazı > hız. Hiçbiri yetmezse hız/ihtiyaç oranı en iyi olan; kalitesi bilinmeyen en sonda (502 MB "?" seçilmişti).
+    - Sıralama puanı: seed × grup geçmişi (0.3-3 kat) × Türkçe altyazı (1.5) × yalnız Dolby Vision (0.5). Odada bırakılan torrent'ler en sonda.
+    - Canlı aday listesi (`#oto-liste`): ✓ yetiyor, ✗ bırakıldı, kalite, boyut, grup, kişi, hız / çıta.
+  - **Kaynak hafızası** (`src/kaynak-hafiza.js`): yayın gruplarının iyi/kötü sayısı bütün içeriklerde. Odada otomatik bırakılan ya da öneriyle değiştirilen kaynak `kaynakKotu` ile "kötü" (7 gün). `GET /api/kaynak-gruplari`.
+  - **Ölçüm hatası düzeltildi:** TorrServer okuyan kalmayınca indirmeyi bırakıyor. Ölçüm 1 MB / 2 bayt okuduğu için her aday ~0 Mbps görünüyordu, seçim rastgeleydi. Artık TorrServer'da ölçümde 32 MB okunuyor (en çok 25 sn; `OLCUM_BAYT_TS`, `stremio-local.js` `okuBayt`).
+  - **Tracker'sız açılma düzeltildi:** Torrentio kaynakla tracker göndermiyor. Ek liste (ngosang) alınamazsa torrent'ler 0 tracker'la açılıyordu; liste bir kez denenip bırakılıyordu. Şimdi: 1 dk arayla 5 deneme ve taklit her torrent'e `IYI_TRACKERLAR` + ek listeyi ekliyor.
+  - **Dikkat:** arama çok aday denerse (Silo denemesinde 48'e kadar) evin modemine yük biniyor. Art arda denemelerden sonra tek torrent'in film bilgisi 1.6 sn'den 6 sn'ye çıktı (modem bağlantı tablosu şüphesi, kesin değil). Gerekirse aday sınırı ya da dalgalar arası bekleme eklenebilir.
 - **Siteden film bilgisi:** itorrents aynı anda çok isteği kısıtlıyor (10 istekten sonra dakikalarca zaman aşımı). Artık istekler sırayla gidiyor, üst üste 2 hatada site 5 dk sorulmuyor. `http://` yönlendirmesi de izleniyor (önceden "Protocol http: not supported" veriyordu).
 - **Düzeltme:** TorrServer'da ayar yazmak bütün torrent'leri kapatıyor (`SetSettings` → `dropAllTorrent`).
   - Ayar artık yalnız değiştiyse yazılıyor.

@@ -1,6 +1,6 @@
 import { api, apiStream, el, $, formatSize } from './api.js';
 import { browserCodecs } from './codecs.js';
-import { otomatikSec, hafizaOnce } from './kaynak-sec.js';
+import { otomatikSec, hafizaOnce, grupAdi } from './kaynak-sec.js';
 
 // Can this browser show the picture without re-encoding (original quality)?
 const caps = browserCodecs(document.createElement('video'));
@@ -335,29 +335,52 @@ let otoSecim = null;
 // ölçülüyor (bağlanılan kişi, gerçek hız); en hızlı olan seçiliyor.
 let otoAdaylar = [];
 let otoOlcumBasi = 0;
-// "Yeterince hızlı" kaynağa göre: videonun ihtiyacı (boyut / süre) x 1.5; süre bilinmiyorsa sabit 15 Mbps.
+// "Yeterince hızlı" kaynağa göre: videonun ihtiyacı (boyut / süre) x pay; süre bilinmiyorsa sabit 15 Mbps.
 // Sabit 15, 2 GB'lık 1080p bölüm için gereksiz bekletiyor (5 Mbps yetiyor), 20 GB'lık 4K için azdı.
+// Pay arama uzadıkça iniyor (30 sn'ye kadar 1.5, 60 sn'ye kadar 1.25, sonra 1.1) ama ihtiyacın altına
+// hiç inmiyor: izlenebilir olmayan kaynak "yeterli" sayılmıyor.
 const OTO_IYI_MBPS = 15;
 let sureSn = null; // içeriğin süresi (Cinemeta), meta satırıyla geliyor
+let otoBaslangic = 0; // ilk dalganın başladığı an
+const ihtiyacMbps = (s) => (sureSn && s.sizeBytes ? (s.sizeBytes * 8) / sureSn / 1e6 : null);
+function payKatsayisi() {
+  const sn = otoBaslangic ? (Date.now() - otoBaslangic) / 1000 : 0;
+  return sn < 30 ? 1.5 : sn < 60 ? 1.25 : 1.1;
+}
 function yeterliMbps(s) {
-  const ihtiyac = sureSn && s.sizeBytes ? (s.sizeBytes * 8) / sureSn / 1e6 : null;
-  return ihtiyac ? Math.max(4, ihtiyac * 1.5) : OTO_IYI_MBPS;
+  const ihtiyac = ihtiyacMbps(s);
+  return ihtiyac ? Math.max(4, ihtiyac * payKatsayisi()) : OTO_IYI_MBPS;
 }
 // Dalga başına ölçüm süresi. Film bilgisi artık siteden ~0.3 sn'de geldiği için 20 sn'den 12 sn'ye indi.
 const OTO_OLCUM_MS = 12_000;
-const OTO_EN_COK = 12;
-const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1);
+// Sıralama puanı: seed (sezon paketi geride) x yayın grubunun geçmişi x Türkçe altyazı x uyumluluk.
+// - Grup: bütün içeriklerde iyi/kötü sayısı (bkz. src/kaynak-hafiza.js), 0.3-3 kat.
+// - Dosyanın içinde Türkçe altyazı (sürüm adından): 1.5 kat.
+// - Yalnız Dolby Vision (HDR10 yedeği yok): DV desteklemeyen ekranda renkler bozuk (mor/yeşil), 0.5 kat.
+let kaynakOzet = { gruplar: {}, kotu: [] };
+api('/api/kaynak-gruplari').then((o) => { if (o?.gruplar) kaynakOzet = o; }).catch(() => {});
+const trAltyazi = (s) => (s.embeddedSubs?.langs || []).includes('Türkçe');
+const dvYalniz = (s) => {
+  const t = `${s.name || ''} ${s.title || ''}`;
+  return /\b(dv|dovi)\b|dolby.?vision/i.test(t) && !/\bhdr(10)?(\+|plus)?\b/i.test(t);
+};
+function grupCarpani(s) {
+  const g = kaynakOzet.gruplar?.[grupAdi(s)];
+  return g ? Math.min(3, Math.max(0.3, (g.iyi + 1) / (g.kotu + 1))) : 1;
+}
+const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1) * grupCarpani(s) * (trAltyazi(s) ? 1.5 : 1) * (dvYalniz(s) ? 0.5 : 1);
 function otoAdayBul() {
   const torrents = streams.filter((s) => s.kind === 'torrent');
   const secilen = otomatikSec(streams, tercihKalite, { hafiza: kaynakHafiza });
   if (!secilen) return [];
-  // Seçilen kalitedeki adaylar (çok seed'liden aza), sonra başka kaliteler; en fazla 12.
-  // 6'şarlı dalgalarla ölçülüyor: ilk 6'da hızlı kaynak yoksa sıradaki 6 (bağlantı sayısı
-  // bir anda patlamasın: 12 torrent aynı anda modemi boğuyordu).
+  // Seçilen kalitedeki adaylar (puana göre), sonra başka kaliteler. Sınır yok: videoya yetecek hızda
+  // kaynak bulunana kadar 6'şarlı dalgalarla ölçülüyor. Odada daha önce bırakılan kaynaklar en sonda.
   const ayni = hafizaOnce(torrents.filter((s) => s.quality === secilen.quality).sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
   const diger = torrents.filter((s) => s.quality !== secilen.quality && (Number(s.seeders) || 0) >= 3)
     .sort((a, b) => otoPuan(b) - otoPuan(a));
-  return [...ayni, ...diger].slice(0, 12);
+  const kotu = new Set(kaynakOzet.kotu || []);
+  const hepsi = [...ayni, ...diger];
+  return [...hepsi.filter((s) => !kotu.has(s.infoHash)), ...hepsi.filter((s) => kotu.has(s.infoHash))];
 }
 // Dalga 6 (kullanıcı istedi, 2026-10-07; önce 4). Ölçüm başlamak için 4 aday yetiyor (OTO_ERKEN).
 const OTO_DALGA = 6;
@@ -366,12 +389,11 @@ let otoTumAdaylar = [];
 // Dizide önceki bölümlerde iyi indiren kaynağın grubu: önce onlar ölçülüyor.
 let kaynakHafiza = null;
 if (type === 'series') api(`/api/kaynak-hafiza?${new URLSearchParams({ id })}`).then((h) => { kaynakHafiza = h; }).catch(() => {});
-// Sıradaki 4 aday. Havuz her dalgada yeniden hesaplanıyor: ölçüm yavaş eklentiyi beklemeden başladığı
-// için sonradan gelen eklentilerin kaynakları da sıraya giriyor.
+// Henüz ölçülmeyen adaylar. Havuz her dalgada yeniden hesaplanıyor: ölçüm yavaş eklentiyi beklemeden
+// başladığı için sonradan gelen eklentilerin kaynakları da sıraya giriyor.
 function otoHavuz() {
   const olculen = new Set(otoAdaylar.map((s) => s.infoHash));
-  const kalan = otoAdayBul().filter((s) => !olculen.has(s.infoHash));
-  return kalan.slice(0, Math.max(0, OTO_EN_COK - otoAdaylar.length));
+  return otoAdayBul().filter((s) => !olculen.has(s.infoHash));
 }
 // Yeni dalga başlarken önceki adayların en iyisi dışındakiler kapatılıyor: aynı anda açık torrent
 // azalınca yenileri daha çabuk bağlanıyor (ölçüm: 8 torrent birden açıkken film bilgisi 6 kat geç geldi).
@@ -395,10 +417,29 @@ function otoDalgaBaslat() {
   otoAdaylar = [...otoAdaylar, ...yeni];
   otoTumAdaylar = [...otoAdaylar, ...havuz.slice(OTO_DALGA)];
   otoOlcumBasi = Date.now();
-  const olcumsuz = yeni.filter((s) => !durum[s.infoHash] && !sonuclar.has(s.infoHash)).map((s) => s.streamId);
+  otoBaslangic ||= otoOlcumBasi;
+  // Önceden açılmış (ısıtılmış) olanlar da ölçüme gidiyor: TorrServer'da hız ancak okurken görünüyor,
+  // ısıtma yalnız 1 MB okuyor.
+  const olcumsuz = yeni.filter((s) => !sonuclar.has(s.infoHash)).map((s) => s.streamId);
   if (olcumsuz.length) api('/api/torrent-denetle', { method: 'POST', body: { type, id, streamIds: olcumsuz } }).catch(() => {});
 }
 const olcum = (s) => sonuclar.get(s.infoHash) || enIyi.get(s.infoHash) || null;
+// Ölçülen adaylar canlı: kalite, boyut, grup, kişi, hız / çıta. ✓ yetiyor, ✗ bırakıldı, ⏳ bağlanıyor.
+function otoListeYaz(sonuc) {
+  const kutu = $('#oto-liste');
+  if (!kutu) return;
+  const satirlar = [...sonuc].sort((a, b) => (b.o?.downMbps || 0) - (a.o?.downMbps || 0)).slice(0, 8);
+  kutu.hidden = !satirlar.length;
+  kutu.replaceChildren(...satirlar.map(({ s, o }) => {
+    const hedef = yeterliMbps(s);
+    const hiz = o?.downMbps || 0;
+    const isaret = hiz >= hedef ? '✓' : otoKapatilan.has(s.infoHash) ? '✗' : o?.peers ? '…' : '⏳';
+    const grup = grupAdi(s);
+    return el('li', { class: hiz >= hedef ? 'iyi' : otoKapatilan.has(s.infoHash) ? 'birakildi' : '' },
+      `${isaret} ${s.quality || '?'}${s.hdr ? ` ${s.hdr}` : ''} · ${formatSize(s.sizeBytes) || '?'}${grup ? ` · ${grup}` : ''}`
+      + `${trAltyazi(s) ? ' · TR altyazı' : ''} — 👤 ${o?.peers || 0} · ↓ ${hiz} / ${Math.round(hedef)} Mbps`);
+  }));
+}
 function otoDurdur() {
   clearInterval(otoSayac);
   otoSayac = null;
@@ -431,9 +472,12 @@ function otoDene() {
     }
     otoDalgaBaslat();
   }
-  // Ölçüm: biri videoya yetecek kadar hızlıysa hemen, yoksa hepsi bitince ya da 12 sn dolunca karar.
+  // Ölçüm: biri videoya yetecek kadar hızlıysa hemen; yoksa dalga bitince sıradakiler. Yeten bulunana ya
+  // da adaylar bitene kadar sürüyor (kullanıcı istedi: "yeter ki izlenebilir kaynağı bulsun").
   const sonuc = otoAdaylar.map((s) => ({ s, o: olcum(s) }));
-  const hizli = sonuc.some((x) => (x.o?.downMbps || 0) >= yeterliMbps(x.s));
+  otoListeYaz(sonuc);
+  const yeterliler = sonuc.filter((x) => (x.o?.downMbps || 0) >= yeterliMbps(x.s));
+  const hizli = yeterliler.length > 0;
   const bitti = otoAdaylar.every((s) => sonuclar.has(s.infoHash));
   // Bu dalga bitti, hızlı kaynak yok ve sırada aday var: sonraki 6'yı ölç.
   if (!hizli && (bitti || Date.now() - otoOlcumBasi >= OTO_OLCUM_MS) && otoHavuz().length) {
@@ -442,13 +486,20 @@ function otoDene() {
   }
   if (!hizli && !bitti && Date.now() - otoOlcumBasi < OTO_OLCUM_MS) {
     const olculen = sonuc.filter((x) => x.o?.peers).length;
-    const hedef = Math.round(yeterliMbps(otoAdaylar[0]));
-    otoYaz(`🤖 En iyi kaynak ölçülüyor… (${otoAdaylar.length}/${otoTumAdaylar.length} aday, ${olculen} tanesi bağlandı, `
-      + `hedef ${hedef} Mbps, ${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
+    otoYaz(`🤖 İzlenebilir kaynak aranıyor… (${otoAdaylar.length}/${otoTumAdaylar.length} aday, ${olculen} tanesi bağlandı, `
+      + `çıta videonun ihtiyacının ${payKatsayisi()} katı, ${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
     return;
   }
-  const sirali = sonuc.sort((a, b) => (b.o?.downMbps || 0) - (a.o?.downMbps || 0)
-    || (b.o?.peers || 0) - (a.o?.peers || 0) || otoPuan(b.s) - otoPuan(a.s));
+  const ilkKalite = otoAdaylar[0]?.quality;
+  const oran = (x) => (x.o?.downMbps || 0) / (ihtiyacMbps(x.s) || OTO_IYI_MBPS / 1.5);
+  const sirali = hizli
+    // Yetenler arasında: tercih edilen kalite, sonra dosyada Türkçe altyazı, sonra hız.
+    ? yeterliler.sort((a, b) => (b.s.quality === ilkKalite) - (a.s.quality === ilkKalite)
+      || trAltyazi(b.s) - trAltyazi(a.s) || (b.o?.downMbps || 0) - (a.o?.downMbps || 0))
+    // Hiçbiri yetmedi, adaylar bitti: hızın ihtiyaca oranı en iyi olan (çoğunlukla daha düşük kalite).
+    // Kalitesi bilinmeyenler (örnek/bozuk dosya olabiliyor: 502 MB "?" seçilmişti) en sonda.
+    : sonuc.sort((a, b) => Boolean(b.s.quality) - Boolean(a.s.quality) || oran(b) - oran(a)
+      || (b.o?.peers || 0) - (a.o?.peers || 0) || otoPuan(b.s) - otoPuan(a.s));
   otoSecim = sirali[0].s;
   const secOlcum = sirali[0].o;
   let kalan = 3;

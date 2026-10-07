@@ -5,7 +5,7 @@ import path from 'node:path';
 import express from 'express';
 import { isContentId, isContentType } from './addon.js';
 import { normalizeStreams, normalizeAddonStreams } from './streams.js';
-import { isit } from './stremio-isit.js';
+import { isit, OLCUM_BAYT_TS } from './stremio-isit.js';
 import { STREMIO_BASE } from '../public/js/shared/stream-url.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun } from './bizim-torrentler.js';
 import { masaustuAc } from './masaustu-baslat.js';
@@ -303,6 +303,8 @@ export function createPanelApp({
 
   // Otomatik seçim: dizide daha önce iyi indiren kaynağın grubu (bkz. kaynak-hafiza.js).
   app.get('/api/kaynak-hafiza', (req, res) => res.json(kaynakHafiza?.oku(String(req.query.id || '')) || null));
+  // Bütün içerikler: yayın gruplarının iyi/kötü sayıları ve bırakılan (kötü) torrent'ler.
+  app.get('/api/kaynak-gruplari', (req, res) => res.json(kaynakHafiza?.ozet?.() || { gruplar: {}, kotu: [] }));
 
   // Oda aç ekranı: Stremio'da açık (denetlenen) torrent'lerin canlı durumu: bağlı kişi, hız.
   app.get('/api/torrent-durum', wrap(async (req, res) => {
@@ -334,11 +336,16 @@ export function createPanelApp({
     if (!validContent(type, id) || !Array.isArray(streamIds)) return res.status(400).json({ error: 'Geçersiz' });
     const entry = streamCache.get(`${type}|${id}`);
     if (!entry) return res.status(404).json({ error: 'Liste yok' });
+    // Ölçüm için okunan miktar: Stremio açtığı torrent'i kendiliğinden indirmeye devam ediyor, 1 MB
+    // yetiyor. TorrServer okuyan kalmayınca duruyor: hız ancak okurken ölçülüyor, 32 MB okunuyor
+    // (2026-10-07: 1 MB'ta bütün adaylar ~0 Mbps görünüyordu, seçim rastgeleydi). Okunan kısım
+    // disk önbelleğine de yazılıyor: seçilen kaynakta boşa gitmiyor.
+    const bayt = motorBilgisi?.()?.kullanilan === 'torrserver' ? OLCUM_BAYT_TS : 1024 * 1024;
     let n = 0;
     for (const sid of streamIds.slice(0, 12)) {
       const s = entry.streams.find((x) => x.streamId === sid);
       if (s?.kind === 'torrent') {
-        isit(s);
+        isit(s, bayt);
         n += 1;
       }
     }

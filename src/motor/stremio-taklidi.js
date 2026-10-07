@@ -14,6 +14,7 @@
 
 import crypto from 'node:crypto';
 import http from 'node:http';
+import { IYI_TRACKERLAR } from './torrserver.js';
 
 const DOSYA = /^\/([0-9a-f]{40})\/(-1|\d+)$/i;
 const VIDEO = /\.(mkv|mp4|avi|m4v|mov|wmv|ts|m2ts|webm|mpg|mpeg)$/i;
@@ -69,7 +70,8 @@ const YEREL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 // onbellek: src/motor/onbellek.js (verilmezse her şey doğrudan TorrServer'dan).
 // birak: verilirse (masaüstü uygulaması) POST /birak gelince çağrılır; sunucu 11470'i almak istiyor.
-export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null, onbellek = null, birak = null }) {
+// ekTrackerlar: sunucunun güncel tracker listesi (ngosang); her torrent'e IYI_TRACKERLAR ile birlikte ekleniyor.
+export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null, onbellek = null, birak = null, ekTrackerlar = () => [] }) {
   const kimlik = crypto.randomBytes(8).toString('hex'); // 127.0.0.1'e cevap verenin biz olduğunu doğrulamak için
   const ekleniyor = new Map(); // hash -> ekleme sözü (aynı torrent iki kez eklenmesin)
   const secilen = new Map(); // `${hash}/${sıra}` -> { id, length }
@@ -94,9 +96,12 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     .filter((s) => typeof s === 'string' && s.startsWith('tracker:'))
     .map((s) => s.slice('tracker:'.length));
 
+  // Her torrent iyi tracker'larla açılıyor: Torrentio kaynakla tracker göndermiyor, sunucunun ek listesi
+  // (ekTrackerlar) alınamazsa torrent yalnız DHT'yle kalıp çok geç bağlanıyordu (2026-10-07 ölçüm: 0 tracker).
   async function ekle(ih, tr) {
+    const hepsi = [...new Set([...tr, ...(ekTrackerlar() || []), ...IYI_TRACKERLAR])].slice(0, 40);
     if (!acilis.has(ih)) acilis.set(ih, { t0: Date.now(), meta: null, tracker: tr.length });
-    if (!ekleniyor.has(ih)) ekleniyor.set(ih, ts.ekle(ih, tr).finally(() => ekleniyor.delete(ih)));
+    if (!ekleniyor.has(ih)) ekleniyor.set(ih, ts.ekle(ih, hepsi).finally(() => ekleniyor.delete(ih)));
     return ekleniyor.get(ih);
   }
 

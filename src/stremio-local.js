@@ -75,11 +75,16 @@ export function createStremioLocal({ base = STREMIO_BASE, fetchImpl = fetch, tim
     // real playback gives one up to 60s (see player.js's LOAD_TIMEOUT_MS) before
     // calling it dead, so a much shorter window here was reporting healthy
     // torrents as "no data" just because they hadn't warmed up yet.
-    async checkTorrent(stream, { checkMs = 20_000, pollMs = 1000 } = {}) {
+    // okuBayt: torrent'i açarken okunan miktar. Stremio açtığı torrent'i kendiliğinden indirdiği için 2 bayt
+    // yetiyor; TorrServer okuyan kalmayınca duruyor, hız ancak okurken ölçülüyor (sunucu 32 MB veriyor).
+    async checkTorrent(stream, { checkMs = 20_000, pollMs = 1000, okuBayt = 2 } = {}) {
+      let okundu = false;
       const warm = fetchImpl(localTorrentUrl(stream, base), {
-        headers: { range: 'bytes=0-1' },
+        headers: { range: `bytes=0-${okuBayt - 1}` },
         signal: AbortSignal.timeout(checkMs + 2000),
-      }).catch(() => {});
+      }).then(async (r) => {
+        if (okuBayt > 2 && r?.body) for await (const parca of r.body) void parca; // okuyarak indirt
+      }).catch(() => {}).finally(() => { okundu = true; });
       const deadline = Date.now() + checkMs;
       const best = { peers: 0, downMbps: 0, progress: 0 };
       while (Date.now() < deadline) {
@@ -92,8 +97,10 @@ export function createStremioLocal({ base = STREMIO_BASE, fetchImpl = fetch, tim
           // Clearly alive: either it's actively downloading, or it's already
           // sitting on disk from a previous run (nothing left to download, so
           // downloadSpeed can legitimately stay 0 forever).
-          if (best.downMbps > 0.1 || best.progress >= 0.99) break;
+          // Okuyarak ölçerken (TorrServer) ilk hızda durma: okuma bitene kadar en yükseği al.
+          if (okuBayt <= 2 && (best.downMbps > 0.1 || best.progress >= 0.99)) break;
         }
+        if (okuBayt > 2 && okundu) break;
       }
       await warm;
       // Peers alone prove nothing (that's the whole complaint: some torrents show

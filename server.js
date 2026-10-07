@@ -19,7 +19,7 @@ import { createAddonRouter, isContentType, isContentId } from './src/addon.js';
 import { normalizeStreams, normalizeAddonStreams, bestStream } from './src/streams.js';
 import { otomatikSec, hafizaOnce } from './public/js/shared/kaynak-sec.js';
 import { createKaynakHafiza } from './src/kaynak-hafiza.js';
-import { isit as isitStremio } from './src/stremio-isit.js';
+import { isit as isitStremio, OLCUM_BAYT_TS } from './src/stremio-isit.js';
 import { parseMagnet } from './src/magnet.js';
 import { createStremioLocal } from './src/stremio-local.js';
 import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-restart.js';
@@ -100,7 +100,10 @@ if (MOTOR === 'torrserver') {
   onbellek.temizle();
   setInterval(() => onbellek.temizle(), 10 * 60_000).unref();
   const taklitPort = Number(new URL(STREMIO_BASE).port) || 11470;
-  stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: taklitPort, log, dosyaAdi, onbellek });
+  stremioTaklidi = createStremioTaklidi({
+    ts: torrServer, port: taklitPort, log, dosyaAdi, onbellek,
+    ekTrackerlar: () => torrentHiz.kaynaklar().map((t) => t.slice('tracker:'.length)),
+  });
   try {
     try {
       await stremioTaklidi.baslat();
@@ -333,7 +336,17 @@ socketCtl = attachSocket(io, {
       // Telefonun ölçüp seçtiği iyi kaynak da dizinin hafızasına.
       kaynakIyi: (room, uid, p) => {
         const s = room.streams.find((x) => x.streamId === p?.streamId);
-        if (s && room.type === 'series') kaynakHafiza.iyi(room.contentId, s);
+        if (s) kaynakHafiza.iyi(room.contentId, s);
+        return { msgs: [] };
+      },
+      // Odada otomatik olarak bırakılan kaynak (açılmadı / zayıftı): otomatik seçim bir daha önce denemesin.
+      kaynakKotu: (room, uid, p) => {
+        if (uid !== room.hostUserId) return { error: 'notHost' };
+        const s = room.streams.find((x) => x.streamId === p?.streamId);
+        if (s?.kind === 'torrent') {
+          kaynakHafiza.kotu(s);
+          log.info('Kaynak kötü işaretlendi', { infoHash: s.infoHash, neden: String(p?.neden || '').slice(0, 20) });
+        }
         return { msgs: [] };
       },
       // Tanı kaydı (bkz. src/tani.js): cihaz yolluyor, host kişinin kaydını açabiliyor.
@@ -647,7 +660,8 @@ const statsTimer = setInterval(async () => {
 function watchStall(room, stats) {
   const takildi = stremioTakildiMi(room, stats);
   // İyi indiren kaynak dizinin hafızasına (sonraki bölümlerde önce bu grup denenir).
-  if (stats && stats.downMbps >= 8 && room.type === 'series') {
+  // Film de sayılıyor: yayın grubunun iyi/kötü sayısı bütün içerikler için (bkz. kaynak-hafiza.js).
+  if (stats && stats.downMbps >= 8) {
     const s = room.streams.find((x) => x.streamId === room.hostStreamId);
     if (s) kaynakHafiza.iyi(room.contentId, s);
   }
@@ -720,7 +734,8 @@ async function torrentDenetle(room, stream, { kapat = true } = {}) {
   activeChecks.set(stream.infoHash, (activeChecks.get(stream.infoHash) || 0) + 1);
   torrentDokun(stream.infoHash);
   try {
-    const r = await stremioLocal.checkTorrent(stream);
+    // TorrServer'da hız ancak okurken görünüyor: ölçüm için 32 MB okunuyor (bkz. stremio-isit.js).
+    const r = await stremioLocal.checkTorrent(stream, motorAyri ? { okuBayt: OLCUM_BAYT_TS } : {});
     olcumKaydet(room, stream.infoHash, r);
     return r;
   } finally {

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { dosyaSec, istatistik, opensubHash, createStremioTaklidi } from '../src/motor/stremio-taklidi.js';
+import { IYI_TRACKERLAR } from '../src/motor/torrserver.js';
 
 const sessiz = { info() {}, warn() {}, error() {} };
 const IH = 'ab'.repeat(20);
@@ -82,7 +83,10 @@ test('Stremio taklidi: stats, akış (Range), kapatma, ekleme', async () => {
     assert.equal(res.status, 206);
     assert.equal(res.headers.get('content-range'), 'bytes 5-9/20');
     assert.equal(await res.text(), '56789');
-    assert.deepEqual(olaylar[0], ['ekle', IH, ['udp://t:1']]);
+    // Adresteki tracker önce, ardından her zaman eklenen iyi tracker listesi (Torrentio tracker göndermiyor).
+    assert.equal(olaylar[0][0], 'ekle');
+    assert.equal(olaylar[0][2][0], 'udp://t:1');
+    assert.ok(olaylar[0][2].includes(IYI_TRACKERLAR[0]));
     // Yeni açılan torrent'in açılış süresi günlüğe (metadata ve ilk veri ayrı).
     const acilis = kayitlar.find(([m]) => m === 'Torrent açılışı')?.[1];
     assert.equal(acilis?.infoHash, IH);
@@ -93,7 +97,7 @@ test('Stremio taklidi: stats, akış (Range), kapatma, ekleme', async () => {
     await fetch(`${adres}/${IH}/remove`);
     assert.deepEqual(olaylar.at(-1), ['kapat', IH]);
     await fetch(`${adres}/${IH}/create`, { method: 'POST', body: JSON.stringify({ torrent: { infoHash: IH }, peerSearch: { sources: ['tracker:udp://u:2'] } }) });
-    assert.deepEqual(olaylar.at(-1), ['ekle', IH, ['udp://u:2']]);
+    assert.equal(olaylar.at(-1)[2][0], 'udp://u:2');
     assert.equal((await fetch(`${adres}/hlsv2/x/master.m3u8`)).status, 404);
   } finally {
     taklit.durdur();

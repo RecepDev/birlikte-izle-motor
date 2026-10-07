@@ -7,6 +7,12 @@ import http from 'node:http';
 import { localTorrentUrl, STREMIO_BASE } from '../public/js/shared/stream-url.js';
 import { dokun } from './bizim-torrentler.js';
 
+// TorrServer motorunda hız ölçümü için okunan miktar (bkz. panel-api.js torrent-denetle): TorrServer
+// okuyan kalmayınca indirmeyi bırakıyor, hız ancak okurken görünüyor.
+export const OLCUM_BAYT_TS = 32 * 1024 * 1024;
+// Ölçüm okuması en çok bu kadar sürer (yavaş kaynak arkada uzun süre inmeye devam etmesin).
+const OLCUM_SURE_MS = 25_000;
+
 export function isit(stream, bytes = 1024 * 1024) {
   // Testlerde gerçek Stremio'ya sahte torrent açılmasın.
   if (stream?.kind !== 'torrent' || process.env.NODE_TEST_CONTEXT) return;
@@ -17,5 +23,6 @@ export function isit(stream, bytes = 1024 * 1024) {
     // Arka plan işi: süreç (ya da testler) bunu beklemesin.
     req.on('socket', (sock) => sock.unref());
     req.setTimeout(120_000, () => req.destroy());
+    if (bytes > 1024 * 1024) setTimeout(() => req.destroy(), OLCUM_SURE_MS).unref();
   } catch { /* geç */ }
 }
