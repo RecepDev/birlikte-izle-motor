@@ -13,6 +13,8 @@ window.kabuk = {
   isim: () => ipcRenderer.sendSync('kabuk:isim'),
   otoKaynak: () => ipcRenderer.sendSync('kabuk:oto'),
   otoKaynakYaz: (acik) => ipcRenderer.send('kabuk:oto-yaz', Boolean(acik)),
+  internetMbps: () => ipcRenderer.sendSync('kabuk:internet-mbps'),
+  internetMbpsYaz: (mbps) => ipcRenderer.send('kabuk:internet-mbps-yaz', mbps),
   hizliBaslat: () => ipcRenderer.sendSync('kabuk:hizli-baslat'),
   hizliBaslatYaz: (acik) => ipcRenderer.send('kabuk:hizli-baslat-yaz', Boolean(acik)),
   // Sunucu (Kurulumsuz'da kodu yanında): kapalıysa başlatır, paneli bu pencerede açar. { ok } | { error }

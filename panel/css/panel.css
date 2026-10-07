@@ -153,3 +153,4 @@ select { font: inherit; color: inherit; background: var(--bg); border: 1px solid
 .oto-liste li.iyi { color: var(--ok); }
 .oto-liste li.birakildi { opacity: .55; }
 body.oto-mod .oto-liste { font-size: 13px; }
+.hiz-kutu { width: 90px !important; min-width: 0 !important; flex: none !important; padding: 4px 8px !important; margin: 0 4px; }

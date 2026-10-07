@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-07 · Son commit: c068c8d · Masaüstü 0.7.44 · Android 0.33.0 (versionCode 33)
+Son güncelleme: 2026-10-07 · Son commit: c068c8d · Masaüstü 0.7.45 · Android 0.33.0 (versionCode 33)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
@@ -58,6 +58,7 @@ Son güncelleme: 2026-10-07 · Son commit: c068c8d · Masaüstü 0.7.44 · Andro
       3. Yeten hemen seçiliyor; yetmeyenlerin en iyisi açık tutuluyor, adaylar biterse o.
       4. Hat kapasitesi (tek başına görülen en yüksek hız, localStorage `hatMbps`): taşıyamayacağı kaynaklar sona; hat 1.5 katı veremiyorsa çıta hattın %90'ı (en az 1.1 kat).
       Deneme (yalıtılmış sunucu): Silo S03E01 4K 21 sn (gerçek aramada ~2 dk), Silo S01E08 4K 17 sn, Matrix 4K 35 GB 16 sn.
+    - **İnternet hızı** (elle, `data/tercih.json` `internetMbps`; oda aç sayfasında ve masaüstü açılış ekranında): videonun ihtiyacı bundan fazla olan kaynak otomatik seçimde hiç denenmiyor, listede "⚠️ ~X Mbps ister" uyarısı. Çıta da bu hıza göre. O kalitenin hepsi aşıyorsa uyarı + "1080p'ye geç". Deneme: 60 Mbps'de Matrix 4K'nın 62-73 GB'lık 5 kaynağı elendi.
     - **Yalnız tercih edilen kalite** (kullanıcı): 4K seçiliyken yalnız 4K'lar aranıyor, en iyi 4K seçiliyor. Alt kaliteye geçiş elle: 30 sn'de yeten çıkmazsa ya da adaylar biterse "1080p'ye geç" düğmesi. Hiçbiri veri vermediyse oda açılmıyor, uyarı + düğme. Odadaki otomatik geçiş de aynı kaliteden çıkmıyor.
     - Çıta ihtiyaç × 1.5; 30 sn'den sonra × 1.25, 60 sn'den sonra × 1.1. İhtiyacın altına inmiyor.
     - Yetenlerden: tercih edilen kalite > dosyada Türkçe altyazı > hız. Hiçbiri yetmezse hız/ihtiyaç oranı en iyi olan; kalitesi bilinmeyen en sonda (502 MB "?" seçilmişti).

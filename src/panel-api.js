@@ -214,8 +214,15 @@ export function createPanelApp({
 
   // Daha önce oda açılan film ve diziler (en yenisi başta).
   app.get('/api/gecmis', (req, res) => res.json(gecmis.liste()));
-  app.get('/api/tercih', (req, res) => res.json({ kalite: tercih.kalite() }));
-  app.post('/api/tercih', (req, res) => res.json({ ok: tercih.ayarla?.(req.body?.kalite) ?? false }));
+  app.get('/api/tercih', (req, res) => res.json({ kalite: tercih.kalite(), internetMbps: tercih.internetMbps?.() ?? null }));
+  // Gövdede hangisi varsa o yazılıyor: { kalite } ve/ya { internetMbps } (null = sil).
+  app.post('/api/tercih', (req, res) => {
+    const b = req.body || {};
+    let ok = true;
+    if ('kalite' in b) ok = (tercih.ayarla?.(b.kalite) ?? false) && ok;
+    if ('internetMbps' in b) ok = (tercih.internetAyarla?.(b.internetMbps) ?? false) && ok;
+    res.json({ ok });
+  });
 
   app.get('/api/streams', wrap(async (req, res) => {
     const { type, id, retry } = req.query;

@@ -94,6 +94,10 @@
         <span class="anahtar"><input type="checkbox" id="hizli-baslat"><span></span></span>
       </label>
       <label class="ayar">
+        <div>📶 İnternet hızım (Mbps)<small>Tam hızda bile izlenemeyecek kadar büyük kaynaklar (ör. 60 GB'lık 4K) aranmaz</small></div>
+        <input type="number" id="internet-hiz" min="1" max="10000" step="1" placeholder="?">
+      </label>
+      <label class="ayar">
         <div>Görüntü kalitesi<small>Önce bu kalitenin kaynakları aranır</small></div>
         <select id="kalite"><option value="2160p">4K (2160p)</option><option value="1080p">1080p</option><option value="720p">720p</option></select>
       </label>
@@ -200,6 +204,9 @@
   const oto = document.getElementById('oto');
   oto.checked = window.kabuk.otoKaynak ? window.kabuk.otoKaynak() : true;
   oto.addEventListener('change', () => window.kabuk.otoKaynakYaz?.(oto.checked));
+  const internetHiz = document.getElementById('internet-hiz');
+  internetHiz.value = window.kabuk.internetMbps?.() ?? '';
+  internetHiz.addEventListener('change', () => window.kabuk.internetMbpsYaz?.(internetHiz.value ? Number(internetHiz.value) : null));
   const hizli = document.getElementById('hizli-baslat');
   hizli.checked = window.kabuk.hizliBaslat ? window.kabuk.hizliBaslat() : true;
   hizli.addEventListener('change', () => window.kabuk.hizliBaslatYaz?.(hizli.checked));

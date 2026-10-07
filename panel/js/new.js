@@ -37,7 +37,32 @@ const siraQ = (s) => {
   const i = QUALITIES.indexOf(s.quality);
   return i < 0 ? 9 : i;
 };
-api('/api/tercih').then((t) => { tercihKalite = t?.kalite || null; render(); }).catch(() => {});
+// İnternet hızı (elle, Mbps; sunucuda saklanıyor, masaüstü uygulamasının açılış ekranından da giriliyor).
+// Girildiyse tam hızda bile izlenemeyecek kaynaklar otomatik seçimde hiç denenmiyor, listede uyarılıyor.
+let internetMbps = null;
+function internetYaz(deger) {
+  const n = Number(deger);
+  internetMbps = n >= 1 ? n : null;
+  const kutu = $('#internet-hiz');
+  if (kutu && document.activeElement !== kutu) kutu.value = internetMbps ?? '';
+}
+api('/api/tercih').then((t) => {
+  tercihKalite = t?.kalite || null;
+  internetYaz(t?.internetMbps);
+  // Uygulamanın açılış ekranında girilen değer sunucudakinden farklıysa o geçerli (en son girilen).
+  const uygulamada = Number(window.kabuk?.internetMbps?.()) || null;
+  if (uygulamada && uygulamada !== internetMbps) {
+    internetYaz(uygulamada);
+    api('/api/tercih', { method: 'POST', body: { internetMbps: uygulamada } }).catch(() => {});
+  }
+  render();
+}).catch(() => {});
+$('#internet-hiz')?.addEventListener('change', (e) => {
+  internetYaz(e.target.value);
+  api('/api/tercih', { method: 'POST', body: { internetMbps } }).catch(() => {});
+  window.kabuk?.internetMbpsYaz?.(internetMbps);
+  render();
+});
 const siraliStream = (a, b) => siraQ(a) - siraQ(b) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0);
 
 // Bir addon (yeniden) cevap verince o addon'un eski sonuçlarının yerini alıyor.
@@ -232,6 +257,8 @@ function render() {
         el('div', { class: 'info' },
           el('div', { text: `${formatSize(s.sizeBytes)} ${s.title || s.name}`.trim() }),
           el('span', { class: 'kind', text: s.kind === 'torrent' ? '🧲 torrent' : '🔗 doğrudan link (debrid)' }),
+          // İnternet hızı girildiyse: tam hızda bile yetmeyecek kadar büyük kaynak (otomatik seçim denemez).
+          internetiAsar(s) ? el('span', { class: 'kind risk', text: ` · ⚠️ ~${Math.round(ihtiyacMbps(s))} Mbps ister, internetin ${internetMbps} Mbps` }) : null,
           // Masaüstü uygulamasında (mpv) her biçim açılıyor: tarayıcı notları gereksiz.
           s.notWebReady && !kabuktayiz ? el('span', { class: 'kind', text: ' · tarayıcıda dönüştürme gerekebilir' }) : null,
           (() => {
@@ -369,14 +396,19 @@ function payKatsayisi(s) {
   const sn = otoBaslangic ? (Date.now() - otoBaslangic) / 1000 : 0;
   let pay = sn < 30 ? 1.5 : sn < 60 ? 1.25 : 1.1;
   const ihtiyac = s && ihtiyacMbps(s);
-  if (ihtiyac && hatMbps && ihtiyac * pay > hatMbps * 0.9) pay = Math.max(1.1, (hatMbps * 0.9) / ihtiyac);
+  const h = hat();
+  if (ihtiyac && h && ihtiyac * pay > h * 0.9) pay = Math.max(1.1, (h * 0.9) / ihtiyac);
   return Math.round(pay * 100) / 100;
 }
 function yeterliMbps(s) {
   const ihtiyac = ihtiyacMbps(s);
   return ihtiyac ? Math.max(4, ihtiyac * payKatsayisi(s)) : OTO_IYI_MBPS;
 }
-const hatTasimaz = (s) => hatMbps > 0 && (ihtiyacMbps(s) || 0) * 1.1 > hatMbps;
+// Hat: elle girilen internet hızı, yoksa şimdiye kadar tek başına görülen en yüksek hız.
+const hat = () => internetMbps || hatMbps;
+const hatTasimaz = (s) => hat() > 0 && (ihtiyacMbps(s) || 0) * 1.1 > hat();
+// İnternet hızı girildiyse: videonun ihtiyacı bu hızdan fazlaysa tam hızda bile izlenemez, hiç denenmez.
+const internetiAsar = (s) => Boolean(internetMbps) && (ihtiyacMbps(s) || 0) > internetMbps;
 // Sıralama puanı: seed (sezon paketi geride) x yayın grubunun geçmişi x Türkçe altyazı x uyumluluk.
 // - Grup: bütün içeriklerde iyi/kötü sayısı (bkz. src/kaynak-hafiza.js), 0.3-3 kat.
 // - Dosyanın içinde Türkçe altyazı (sürüm adından): 1.5 kat.
@@ -413,11 +445,13 @@ function altKalite() {
   if (i < 0) return null;
   return KALITE_SIRA.slice(i + 1).find((q) => streams.some((s) => s.kind === 'torrent' && s.quality === q)) || null;
 }
-// Adaylar: aranan kalitedekiler puana göre. Hattın taşıyamayacağı ve odada daha önce bırakılanlar en sonda.
+// Adaylar: aranan kalitedekiler puana göre. İnternet hızını aşanlar hiç yok (kullanıcı: "aranmasın bile");
+// hattın rahat taşıyamayacağı ve odada daha önce bırakılanlar en sonda.
 function otoAdayBul() {
   const kalite = otoArananKalite();
   if (!kalite) return [];
-  const hepsi = hafizaOnce(streams.filter((s) => s.kind === 'torrent' && s.quality === kalite).sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
+  const hepsi = hafizaOnce(streams.filter((s) => s.kind === 'torrent' && s.quality === kalite && !internetiAsar(s))
+    .sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
   const kotu = new Set(kaynakOzet.kotu || []);
   const geri = (s) => kotu.has(s.infoHash) || hatTasimaz(s);
   return [...hepsi.filter((s) => !geri(s)), ...hepsi.filter(geri)];
@@ -547,6 +581,16 @@ function otoDene() {
     const erken = ilk.length === OTO_ERKEN && ilk.every((s) => s.quality === ilk[0].quality);
     if (!loadDone && !beklendi && !erken) return otoYaz(`🤖 Otomatik mod: kaynaklar aranıyor… (${addonsReplied} eklenti cevap verdi)`);
     if (!otoAdayBul().length) {
+      // O kalitede kaynak var ama hepsi internet hızını aşıyor: denenmez, kalite elle.
+      const kalite = otoArananKalite();
+      const asan = streams.filter((s) => s.kind === 'torrent' && s.quality === kalite && internetiAsar(s)).length;
+      if (asan) {
+        const alt = altKalite();
+        $('#oto-kalite').hidden = !alt;
+        if (alt) $('#oto-kalite').textContent = `${kaliteAdi(alt)}'ye geç`;
+        return otoYaz(`⚠️ ${kaliteAdi(kalite)} kaynakların hepsi (${asan}) internet hızın (${internetMbps} Mbps) için fazla büyük, `
+          + `tam hızda bile takılır. ${alt ? `${kaliteAdi(alt)}'ye geçebilir ya da ` : ''}listeden seçebilirsin.`);
+      }
       if (loadDone) {
         // Hiç torrent yok: listeyi (ve hata mesajını) göster.
         otoHata = true;

@@ -656,6 +656,13 @@ ipcMain.on('kabuk:onbellek-yaz', (_e, sn) => {
   vekilAyarla({ onbellek: sn });
   mpv?.set('demuxer-readahead-secs', sn).catch(() => {});
 });
+// İnternet hızı (Mbps, elle): "Oda aç" otomatik seçimi tam hızda bile izlenemeyecek kaynakları denemiyor.
+// Sayfa bunu okuyup sunucuya da yazıyor (panel/js/new.js); null = girilmedi.
+ipcMain.on('kabuk:internet-mbps', (e) => { e.returnValue = Number(ayarOku().internetMbps) || null; });
+ipcMain.on('kabuk:internet-mbps-yaz', (_e, mbps) => {
+  const n = Number(mbps);
+  ayarYaz({ internetMbps: n >= 1 && n <= 10_000 ? Math.round(n * 10) / 10 : null });
+});
 // Hızlı başlat (bkz. tamponAyarla): ana ekrandan açılıp kapatılıyor, varsayılan açık.
 ipcMain.on('kabuk:hizli-baslat', (e) => { e.returnValue = hizliBaslat(); });
 ipcMain.on('kabuk:hizli-baslat-yaz', (_e, acik) => ayarYaz({ hizliBaslat: acik === true }));

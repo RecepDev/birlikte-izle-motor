@@ -36,3 +36,18 @@ test('Kaynak hafızası: kötü işaretlenen torrent sonra iyi indirirse kötü 
   h.iyi('tt3:1:3', s);
   assert.deepEqual(h.ozet().kotu, []);
 });
+
+test('Tercih: internet hızı yazılır, dosyadan geri okunur, boş değer siler, geçersiz reddedilir', async () => {
+  const { createTercih } = await import('../src/tercih.js');
+  const file = gecici();
+  const t = createTercih({ file, log: sessiz });
+  assert.equal(t.internetMbps(), null);
+  assert.equal(t.internetAyarla(60), true);
+  assert.equal(t.ayarla('2160p'), true);
+  assert.equal(createTercih({ file, log: sessiz }).internetMbps(), 60);
+  assert.equal(createTercih({ file, log: sessiz }).kalite(), '2160p');
+  assert.equal(t.internetAyarla('abc'), false);
+  assert.equal(t.internetAyarla(0), false);
+  assert.equal(t.internetAyarla(null), true);
+  assert.equal(createTercih({ file, log: sessiz }).internetMbps(), null);
+});
