@@ -3,12 +3,15 @@ import { api, el, $ } from './api.js';
 
 const gorunur = (id, acik) => { $(id).hidden = !acik; };
 
+const afisYok = () => el('div', { class: 'poster-yok', text: '🎞' });
+
 function kart(sonuc, tiklama, alt = sonuc.year) {
   return el('button', { type: 'button', class: 'poster-kart', onclick: tiklama },
     sonuc.poster
-      ? el('img', { src: sonuc.poster, alt: '', loading: 'lazy' })
-      : el('div', { class: 'poster-yok', text: '🎞' }),
-    el('span', { class: 'poster-ad', text: sonuc.name }),
+      // Afiş açılmazsa (kırık bağlantı, ör. "Matrix 5") kırık resim simgesi yerine boş afiş.
+      ? el('img', { src: sonuc.poster, alt: '', loading: 'lazy', onerror: (e) => e.target.replaceWith(afisYok()) })
+      : afisYok(),
+    el('span', { class: 'poster-ad', text: sonuc.name, title: sonuc.name }),
     alt ? el('span', { class: 'poster-yil muted small', text: alt }) : null);
 }
 
@@ -111,6 +114,16 @@ async function gecmisiGoster() {
   )));
 }
 gecmisiGoster();
+// Geçmiş şeridi yana kayıyor: fare tekerleği de yana kaydırsın (dikey tekerlek, şerit sonuna
+// gelince sayfayı kaydırmaya devam eder).
+$('#gecmis').addEventListener('wheel', (e) => {
+  const s = e.currentTarget;
+  if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || s.scrollWidth <= s.clientWidth) return;
+  const sonda = e.deltaY > 0 ? s.scrollLeft + s.clientWidth >= s.scrollWidth - 1 : s.scrollLeft <= 0;
+  if (sonda) return;
+  e.preventDefault();
+  s.scrollBy({ left: e.deltaY, behavior: 'auto' });
+}, { passive: false });
 
 $('#ara-btn').addEventListener('click', ara);
 $('#ara-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') ara(); });

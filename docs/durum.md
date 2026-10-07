@@ -34,6 +34,7 @@ Son güncelleme: 2026-10-07 · Son commit: 28ebfae · Masaüstü 0.7.46 · Andro
   - **Film bilgisi siteden** (`src/motor/torrent-dosyasi.js`, varsayılan açık, kullanıcı istedi): itorrents.net'ten .torrent, kimlik doğrulanıp TorrServer'a yükleniyor, diskte de saklanıyor. Metadata 9.4 sn → 0.26 sn (yeni açılmış TorrServer); itorrents 13 torrent'in 12'sinde vardı. Yalnız sunucuda; masaüstünün kendi motorunda ve telefonda yok.
   - **Hızlı başlat** (masaüstü, varsayılan açık, açılış ekranından kapatılır): mpv 30 sn biriktirmek yerine hız/ihtiyaç ≥2 → 5 sn, ≥1.5 → 10 sn. Gerçek odada veri 36-61 Mbps gelirken video 25 sn sonra başlıyordu. Canlı oynatmada henüz denenmedi.
 - Açılış ekranı: oda linki alanı ve "Odaya gir" sağ üstteki ⋮ menüsünde (telefondaki gibi).
+- Film ara sayfası: "Daha önce açtıkların" tek satır, yana kayıyor (fare tekerleği de kaydırır). Afiş ızgarası taşmıyor: büyük afiş kartı genişletiyordu ("Free Your Mind"), kart içi sütun `minmax(0, 1fr)`. Açılmayan afiş kırık resim yerine 🎞 gösteriyor ("Matrix 5"). Uzun adlar "…" ile kısalıyor.
 - Oda: diyalog açılınca mpv penceresi gizleniyor (sayfanın üstündeki ayrı pencere, diyaloğu örterdi). Video alanı siyah kalmasın diye o anki kare (`screenshot-to-file`, altyazıyla) `<video>`'ya kapak resmi olarak konuyor, diyalog kapanınca kalkıyor (`ana.cjs` `kareGoster`, `onyukleme-kabuk.cjs` `kabuk:kare`). Tuzak: video köprüsü `video.removeAttribute`'u yalnız `src` için tanımlıyor; asıl DOM işlevi `Element.prototype` ile çağrılıyor. Test sunucusu + gerçek kabukla doğrulandı.
 - **Sunucu uygulamanın içinde (Kurulumsuz):**
   - Açılış ekranında "🖥️ Sunucuyu başlat" / "🛠️ Sunucu paneli". Sunucu kapalıysa uygulama `node server.js`'i arka planda açar (uygulama kapansa da çalışır; panelde ⏻ Kapat).
@@ -80,10 +81,11 @@ Son güncelleme: 2026-10-07 · Son commit: 28ebfae · Masaüstü 0.7.46 · Andro
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.
   - TorrServer modunda "Windows onayı" uyarısı çıkmıyor.
-- `npm test` 217/217 (yeni: `test/motor-yonetim.test.js`; `html-kimlik.test.js` sayfalardaki gömülü kodu derliyor). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
+- `npm test` 223/223 (yeni: `test/motor-yonetim.test.js`; `html-kimlik.test.js` sayfalardaki gömülü kodu derliyor). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
 - Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.36.exe`, `BirlikteIzleMotor-Android-0.33.0.apk`. Masaüstü 0.7.38 sunucudan otomatik güncellemeyle gidiyor.
 
 ## Bekleyen
+- Matrix KHHQVZ: elle kaynak değiştirince veri 60 Mbps gelirken video 00:00'da kaldı (tampon 0). Yeniden üretilemedi; MKV sonu önden indirme (`sonuOnden`) yardımcı olmalı. Tekrar olursa `KABUK_DEBUG=1` günlüğüne bak.
 - APK gerçek telefonda denenmedi. Telefonda sabit peer portu yok (mobil ağda UPnP işe yaramıyor).
 - Kullanıcıyla Stremio kapalıyken gerçek izleme denemesi yapılmadı.
 - Tarayıcı uyumluluk modu (Stremio hlsv2 dönüştürücüsü) TorrServer modunda yok.

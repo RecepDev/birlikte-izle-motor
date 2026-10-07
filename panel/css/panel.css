@@ -154,3 +154,15 @@ select { font: inherit; color: inherit; background: var(--bg); border: 1px solid
 .oto-liste li.birakildi { opacity: .55; }
 body.oto-mod .oto-liste { font-size: 13px; }
 .hiz-kutu { width: 90px !important; min-width: 0 !important; flex: none !important; padding: 4px 8px !important; margin: 0 4px; }
+/* Afiş kartı ızgara sütununu genişletmesin: büyük/yatay afiş (ör. "Free Your Mind") kartı taşırıyordu
+   (ızgara öğesinin en küçük genişliği resmin kendi genişliği oluyordu). */
+.poster-kart { min-width: 0; overflow: hidden; grid-template-columns: minmax(0, 1fr); align-content: start; }
+.poster-kart img { max-width: 100%; height: auto; }
+/* "Daha önce açtıkların": tek satır, yana kayan şerit (fare tekerleği de yana kaydırır, bkz. ara.js). */
+#gecmis.poster-izgara {
+  grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 132px;
+  overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; scroll-snap-type: x proximity;
+}
+#gecmis .poster-kart { scroll-snap-align: start; }
+.poster-kart .poster-ad, .poster-kart .poster-yil { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#gecmis { scrollbar-width: thin; scrollbar-color: #3a3f4d transparent; }
