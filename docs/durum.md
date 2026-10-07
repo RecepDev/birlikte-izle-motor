@@ -50,7 +50,8 @@ Son güncelleme: 2026-10-07 · Son commit: ec4238b · Masaüstü 0.7.43 · Andro
   - Film seçilince önceden açılan aday sayısı 6/10'dan 3/5'e indi (`src/panel-api.js`).
   - Ölçüm (tek TorrServer): tek tek açılan torrent'te film bilgisi medyan 1.6 sn. 8'i birden açılınca 10 sn, 8'in 2'si 20 sn'de gelmedi.
   - Yalıtılmış denemede (Matrix 4K, soğuk motor) ölçüm 4.3 yerine ~2.5 sn'de başladı, karar 43 yerine 39 sn'de verildi. O anki 4K adaylar zaten çok kötü bağlanıyordu (çoğu 0 kişi).
-  - **İzlenebilir bulunana kadar arama** (kullanıcı istedi): 12 sınırı yok; 6'şar aday, yeten bulunana ya da adaylar bitene kadar.
+  - **İzlenebilir bulunana kadar arama** (kullanıcı istedi): 12 sınırı yok; yeten bulunana ya da adaylar bitene kadar.
+    - **Keşif + tek başına doğrulama** (2026-10-07): 3 aday birlikte açılıyor (keşif, 16 MB okuma). Veri veren en hızlısı tek başına ölçülüyor: ötekilerin okuması durduruluyor (`/api/torrent-olcum-durdur`, `olcumleriDurdur`), dosyanın çeyreğinden 64 MB okunuyor (`/api/torrent-dogrula`), 8 sn, 3. sn'den sonraki örneklerin ortalaması. "Yeterli" yalnız tek başına hızla. Sebep: 6'lı ölçümde hat bölünüyor, 4K çıtayı hiç geçemiyordu. Deneme: Silo S01E08 4K, 22 sn'de KITSUNE 37.5 Mbps (eskiden 94-112 sn, sonunda 1080p).
     - **Yalnız tercih edilen kalite** (kullanıcı): 4K seçiliyken yalnız 4K'lar aranıyor, en iyi 4K seçiliyor. Alt kaliteye geçiş elle: 30 sn'de yeten çıkmazsa ya da adaylar biterse "1080p'ye geç" düğmesi. Hiçbiri veri vermediyse oda açılmıyor, uyarı + düğme. Odadaki otomatik geçiş de aynı kaliteden çıkmıyor.
     - Çıta ihtiyaç × 1.5; 30 sn'den sonra × 1.25, 60 sn'den sonra × 1.1. İhtiyacın altına inmiyor.
     - Yetenlerden: tercih edilen kalite > dosyada Türkçe altyazı > hız. Hiçbiri yetmezse hız/ihtiyaç oranı en iyi olan; kalitesi bilinmeyen en sonda (502 MB "?" seçilmişti).

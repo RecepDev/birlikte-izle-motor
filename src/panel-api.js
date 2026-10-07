@@ -5,7 +5,7 @@ import path from 'node:path';
 import express from 'express';
 import { isContentId, isContentType } from './addon.js';
 import { normalizeStreams, normalizeAddonStreams } from './streams.js';
-import { isit, OLCUM_BAYT_TS } from './stremio-isit.js';
+import { isit, OLCUM_BAYT_TS, DOGRULAMA_BAYT, olcumleriDurdur } from './stremio-isit.js';
 import { STREMIO_BASE } from '../public/js/shared/stream-url.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun } from './bizim-torrentler.js';
 import { masaustuAc } from './masaustu-baslat.js';
@@ -337,9 +337,10 @@ export function createPanelApp({
     const entry = streamCache.get(`${type}|${id}`);
     if (!entry) return res.status(404).json({ error: 'Liste yok' });
     // Ölçüm için okunan miktar: Stremio açtığı torrent'i kendiliğinden indirmeye devam ediyor, 1 MB
-    // yetiyor. TorrServer okuyan kalmayınca duruyor: hız ancak okurken ölçülüyor, 32 MB okunuyor
-    // (2026-10-07: 1 MB'ta bütün adaylar ~0 Mbps görünüyordu, seçim rastgeleydi). Okunan kısım
-    // disk önbelleğine de yazılıyor: seçilen kaynakta boşa gitmiyor.
+    // yetiyor. TorrServer okuyan kalmayınca duruyor: hız ancak okurken ölçülüyor, keşifte 16 MB okunuyor
+    // (2026-10-07: 1 MB'ta bütün adaylar ~0 Mbps görünüyordu, seçim rastgeleydi). Asıl hız, umut veren
+    // aday tek başına doğrulanırken ölçülüyor (/api/torrent-dogrula). Okunan kısım disk önbelleğine de
+    // yazılıyor: seçilen kaynakta boşa gitmiyor.
     const bayt = motorBilgisi?.()?.kullanilan === 'torrserver' ? OLCUM_BAYT_TS : 1024 * 1024;
     let n = 0;
     for (const sid of streamIds.slice(0, 12)) {
@@ -350,6 +351,28 @@ export function createPanelApp({
       }
     }
     res.json({ ok: true, n });
+  }));
+
+  // Oda aç otomatik seçimi: yeni keşif grubu başlarken süren ölçüm okumaları durur (hat yeni gruba kalsın).
+  app.post('/api/torrent-olcum-durdur', (req, res) => {
+    olcumleriDurdur();
+    res.json({ ok: true });
+  });
+
+  // Oda aç otomatik seçimi: umut veren adayı tek başına ölç. Öteki ölçüm okumaları durduruluyor (hat ona
+  // kalsın; 3 aday birlikte ölçülürken hız bölündüğü için 4K hiç çıtayı geçemiyordu) ve dosyanın henüz
+  // inmemiş bir yerinden (çeyreği, keşifte baştan okunmuştu) okunuyor.
+  app.post('/api/torrent-dogrula', wrap(async (req, res) => {
+    const { type, id, streamId } = req.body || {};
+    if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz' });
+    const s = streamCache.get(`${type}|${id}`)?.streams.find((x) => x.streamId === streamId);
+    if (s?.kind !== 'torrent') return res.status(404).json({ error: 'Yok' });
+    olcumleriDurdur(s.infoHash);
+    const MB = 1024 * 1024;
+    const boy = Number(s.sizeBytes) || 0;
+    const bas = boy > DOGRULAMA_BAYT * 4 ? Math.floor((boy * 0.25) / MB) * MB : OLCUM_BAYT_TS;
+    isit(s, DOGRULAMA_BAYT, { bas, sureMs: 15_000 });
+    res.json({ ok: true });
   }));
 
   app.post('/api/rooms', wrap(async (req, res) => {
