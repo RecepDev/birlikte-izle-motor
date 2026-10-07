@@ -85,7 +85,7 @@ Son güncelleme: 2026-10-07 · Son commit: ca368bc · Masaüstü 0.7.47 · Andro
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.
   - TorrServer modunda "Windows onayı" uyarısı çıkmıyor.
 - `npm test` 226/226 (yeni: `test/motor-yonetim.test.js`; `html-kimlik.test.js` sayfalardaki gömülü kodu derliyor). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
-- Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.36.exe`, `BirlikteIzleMotor-Android-0.33.0.apk`. Masaüstü 0.7.38 sunucudan otomatik güncellemeyle gidiyor.
+- Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.47.exe` (2026-10-08; masaüstü kopyası `Masaüstü\Botlar\Birlikte İzle\Motor (Stremio'suz deneme)\`, eski 0.7.36 kopyası oradan kaldırıldı), `BirlikteIzleMotor-Android-0.33.0.apk`.
 
 ## Bekleyen
 - Asıl Birlikte İzle'nin (D:\Botlar\stremio-birlikte-izle) `masaustu/electron/stremio-vekil.cjs`'inde aynı keep-alive aktarma hatası: kullanıcı onayıyla düzeltilecek.
