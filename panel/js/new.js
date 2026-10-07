@@ -352,14 +352,16 @@ function otoAdayBul() {
   const secilen = otomatikSec(streams, tercihKalite, { hafiza: kaynakHafiza });
   if (!secilen) return [];
   // Seçilen kalitedeki adaylar (çok seed'liden aza), sonra başka kaliteler; en fazla 12.
-  // 4'erli dalgalarla ölçülüyor: ilk 4'te hızlı kaynak yoksa sıradaki 4 (bağlantı sayısı
+  // 6'şarlı dalgalarla ölçülüyor: ilk 6'da hızlı kaynak yoksa sıradaki 6 (bağlantı sayısı
   // bir anda patlamasın: 12 torrent aynı anda modemi boğuyordu).
   const ayni = hafizaOnce(torrents.filter((s) => s.quality === secilen.quality).sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
   const diger = torrents.filter((s) => s.quality !== secilen.quality && (Number(s.seeders) || 0) >= 3)
     .sort((a, b) => otoPuan(b) - otoPuan(a));
   return [...ayni, ...diger].slice(0, 12);
 }
-const OTO_DALGA = 4;
+// Dalga 6 (kullanıcı istedi, 2026-10-07; önce 4). Ölçüm başlamak için 4 aday yetiyor (OTO_ERKEN).
+const OTO_DALGA = 6;
+const OTO_ERKEN = 4;
 let otoTumAdaylar = [];
 // Dizide önceki bölümlerde iyi indiren kaynağın grubu: önce onlar ölçülüyor.
 let kaynakHafiza = null;
@@ -411,8 +413,8 @@ function otoDene() {
   // Bütün eklentileri beklemeden başla: seçilen kalitede en az 4 aday geldiyse (çoğunlukla Torrentio,
   // 1-2 sn) ölçüm başlıyor; yavaş eklenti (ThePirateBay+ vb.) 12 sn'ye kadar bekletiyordu.
   const beklendi = otoIlkCevap && Date.now() - otoIlkCevap > 12_000;
-  const ilkAdaylar = otoAdaylar.length ? [] : otoAdayBul().slice(0, OTO_DALGA);
-  const erken = ilkAdaylar.length === OTO_DALGA && ilkAdaylar.every((s) => s.quality === ilkAdaylar[0].quality);
+  const ilkAdaylar = otoAdaylar.length ? [] : otoAdayBul().slice(0, OTO_ERKEN);
+  const erken = ilkAdaylar.length === OTO_ERKEN && ilkAdaylar.every((s) => s.quality === ilkAdaylar[0].quality);
   if (!loadDone && !beklendi && !erken && !otoAdaylar.length) {
     return otoYaz(`🤖 Otomatik mod: kaynaklar aranıyor… (${addonsReplied} eklenti cevap verdi)`);
   }
@@ -433,7 +435,7 @@ function otoDene() {
   const sonuc = otoAdaylar.map((s) => ({ s, o: olcum(s) }));
   const hizli = sonuc.some((x) => (x.o?.downMbps || 0) >= yeterliMbps(x.s));
   const bitti = otoAdaylar.every((s) => sonuclar.has(s.infoHash));
-  // Bu dalga bitti, hızlı kaynak yok ve sırada aday var: sonraki 4'ü ölç.
+  // Bu dalga bitti, hızlı kaynak yok ve sırada aday var: sonraki 6'yı ölç.
   if (!hizli && (bitti || Date.now() - otoOlcumBasi >= OTO_OLCUM_MS) && otoHavuz().length) {
     otoDalgaBaslat();
     return;
