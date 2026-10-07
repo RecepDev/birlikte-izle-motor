@@ -424,7 +424,17 @@ function grupCarpani(s) {
   const g = kaynakOzet.gruplar?.[grupAdi(s)];
   return g ? Math.min(3, Math.max(0.3, (g.iyi + 1) / (g.kotu + 1))) : 1;
 }
-const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1) * grupCarpani(s) * (trAltyazi(s) ? 1.5 : 1) * (dvYalniz(s) ? 0.5 : 1);
+// Görüntü kalitesi: aynı kalitede (4K) bit hızı yüksek dosya daha iyi (1.8 GB'lık sıkıştırılmış "4K",
+// 7.7 GB'lığın önüne geçiyordu). Hattın rahat taşıyabileceği yere (%85) kadar büyük olan önde; karekök:
+// seed sayısını ezmesin.
+function bitHiziCarpani(s) {
+  const ihtiyac = ihtiyacMbps(s);
+  if (!ihtiyac) return 1;
+  const ust = hat() ? hat() * 0.85 : 60;
+  return Math.sqrt(Math.min(ihtiyac, ust) / 10);
+}
+const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1) * grupCarpani(s) * (trAltyazi(s) ? 1.5 : 1)
+  * (dvYalniz(s) ? 0.5 : 1) * bitHiziCarpani(s);
 // Aranan kalite: yalnız tercih edilen kalite. 4K seçiliyken 4K'lar arasından en iyisi bulunuyor, kendiliğinden
 // 1080p'ye inilmiyor (kullanıcı, 2026-10-07). Alt kaliteye geçiş elle: "1080p'ye geç" düğmesi (otoKaliteZorla).
 // O kalitede hiç kaynak yoksa otomatik seçimin kalitesi (bir alt, sonra üst).
@@ -450,8 +460,12 @@ function altKalite() {
 function otoAdayBul() {
   const kalite = otoArananKalite();
   if (!kalite) return [];
-  const hepsi = hafizaOnce(streams.filter((s) => s.kind === 'torrent' && s.quality === kalite && !internetiAsar(s))
-    .sort((a, b) => otoPuan(b) - otoPuan(a)), kaynakHafiza);
+  // Aynı torrent iki eklentiden gelebiliyor (Torrentio + ThePirateBay+): bir kez denensin.
+  const gorulen = new Set();
+  const tekil = streams.filter((s) => s.kind === 'torrent' && s.quality === kalite && !internetiAsar(s))
+    .sort((a, b) => otoPuan(b) - otoPuan(a))
+    .filter((s) => !gorulen.has(s.infoHash) && gorulen.add(s.infoHash));
+  const hepsi = hafizaOnce(tekil, kaynakHafiza);
   const kotu = new Set(kaynakOzet.kotu || []);
   const geri = (s) => kotu.has(s.infoHash) || hatTasimaz(s);
   return [...hepsi.filter((s) => !geri(s)), ...hepsi.filter(geri)];
@@ -509,18 +523,23 @@ function dogrulamaIlerlet() {
   const hedef = yeterliMbps(d.s);
   const son = d.ornekler.filter((o) => o.t - d.bas >= 3000);
   const ort = (l) => l.reduce((a, o) => a + o.mbps, 0) / l.length;
-  const erken = son.length >= 2 && son.slice(-2).every((o) => o.mbps >= hedef);
-  // Isınan kaynak (ölçüm: hız 12 -> 1 -> 38 Mbps, ancak 8. sn'de çıtayı geçti): 8 sn'de çıtanın %70'ine
-  // varmış ve yükseliyorsa 14 sn'ye kadar beklenir.
-  const sonIki = d.ornekler.slice(-2);
-  const isiniyor = sonIki.length === 2 && sonIki[1].mbps >= hedef * 0.7 && sonIki[1].mbps > sonIki[0].mbps;
-  if (!erken && (gecen < DOGRULAMA_MS || (isiniyor && gecen < 14_000))) {
+  // Son 4 örneğin ortalaması çıtayı geçtiyse de yeter (anlık dalgalanma).
+  const son4 = son.slice(-4);
+  const erken = (son.length >= 2 && son.slice(-2).every((o) => o.mbps >= hedef)) || (son4.length === 4 && ort(son4) >= hedef);
+  // Çıtaya yaklaşan kaynak daha uzun bekleniyor (kullanıcı: 33.9/36 Mbps'lik kaynak biraz daha beklense
+  // geçerdi; hız ısınırken 12 -> 1 -> 38 Mbps oluyor). 8 sn'de son örneklerin ortalaması çıtanın %60'ını
+  // geçtiyse (5-10 Mbps'de takılı değilse) 20 sn'ye kadar; o zaman son 5 örneğin ortalaması karar.
+  const yakin = son4.length >= 2 && ort(son4) >= hedef * 0.6;
+  const sinir = yakin ? 20_000 : DOGRULAMA_MS;
+  if (!erken && gecen < sinir) {
     const grup = grupAdi(d.s);
     otoYaz(`🔎 Umut veren ${kaliteAdi(d.s.quality)} kaynak tek başına ölçülüyor: ${formatSize(d.s.sizeBytes)}${grup ? ` · ${grup}` : ''}`
-      + ` — ↓ ${d.ornekler.at(-1)?.mbps ?? 0} / ${Math.round(hedef)} Mbps (${Math.max(1, Math.ceil((DOGRULAMA_MS - gecen) / 1000))} sn)`);
+      + ` — ↓ ${d.ornekler.at(-1)?.mbps ?? 0} / ${Math.round(hedef)} Mbps (${Math.max(1, Math.ceil((sinir - gecen) / 1000))} sn`
+      + `${yakin && gecen >= DOGRULAMA_MS ? ', çıtaya yakın: biraz daha bekleniyor' : ''})`);
     return;
   }
-  const mbps = Math.round((erken ? ort(son.slice(-2)) : son.length ? ort(son) : Math.max(0, ...d.ornekler.map((o) => o.mbps))) * 10) / 10;
+  const karar = erken ? (son4.length === 4 && ort(son4) >= hedef ? son4 : son.slice(-2)) : son.slice(-5);
+  const mbps = Math.round((karar.length ? ort(karar) : Math.max(0, ...d.ornekler.map((o) => o.mbps))) * 10) / 10;
   dogrulanan.set(ih, { mbps, peers: Math.max(0, ...d.ornekler.map((o) => o.peers)) });
   if (mbps > hatMbps) {
     hatMbps = mbps;

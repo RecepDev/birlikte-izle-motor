@@ -78,6 +78,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
   // Açılış ölçümü (yeni eklenen torrent): eklenme, metadata ve TorrServer'dan ilk veri anları.
   // Günlüğe "Torrent açılışı" olarak yazılıyor: yavaşlık metadata'da mı, ilk parçada mı görülsün.
   const acilis = new Map(); // hash -> { t0, meta, kaynak }
+  const sonuIstenen = new Set(); // sonu önden istenen dosyalar (bkz. sonuOnden)
   let sunucu = null;
 
   function acilisMeta(ih) {
@@ -129,9 +130,30 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     res.end(govde);
   }
 
+  // Dosyanın sonu (MKV sarma dizini "Cues", MP4 "moov") baştan okunmaya başlanınca arkadan istenir. mpv
+  // açılırken başı okuyup sona atlıyor, dizin gelmeden oynatmıyor: ölçüm (37.7 GB MKV) baş 19.7 sn'de,
+  // son 5.6 sn sonra geldi, oynatma bu kadar gecikti. Ölçüm okumaları (x-olcum) bunu yapmaz.
+  function sonuOnden(req, ih, idx, tr, ad, adres) {
+    const anahtar = `${ih}/${idx}/${ad || ''}`;
+    const aralik = String(req.headers.range || '');
+    if (req.method !== 'GET' || req.headers['x-olcum'] || sonuIstenen.has(anahtar) || (aralik && !/^bytes=0-/.test(aralik))) return;
+    sonuIstenen.add(anahtar);
+    dosya(ih, idx, tr, ad).then((f) => {
+      const SON = 4 * 1024 * 1024;
+      if (!f || !(f.length > SON * 8) || !sunucu) return;
+      const istek = http.get({
+        host: '127.0.0.1', port: sunucu.address().port, path: adres.pathname + adres.search,
+        headers: { range: `bytes=${f.length - SON}-${f.length - 1}`, 'x-olcum': '1' },
+      }, (r) => r.resume());
+      istek.on('error', () => {});
+      istek.setTimeout(120_000, () => istek.destroy());
+    }).catch(() => {});
+  }
+
   async function akit(req, res, ih, idx, adres) {
     const tr = trackerlar(adres.searchParams.getAll('tr'));
     const ad = adres.searchParams.get('f');
+    sonuOnden(req, ih, idx, tr, ad, adres);
     if (onbellek?.acik()) return onbellekliAkit(req, res, ih, idx, tr, ad);
     const f = await dosya(ih, idx, tr, ad);
     if (!f) return json(res, 504, { error: 'metadata' });
@@ -312,6 +334,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
         await ts.kapat(ih);
         acilis.delete(ih);
         for (const k of secilen.keys()) if (k.startsWith(`${ih}/`)) secilen.delete(k);
+        for (const k of sonuIstenen) if (k.startsWith(`${ih}/`)) sonuIstenen.delete(k);
         return json(res, 200, {});
       }
       let govde = '';

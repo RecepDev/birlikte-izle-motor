@@ -150,3 +150,37 @@ test('Önbellek: izlenen yer diske yazılır, TorrServer kapalıyken de diskten 
     fs.rmSync(klasor, { recursive: true, force: true });
   }
 });
+
+test('Stremio taklidi: dosya baştan okununca sonu (MKV dizini) önden istenir; ölçüm okumasında istenmez', async () => {
+  const BOY = 64 * 1024 * 1024;
+  const istenen = [];
+  const kaynak = http.createServer((req, res) => {
+    const [a, b] = String(req.headers.range || 'bytes=0-').slice(6).split('-').map((x) => (x === '' ? null : Number(x)));
+    const son = Math.min(b ?? a + 99, a + 99); // yalnız küçük bir parça yolla
+    istenen.push(a);
+    res.writeHead(206, { 'content-type': 'video/x-matroska', 'content-range': `bytes ${a}-${son}/${BOY}`, 'content-length': son - a + 1 });
+    res.end(Buffer.alloc(son - a + 1));
+  });
+  await new Promise((r) => kaynak.listen(0, '127.0.0.1', r));
+  const ts = {
+    async torrent() { return { hash: IH, file_stats: [{ id: 1, length: BOY, path: 'x/film.mkv' }] }; },
+    async torrentler() { return []; },
+    async ekle() {},
+    async kapat() {},
+    akisAdresi: () => `http://127.0.0.1:${kaynak.address().port}/stream`,
+  };
+  const taklit = createStremioTaklidi({ ts, port: 0, log: sessiz });
+  await taklit.baslat();
+  const adres = `http://127.0.0.1:${taklit.port()}/${IH}/0`;
+  try {
+    await (await fetch(adres, { headers: { range: 'bytes=0-99', 'x-olcum': '1' } })).arrayBuffer();
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(!istenen.includes(BOY - 4 * 1024 * 1024), 'ölçümde sonu istenmemeli');
+    await (await fetch(`${adres}?f=film.mkv`, { headers: { range: 'bytes=0-99' } })).arrayBuffer();
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(istenen.includes(BOY - 4 * 1024 * 1024), 'oynatmada sonu önden istenmeli');
+  } finally {
+    taklit.durdur();
+    kaynak.close();
+  }
+});

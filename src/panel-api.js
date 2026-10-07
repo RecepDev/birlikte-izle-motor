@@ -369,18 +369,16 @@ export function createPanelApp({
   });
 
   // Oda aç otomatik seçimi: umut veren adayı tek başına ölç. Öteki ölçüm okumaları durduruluyor (hat ona
-  // kalsın; 3 aday birlikte ölçülürken hız bölündüğü için 4K hiç çıtayı geçemiyordu) ve dosyanın henüz
-  // inmemiş bir yerinden (çeyreği, keşifte baştan okunmuştu) okunuyor.
+  // kalsın; 3 aday birlikte ölçülürken hız bölündüğü için 4K hiç çıtayı geçemiyordu). Keşfin bıraktığı
+  // yerden (16. MB) devam ediliyor: henüz inmemiş kısım, yani hız gerçek; ölçerken videonun başı da iniyor
+  // (seçilirse açılışta hazır: eskiden dosyanın çeyreğinden okunuyordu, açılışa faydası yoktu).
   app.post('/api/torrent-dogrula', wrap(async (req, res) => {
     const { type, id, streamId } = req.body || {};
     if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz' });
     const s = streamCache.get(`${type}|${id}`)?.streams.find((x) => x.streamId === streamId);
     if (s?.kind !== 'torrent') return res.status(404).json({ error: 'Yok' });
     olcumleriDurdur(s.infoHash);
-    const MB = 1024 * 1024;
-    const boy = Number(s.sizeBytes) || 0;
-    const bas = boy > DOGRULAMA_BAYT * 4 ? Math.floor((boy * 0.25) / MB) * MB : OLCUM_BAYT_TS;
-    isit(s, DOGRULAMA_BAYT, { bas, sureMs: 15_000 });
+    isit(s, DOGRULAMA_BAYT, { bas: OLCUM_BAYT_TS, sureMs: 20_000 });
     res.json({ ok: true });
   }));
 
@@ -404,6 +402,20 @@ export function createPanelApp({
       }
     }
     onRoomCreated(room);
+    // Açılış tamponu önceden: oda açılır açılmaz (oynatıcı daha yüklenirken) izlenecek yerin 128 MB'ı
+    // indirilmeye başlıyor; ölçüm okumaları duruyor. Oynatıcı açılışta ~30 sn'lik görüntü biriktiriyor,
+    // aramada yalnız baştan 16 MB iniyordu: odaya girince tampon sıfırdan doluyor, video 25 sn bekliyordu.
+    // Kaldığı yerden açılıyorsa (kaldigiYer) oradan.
+    olcumleriDurdur();
+    const secilenAkis = streams.find((s) => s.streamId === streamId);
+    if (secilenAkis?.kind === 'torrent') {
+      const MB = 1024 * 1024;
+      const sure = Number(meta?.sureSn) || 0;
+      const boy = Number(secilenAkis.sizeBytes) || 0;
+      const konum = Number(room.playback?.position) || 0;
+      const bas = sure && boy && konum > 0 ? Math.max(0, Math.floor(((konum / sure) * boy) / MB) * MB - 8 * MB) : 0;
+      isit(secilenAkis, 128 * MB, { bas, sureMs: 60_000, olcum: false });
+    }
     // Seçim ekranında önceden açılan diğer torrent'ler hemen kapansın: seçilen videoyla hızı
     // paylaşıp açılışını geciktiriyorlardı (temizlik ayarını ve 5 sn'lik turu beklemeden).
     const secilen = streams.find((s) => s.streamId === streamId)?.infoHash;

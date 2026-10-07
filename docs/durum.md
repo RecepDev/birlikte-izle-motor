@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-07 · Son commit: 48d9405 · Masaüstü 0.7.45 · Android 0.33.0 (versionCode 33)
+Son güncelleme: 2026-10-07 · Son commit: 48d9405 · Masaüstü 0.7.46 · Android 0.33.0 (versionCode 33)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
@@ -58,6 +58,13 @@ Son güncelleme: 2026-10-07 · Son commit: 48d9405 · Masaüstü 0.7.45 · Andro
       3. Yeten hemen seçiliyor; yetmeyenlerin en iyisi açık tutuluyor, adaylar biterse o.
       4. Hat kapasitesi (tek başına görülen en yüksek hız, localStorage `hatMbps`): taşıyamayacağı kaynaklar sona; hat 1.5 katı veremiyorsa çıta hattın %90'ı (en az 1.1 kat).
       Deneme (yalıtılmış sunucu): Silo S03E01 4K 21 sn (gerçek aramada ~2 dk), Silo S01E08 4K 17 sn, Matrix 4K 35 GB 16 sn.
+    - **Odaya girince yeniden yükleme düzeltildi** (2026-10-07). Kayıt (oda TT2N6M): veri 50 Mbps gelirken video 25 sn bekledi; Matrix KHHQVZ'de 24 sn tampon 0. Sebepler ve düzeltmeler:
+      - Hızlı başlat mpv'nin okuma hızına bakıyordu (açılışta parçalar sırasız, 0.1 Mbps'den başlıyor): artık TorrServer'ın gerçek indirme hızı da sayılıyor (`ana.cjs`).
+      - Aramada videonun başından yalnız 16 MB iniyordu, doğrulama dosyanın çeyreğinden okuyordu: doğrulama artık 16. MB'tan devam ediyor (açılış tamponu ölçerken iniyor).
+      - Oda açılır açılmaz izlenecek yerin 128 MB'ı (kaldığı yerden açılıyorsa oradan) önden iniyor, ölçüm okumaları duruyor (`panel-api.js` POST /api/rooms).
+      - MKV'de mpv açılırken dosyanın sonundaki sarma dizinini (Cues) istiyor; 37.7 GB'lık dosyada baş 19.7 sn, son 5.6 sn sonra geldi. Motor taklidi dosyanın başı okunmaya başlanınca sonunun 4 MB'ını önden istiyor (`sonuOnden`; ölçüm okumaları `x-olcum` ile hariç).
+      - Deneme: oda açıldıktan 3 sn sonra mpv 27 GB 4K MKV'yi 2.7 sn'de açtı, 4.8 sn'de oynattı.
+    - Doğrulama: çıtaya yakın (son örneklerin ortalaması %60+) kaynak 20 sn'ye kadar bekleniyor; son 4 örneğin ortalaması da karar verebiliyor. Aynı torrent iki eklentiden gelince bir kez deneniyor. Sıralamada bit hızı (aynı kalitede büyük dosya daha iyi, hattın %85'ine kadar) da var.
     - **İnternet hızı** (elle, `data/tercih.json` `internetMbps`; oda aç sayfasında ve masaüstü açılış ekranında): videonun ihtiyacı bundan fazla olan kaynak otomatik seçimde hiç denenmiyor, listede "⚠️ ~X Mbps ister" uyarısı. Çıta da bu hıza göre. O kalitenin hepsi aşıyorsa uyarı + "1080p'ye geç". Deneme: 60 Mbps'de Matrix 4K'nın 62-73 GB'lık 5 kaynağı elendi.
     - **Yalnız tercih edilen kalite** (kullanıcı): 4K seçiliyken yalnız 4K'lar aranıyor, en iyi 4K seçiliyor. Alt kaliteye geçiş elle: 30 sn'de yeten çıkmazsa ya da adaylar biterse "1080p'ye geç" düğmesi. Hiçbiri veri vermediyse oda açılmıyor, uyarı + düğme. Odadaki otomatik geçiş de aynı kaliteden çıkmıyor.
     - Çıta ihtiyaç × 1.5; 30 sn'den sonra × 1.25, 60 sn'den sonra × 1.1. İhtiyacın altına inmiyor.

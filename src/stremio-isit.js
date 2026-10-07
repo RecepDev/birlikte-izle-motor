@@ -28,12 +28,15 @@ export function olcumleriDurdur(haric = null) {
 }
 
 // bas: okumaya başlanan bayt (doğrulamada inmemiş bir yer), sureMs: en uzun okuma süresi.
-export function isit(stream, bytes = 1024 * 1024, { bas = 0, sureMs = OLCUM_SURE_MS } = {}) {
+// olcum: ölçüm/ısıtma okuması (motor taklidi dosyanın sonunu önden istemesin); oda açılışındaki ön
+// indirmede false: izlenecek dosyanın sonu (MKV dizini) da insin.
+export function isit(stream, bytes = 1024 * 1024, { bas = 0, sureMs = OLCUM_SURE_MS, olcum = true } = {}) {
   // Testlerde gerçek Stremio'ya sahte torrent açılmasın.
   if (stream?.kind !== 'torrent' || process.env.NODE_TEST_CONTEXT) return;
   dokun(stream.infoHash);
   try {
-    const req = http.get(localTorrentUrl(stream, STREMIO_BASE), { headers: { range: `bytes=${bas}-${bas + bytes - 1}` } }, (r) => r.resume());
+    const basliklar = { range: `bytes=${bas}-${bas + bytes - 1}`, ...(olcum ? { 'x-olcum': '1' } : {}) };
+    const req = http.get(localTorrentUrl(stream, STREMIO_BASE), { headers: basliklar }, (r) => r.resume());
     req.on('error', () => {});
     // Arka plan işi: süreç (ya da testler) bunu beklemesin.
     req.on('socket', (sock) => sock.unref());

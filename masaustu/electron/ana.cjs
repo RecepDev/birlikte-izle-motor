@@ -384,6 +384,10 @@ function tamponAyarla(bekliyor, hiz, boyut, sure) {
       hedef = oran >= 2 ? 5 : oran >= 1.5 ? 10 : 30;
     }
   }
+  if (process.env.KABUK_DEBUG && Date.now() - (tamponAyarla.son || 0) > 1000) {
+    tamponAyarla.son = Date.now();
+    console.log('tampon', JSON.stringify({ bekliyor, hizMbps: Math.round((hiz * 8) / 1e5) / 10, ihtiyacMbps: sure > 0 ? Math.round((boyut * 8) / sure / 1e5) / 10 : null, ornek: hizOrnekleri.length, hedef }));
+  }
   if (hedef === tamponSn) return;
   tamponSn = hedef;
   mpv.set('cache-pause-wait', hedef).catch(() => {});
@@ -402,7 +406,11 @@ async function durumDongusu() {
       mpv.get('demuxer-cache-duration'), mpv.get('frame-drop-count'), mpv.get('decoder-frame-drop-count'),
       mpv.get('estimated-frame-number'), mpv.get('cache-speed'), mpv.get('file-size'),
     ].map((p) => p.catch(() => null)));
-    tamponAyarla(Boolean(stalled), Number(netSpeed), Number(fileSize), Number(duration));
+    // Hız: mpv'nin okuma hızı açılışta parçalar sırayla gelmediği için düşük (ölçüm: 0.1 Mbps'den başladı,
+    // TorrServer 50 Mbps indirirken). Torrent'te motorun gerçek indirme hızı da sayılıyor, büyüğü.
+    const torrentteMi = torrentHizi !== null && /:\/\/127\.0\.0\.1:\d+\/[0-9a-f]{40}\//i.test(sonYuklenen || '');
+    const hizBps = Math.max(Number(netSpeed) || 0, torrentteMi ? (torrentHizi * 1e6) / 8 : 0);
+    tamponAyarla(Boolean(stalled), hizBps, Number(fileSize), Number(duration));
     if (Number.isFinite(position) && position > 0) sonKonum = position;
     donmaBekcisi(position, paused || seeking || stalled, (Number(drops) || 0) + (Number(decDrops) || 0));
     if (Number.isFinite(duration) && duration !== sonVekilSure) {
