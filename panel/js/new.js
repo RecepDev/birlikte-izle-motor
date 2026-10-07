@@ -351,8 +351,10 @@ function yeterliMbps(s) {
   const ihtiyac = ihtiyacMbps(s);
   return ihtiyac ? Math.max(4, ihtiyac * payKatsayisi()) : OTO_IYI_MBPS;
 }
-// Dalga başına ölçüm süresi. Film bilgisi artık siteden ~0.3 sn'de geldiği için 20 sn'den 12 sn'ye indi.
-const OTO_OLCUM_MS = 12_000;
+// Dalga en çok bu kadar sürüyor; adaylarının hepsi sonuçlanınca (bağlanan 12 sn'de ölçülmüş sayılıyor,
+// bağlanamayan 25 sn'de "kimse yok") hemen sonrakine geçiliyor. 12 sn'de kesilince 6'sı birden açıkken
+// geç bağlanan adaylar (aynı anda çok torrent bağlanmayı yavaşlatıyor) şans bulamadan eleniyordu.
+const OTO_OLCUM_MS = 25_000;
 // Sıralama puanı: seed (sezon paketi geride) x yayın grubunun geçmişi x Türkçe altyazı x uyumluluk.
 // - Grup: bütün içeriklerde iyi/kötü sayısı (bkz. src/kaynak-hafiza.js), 0.3-3 kat.
 // - Dosyanın içinde Türkçe altyazı (sürüm adından): 1.5 kat.

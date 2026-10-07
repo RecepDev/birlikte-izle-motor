@@ -46,7 +46,7 @@ Son güncelleme: 2026-10-07 · Son commit: ec4238b · Masaüstü 0.7.43 · Andro
 - **Otomatik kaynak bulma (Oda aç, `panel/js/new.js`):**
   - Yavaş eklentiyi beklemiyor: seçilen kalitede 4 aday gelince ölçüm başlıyor. Geç gelen eklentinin kaynakları sonraki dalgalara giriyor.
   - "Yeterince hızlı" ölçütü videoya göre: ihtiyaç (boyut / Cinemeta süresi) × 1.5, en az 4 Mbps. Süre bilinmiyorsa eskisi gibi 15 Mbps. Meta satırında `sureSn` var (`src/addons-client.js` `sureSnCoz`).
-  - Dalga 6 aday (kullanıcı istedi; önce 4), süresi 20 sn'den 12 sn'ye indi. Yeni dalgada önceki dalganın en iyisi dışındakiler kapanıyor.
+  - Dalga 6 aday (kullanıcı istedi; önce 4), en çok 25 sn: bağlanan aday 12 sn'de ölçülmüş sayılıyor, hepsi sonuçlanınca sonraki dalga. (12 sn'de kesmek, 6'sı birden açıkken geç bağlananları şans vermeden eliyordu: gerçek aramada 45 sn'de ~25 aday açıldı, biri veri verdi.) Yeni dalgada önceki dalganın en iyisi dışındakiler kapanıyor.
   - Film seçilince önceden açılan aday sayısı 6/10'dan 3/5'e indi (`src/panel-api.js`).
   - Ölçüm (tek TorrServer): tek tek açılan torrent'te film bilgisi medyan 1.6 sn. 8'i birden açılınca 10 sn, 8'in 2'si 20 sn'de gelmedi.
   - Yalıtılmış denemede (Matrix 4K, soğuk motor) ölçüm 4.3 yerine ~2.5 sn'de başladı, karar 43 yerine 39 sn'de verildi. O anki 4K adaylar zaten çok kötü bağlanıyordu (çoğu 0 kişi).
