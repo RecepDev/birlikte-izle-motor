@@ -18,15 +18,17 @@ Portlar: 7300 herkese açık (oda sayfası, addon, relay; cloudflared tüneli) �
 - `src/motor/torrserver.js` — TorrServer'ı indirir/açar/kapatır, HTTP API.
 - `src/motor/stremio-taklidi.js` — 11470 taklidi. Dosyayı adla eşler (TorrServer pad dosyalarını listelemez, sıra numarası tutmaz). `::` üzerinde dinler + kimlik kontrolü.
 - `src/motor/onbellek.js` — 4 MB bloklu disk önbelleği (en eski kullanılan silinir).
+- `src/motor/torrent-dosyasi.js` — film bilgisini (.torrent) itorrents'ten alır, kimliğini doğrular, diskte saklar; TorrServer'a yüklenince metadata ~0.2 sn. Açma/kapama `data/motor.json` "siteden" (panel Motor kartı).
+- `src/motor-secim.js` — panel Motor kartının ayarları (`data/motor.json`: motor, bekçi, siteden).
 - `src/onbellek-ayar.js` — elle girilen önbellek boyutu (`data/onbellek.json`) + Stremio `cacheSize`.
 - `src/rooms.js`, `src/socket.js` — oda durumu, Socket.IO.
 - `src/streams.js`, `src/addon.js`, `src/addons-client.js` — kaynak bulma, Stremio addon.
 - `src/relay.js` — misafirlere video aktarımı.
 - `src/panel-api.js` + `panel/` — yerel panel.
 - `src/indir.js` — masaüstü güncelleme listesi `MASAUSTU_DOSYALARI`.
-- `src/masaustu-baslat.js` — paneldeki "uygulamayı aç".
+- `src/masaustu-baslat.js` — paneldeki "uygulamayı aç"; `scripts/panel-ac.mjs` bununla paneli uygulamanın "Panel" penceresinde açar (`--panel`), `baslat.vbs` uygulama yoksa Edge'e düşer.
 - `public/room.html`, `public/js/room.js` (3400 satır — Grep kullan), `public/js/shared/` (sync-core, stream-url: DOM'suz, istemcilerle ortak).
-- `masaustu/` — Electron + gömülü mpv. `electron/ana.cjs` ana süreç, `motor-baslat.cjs` 11470 boşsa TorrServer açar, `stremio-vekil.cjs`, `baslangic.html` açılış ekranı, `onyukleme-kabuk.cjs`.
+- `masaustu/` — Electron + gömülü mpv. `electron/ana.cjs` ana süreç, `motor-baslat.cjs` 11470 boşsa TorrServer açar, `stremio-vekil.cjs`, `baslangic.html` açılış ekranı, `onyukleme-kabuk.cjs`. `ana.cjs` `tamponAyarla()`: hızlı başlat (mpv `cache-pause-wait` hız/ihtiyaca göre 5/10/30 sn), `panelAc()`: sunucu paneli penceresi.
 - `android/app/src/main/java/xyz/birlikteizle/mobil/` — Kotlin, Media3. `Motor.kt` (TorrServer + Kotlin taklit + önbellek), `Onbellek.kt`, `OdaActivity.kt`, `MainActivity.kt`.
 - `deneme/motor/` — motor karşılaştırma betikleri (ürüne girmez).
 

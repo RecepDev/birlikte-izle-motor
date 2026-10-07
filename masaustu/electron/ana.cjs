@@ -348,6 +348,33 @@ function donmaBekcisi(konum, beklemede, kayip) {
   console.warn('Görüntü donuk (kare kaybı), çözücü sıfırlanıyor', konum);
   mpv?.command('seek', String(konum), 'absolute+exact').catch(() => {});
 }
+// Hızlı başlat: mpv açılışta ve her sarmadan sonra 30 sn biriktirip öyle oynatıyordu (--cache-pause-wait).
+// İndirme hızı videonun ihtiyacından (boyut / süre) belirgin fazlaysa o kadar beklemeye gerek yok:
+// hız/ihtiyaç ≥ 2 → 5 sn, ≥ 1.5 → 10 sn, daha azı → 30 sn. Gerçek oda kaydında (2026-10-07) veri 36-61
+// Mbps gelirken video 25 sn sonra başlamıştı. Açılış ekranından kapatılabiliyor (ayar "hizliBaslat").
+const hizliBaslat = () => ayarOku().hizliBaslat !== false;
+let tamponSn = 30;
+const hizOrnekleri = []; // beklerken son 3 sn'nin indirme hızları (durum 200 ms'de bir)
+function tamponAyarla(bekliyor, hiz, boyut, sure) {
+  if (!mpv) return;
+  let hedef = 30;
+  if (!bekliyor) {
+    // Oynarken bir sonraki bekleyiş yine 30'dan başlasın; hız ölçülünce iner.
+    hizOrnekleri.length = 0;
+  } else {
+    if (Number.isFinite(hiz)) {
+      hizOrnekleri.push(hiz);
+      if (hizOrnekleri.length > 15) hizOrnekleri.shift();
+    }
+    if (hizliBaslat() && boyut > 0 && sure > 0 && hizOrnekleri.length >= 5) {
+      const oran = hizOrnekleri.reduce((a, b) => a + b, 0) / hizOrnekleri.length / (boyut / sure);
+      hedef = oran >= 2 ? 5 : oran >= 1.5 ? 10 : 30;
+    }
+  }
+  if (hedef === tamponSn) return;
+  tamponSn = hedef;
+  mpv.set('cache-pause-wait', hedef).catch(() => {});
+}
 // Ara katmanın parça boyu için video süresi (bkz. stremio-vekil.cjs).
 let sonVekilSure = null;
 // mpv'den okunan değerleri sayfaya iter. Sayfa bunları <video> gibi görür.
@@ -355,13 +382,14 @@ async function durumDongusu() {
   if (!mpv) return;
   try {
     const [position, duration, paused, seeking, speed, width, height, cacheEnd, idle, stalled,
-      cacheSec, drops, decDrops, frames, netSpeed] = await Promise.all([
+      cacheSec, drops, decDrops, frames, netSpeed, fileSize] = await Promise.all([
       mpv.get('time-pos'), mpv.get('duration'), mpv.get('pause'), mpv.get('seeking'),
       mpv.get('speed'), mpv.get('dwidth'), mpv.get('dheight'),
       mpv.get('demuxer-cache-time'), mpv.get('core-idle'), mpv.get('paused-for-cache'),
       mpv.get('demuxer-cache-duration'), mpv.get('frame-drop-count'), mpv.get('decoder-frame-drop-count'),
-      mpv.get('estimated-frame-number'), mpv.get('cache-speed'),
+      mpv.get('estimated-frame-number'), mpv.get('cache-speed'), mpv.get('file-size'),
     ].map((p) => p.catch(() => null)));
+    tamponAyarla(Boolean(stalled), Number(netSpeed), Number(fileSize), Number(duration));
     if (Number.isFinite(position) && position > 0) sonKonum = position;
     donmaBekcisi(position, paused || seeking || stalled, (Number(drops) || 0) + (Number(decDrops) || 0));
     if (Number.isFinite(duration) && duration !== sonVekilSure) {
@@ -414,6 +442,7 @@ async function mpvBaslat() {
       '--cache=yes', '--cache-on-disk=yes', `--demuxer-cache-dir=${path.join(os.tmpdir(), 'birlikte-izle-onbellek')}`,
       '--demuxer-max-bytes=6GiB', `--demuxer-readahead-secs=${onbellekSn()}`,
       // Önbellek biterse saniyelik kesik kesik oynamak yerine 30 sn doldurup öyle devam et.
+      // Hız yetiyorsa tamponAyarla() bunu 5-10 sn'ye indiriyor (hızlı başlat).
       '--cache-pause-wait=30',
       // Açılışta ve her sarmadan sonra da önce 30 sn hazırla, sonra oynat: sarınca hemen
       // oynayıp saniyede bir takılmasın (bu arada oda o kişiyi bekliyor).
@@ -441,6 +470,9 @@ async function mpvBaslat() {
     return;
   }
   mpv.on('exit', () => { mpv = null; });
+  // Yeni mpv --cache-pause-wait=30 ile başlıyor (hızlı başlat bundan sonra ayarlar).
+  tamponSn = 30;
+  hizOrnekleri.length = 0;
   mpv.on('file-loaded', altyaziEkle);
   // Pencere/oran değişince videonun yeri değişiyor: altyazı konumu yeniden hesaplanır.
   sonSubPos = null;
@@ -611,6 +643,9 @@ ipcMain.on('kabuk:onbellek-yaz', (_e, sn) => {
   vekilAyarla({ onbellek: sn });
   mpv?.set('demuxer-readahead-secs', sn).catch(() => {});
 });
+// Hızlı başlat (bkz. tamponAyarla): ana ekrandan açılıp kapatılıyor, varsayılan açık.
+ipcMain.on('kabuk:hizli-baslat', (e) => { e.returnValue = hizliBaslat(); });
+ipcMain.on('kabuk:hizli-baslat-yaz', (_e, acik) => ayarYaz({ hizliBaslat: acik === true }));
 // Otomatik kaynak seçimi (Oda aç): ana ekrandan açılıp kapatılıyor, varsayılan açık.
 ipcMain.on('kabuk:oto', (e) => { e.returnValue = ayarOku().otoKaynak !== false; });
 // Video önbelleği boyutu (GB, elle; 0 = kapalı), bu bilgisayarın motoruna göre:
@@ -729,9 +764,50 @@ if (!tekOrnek) app.quit();
 else {
   app.on('second-instance', (_e, arglar) => {
     if (process.env.KABUK_DEBUG) console.log('ikinci-ornek', JSON.stringify(arglar));
+    // Sunucu kısayolu (baslat.vbs) paneli istiyor: oynatıcı penceresine dokunma (odada olabilir).
+    if (arglar.includes('--panel')) return panelAc();
     odayaGit(semadanUrl(arglar));
   });
 }
+
+// Sunucu paneli (127.0.0.1:7301) Edge yerine burada, ayrı bir pencerede. Sunucu kısayolu
+// "--panel" ile açıyor; açılış ekranında da düğmesi var. Uygulama yalnız panel için açıldıysa
+// panel kapanınca uygulama da kapanır.
+const PANEL_URL = 'http://127.0.0.1:7301/';
+let panelPencere = null;
+function panelAc() {
+  if (panelPencere && !panelPencere.isDestroyed()) {
+    if (panelPencere.isMinimized()) panelPencere.restore();
+    panelPencere.show();
+    panelPencere.focus();
+    return;
+  }
+  panelPencere = new BrowserWindow({
+    width: 1200, height: 860, backgroundColor: '#0e0f13', title: 'Birlikte İzle · Panel',
+    icon: path.join(__dirname, 'simge.ico'), autoHideMenuBar: true,
+  });
+  panelPencere.setMenuBarVisibility(false);
+  // Odaya git bağlantıları oynatıcı penceresinde, başka her şey (stremio://, dış siteler) sistemde.
+  const disari = (url) => {
+    if (/\/room\/[A-Z0-9]+/i.test(url) && /^https?:/.test(url)) odayaGit(url);
+    else shell.openExternal(url).catch(() => {});
+  };
+  panelPencere.webContents.on('will-navigate', (e, url) => {
+    if (url.startsWith(PANEL_URL)) return;
+    e.preventDefault();
+    disari(url);
+  });
+  panelPencere.webContents.setWindowOpenHandler(({ url }) => {
+    disari(url);
+    return { action: 'deny' };
+  });
+  panelPencere.on('closed', () => {
+    panelPencere = null;
+    if (ana && !ana.isDestroyed() && !ana.isVisible()) app.quit();
+  });
+  panelPencere.loadURL(PANEL_URL);
+}
+ipcMain.on('kabuk:panel-ac', () => panelAc());
 // Yalnızca paketlenmiş uygulama şemayı üstlensin: geliştirme sırasında çalıştırmak
 // kaydı çıplak electron.exe'ye çevirip bağlantıyı bozuyor.
 if (app.isPackaged) app.setAsDefaultProtocolClient(SEMA);
@@ -759,8 +835,11 @@ app.whenReady().then(() => {
       gunluk(`motor açılamadı: ${err.message}`);
     })
     .finally(() => { motorAciliyor = false; });
+  // Yalnız panel için açıldıysa (sunucu kısayolu) ana pencere gizli kalır; kısayola tekrar basınca görünür.
+  const yalnizPanel = process.argv.includes('--panel');
   ana = new BrowserWindow({
     width: 1280, height: 800, backgroundColor: '#0e0f13', title: 'Birlikte İzle',
+    show: !yalnizPanel,
     webPreferences: {
       preload: path.join(__dirname, 'onyukleme-kabuk.cjs'),
       // Köprü, sayfadaki <video> öğesinin özelliklerini değiştirmek zorunda. Yalıtılmış
@@ -1034,6 +1113,7 @@ app.whenReady().then(() => {
   if (semaUrl) ana.loadURL(semaUrl);
   else if (ODA_URL) ana.loadURL(ODA_URL);
   else ana.loadFile(path.join(__dirname, 'baslangic.html'));
+  if (yalnizPanel) panelAc();
 });
 
 ipcMain.on('kabuk:odaya-git', (_e, url) => ana?.loadURL(url));

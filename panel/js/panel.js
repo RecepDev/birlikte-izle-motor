@@ -344,6 +344,7 @@ async function refreshMotor() {
   $('#motor-sec-not').textContent = not.join(' ');
   $('#motor-sec-not').hidden = !not.length;
   $('#motor-bekci').checked = motor.bekci;
+  $('#motor-siteden').checked = motor.siteden;
 }
 
 async function torrentKapat(t, btn) {
@@ -375,6 +376,10 @@ $('#motor-sec').addEventListener('change', async (e) => {
 });
 $('#motor-bekci').addEventListener('change', async (e) => {
   await api('/api/motor/ayar', { method: 'PUT', body: { bekci: e.target.checked } }).catch((err) => alert(err.message));
+  refreshMotor();
+});
+$('#motor-siteden').addEventListener('change', async (e) => {
+  await api('/api/motor/ayar', { method: 'PUT', body: { siteden: e.target.checked } }).catch((err) => alert(err.message));
   refreshMotor();
 });
 

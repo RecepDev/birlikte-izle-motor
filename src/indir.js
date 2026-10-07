@@ -32,6 +32,7 @@ export const MASAUSTU_DOSYALARI = [
   'motor/torrserver.js',
   'motor/stremio-taklidi.js',
   'motor/onbellek.js',
+  'motor/torrent-dosyasi.js',
 ];
 
 export function createIndirRouter({ root, log }) {

@@ -27,25 +27,30 @@ Son güncelleme: 2026-10-06 · Son commit: a59453a · Masaüstü 0.7.37 · Andro
   - Oda: video hiç başlamadı ve veri gelmiyorsa, ölçülmüş iyi kaynağa 15 sn'de geçiliyor (eskisi 45 sn).
   - Önden okuma %95 → %10 (≈51 MB). Ölçümde sıralı izleme 25.5 → 44.8 Mbps (`docs/stremiosuz-plan.md` "üçüncü tur"). uTP açık kaldı.
   - Telefon (APK 0.33.0): önden okuma ≈51 MB, boşta kapanma 2 dk, güncel tracker listesi.
+  - **Film bilgisi siteden** (`src/motor/torrent-dosyasi.js`, varsayılan açık, kullanıcı istedi): itorrents.net'ten .torrent, kimlik doğrulanıp TorrServer'a yükleniyor, diskte de saklanıyor. Metadata 9.4 sn → 0.26 sn (yeni açılmış TorrServer); itorrents 13 torrent'in 12'sinde vardı. Yalnız sunucuda; masaüstünün kendi motorunda ve telefonda yok.
+  - **Hızlı başlat** (masaüstü, varsayılan açık, açılış ekranından kapatılır): mpv 30 sn biriktirmek yerine hız/ihtiyaç ≥2 → 5 sn, ≥1.5 → 10 sn. Gerçek odada veri 36-61 Mbps gelirken video 25 sn sonra başlıyordu. Canlı oynatmada henüz denenmedi.
+- **Panel Edge yerine uygulamada:** sunucu kısayolu (`baslat.vbs`) `scripts/panel-ac.mjs` ile uygulamayı `--panel` açar; panel ayrı pencerede, oynatıcı penceresi gizli kalır (kısayola basınca görünür). Uygulama yoksa Edge. Açılış ekranında "🛠️ Sunucu paneli" düğmesi. Yalıtılmış Electron denemesiyle doğrulandı.
 - **Düzeltme:** TorrServer'da ayar yazmak bütün torrent'leri kapatıyor (`SetSettings` → `dropAllTorrent`).
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.
   - TorrServer modunda "Windows onayı" uyarısı çıkmıyor.
-- `npm test` 214/214 (yeni: `test/motor-yonetim.test.js`; `html-kimlik.test.js` sayfalardaki gömülü kodu derliyor). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
-- Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.36.exe`, `BirlikteIzleMotor-Android-0.33.0.apk`. Masaüstü 0.7.37 sunucudan otomatik güncellemeyle gidiyor.
+- `npm test` 217/217 (yeni: `test/motor-yonetim.test.js`; `html-kimlik.test.js` sayfalardaki gömülü kodu derliyor). e2e 24/24 (TorrServer). Panel uçları yalıtılmış sunucuda denendi.
+- Kurulum dosyaları: `D:\Botlar\Kurulumlar\BirlikteIzleMotor-Kurulum-0.7.36.exe`, `BirlikteIzleMotor-Android-0.33.0.apk`. Masaüstü 0.7.38 sunucudan otomatik güncellemeyle gidiyor.
 
 ## Bekleyen
 - APK gerçek telefonda denenmedi. Telefonda sabit peer portu yok (mobil ağda UPnP işe yaramıyor).
 - Kullanıcıyla Stremio kapalıyken gerçek izleme denemesi yapılmadı.
 - Tarayıcı uyumluluk modu (Stremio hlsv2 dönüştürücüsü) TorrServer modunda yok.
 - Arayüzde ~78 kullanıcıya görünen "Stremio" yazısı kaldı (Faz 5).
-- Açılış: TorrServer medyanı 7.6 sn (önceki tur 12.9; Stremio o turda 4.1). Bunun 4–5 sn'si metadata.
-- Film bilgisini (metadata) diskte saklama ve itorrents gibi bir siteden isteme yapılmadı. İkincisi gizlilik yüzünden kullanıcı onayı bekliyor.
+- Açılış: TorrServer medyanı 7.6 sn (önceki tur 12.9; Stremio o turda 4.1). Bunun 4–5 sn'si metadata (siteden isteme bunu kısaltıyor; gerçek kullanımda günlükteki "Torrent açılışı" ve "Film bilgisi hazır" satırlarına bak).
+- Telefonun oynatıcısında (ExoPlayer) başlangıç tamponu ayarı incelenmedi.
 - Windows güvenlik duvarı açık olan bilgisayarlarda TorrServer'a gelen bağlantı kuralı yok (bu bilgisayarda duvar kapalı).
 
 ## Bilinen tuzaklar
 - Windows'ta Stremio `::` üzerinde dinlerken 127.0.0.1'e bağlanmak yine başarılı oluyor ve trafiği Stremio alıyor. Taklit bu yüzden `::` üzerinde dinleyip kimlik kontrolü yapıyor.
 - TorrServer'ın kendi disk önbelleği yeniden açılışta kullanılmıyor; kendi blok önbelleğimiz bu yüzden var.
+- Node'un `fetch`'i bu bilgisayarda Cloudflare'in IPv6 adreslerine takılıyor (IPv6 bağlantısı yok). Dış sitelere `https.get` + `family: 4` (bkz. torrent-dosyasi.js).
+- `cscript baslat.vbs` sözdizimi denetimi değil, betiği çalıştırır (panel açılır).
 - TorrServer zorla kapatılırsa süreç sahipsiz kalır: önce `/shutdown`.
 - TorrServer'a `/settings set` göndermek açık torrent'leri kapatır. İzleme sırasında ayar yazma.
 - Kurulumsuz kısayol (`masaustu` içinde electron.exe) kaynak dosyaları doğrudan çalıştırır: açılış ekranındaki hata hemen ona yansır. d72779e'de bir tırnak hatası bütün ekran kodunu durdurmuştu.

@@ -66,12 +66,17 @@
     <input id="link" placeholder="http://... /room/ABC123" autocomplete="off" required>
     <button type="submit">Odaya gir</button>
     <button id="panel" type="button" class="ikincil" hidden>Film ara ve oda aç</button>
+    <button id="sunucu-paneli" type="button" class="ikincil" hidden>🛠️ Sunucu paneli</button>
     <p id="panel-ipucu" class="ipucu" hidden>Sunucu bu bilgisayarda çalışıyor: Stremio'ya girmeden ara, seç, oda aç.</p>
     <button id="guncelle" type="button" class="ikincil">Güncellemeleri denetle</button>
     <div class="ayarlar">
       <label class="ayar">
         <div>🤖 Otomatik kaynak seçimi<small>Bölümü seçince en iyi kaynak bulunup oda açılır</small></div>
         <span class="anahtar"><input type="checkbox" id="oto"><span></span></span>
+      </label>
+      <label class="ayar">
+        <div>⚡ Hızlı başlat<small>İnternet yetiyorsa 30 sn biriktirmeden 5-10 sn'de oynatır (açılışta ve sarınca)</small></div>
+        <span class="anahtar"><input type="checkbox" id="hizli-baslat"><span></span></span>
       </label>
       <label class="ayar">
         <div>Görüntü kalitesi<small>Önce bu kalitenin kaynakları aranır</small></div>
@@ -180,6 +185,9 @@
   const oto = document.getElementById('oto');
   oto.checked = window.kabuk.otoKaynak ? window.kabuk.otoKaynak() : true;
   oto.addEventListener('change', () => window.kabuk.otoKaynakYaz?.(oto.checked));
+  const hizli = document.getElementById('hizli-baslat');
+  hizli.checked = window.kabuk.hizliBaslat ? window.kabuk.hizliBaslat() : true;
+  hizli.addEventListener('change', () => window.kabuk.hizliBaslatYaz?.(hizli.checked));
   // Ad: ilk açılışta sorulur (kapatılamaz), sonra kalite.
   const isimSor = document.getElementById('isim-sor');
   const isimKutu = document.getElementById('isim');
@@ -212,11 +220,13 @@
   document.getElementById('panel').addEventListener('click', () => {
     window.kabuk.odayaGit('http://127.0.0.1:7301/ara');
   });
+  document.getElementById('sunucu-paneli').addEventListener('click', () => window.kabuk.panelAc?.());
   // Sunucu uygulamadan sonra açılırsa düğme de sonradan görünsün: bulunana kadar 5 sn'de bir bakılıyor.
   function panelAra() {
     fetch('http://127.0.0.1:7301/api/ping', { mode: 'no-cors', cache: 'no-store' })
       .then(() => {
         document.getElementById('panel').hidden = false;
+        document.getElementById('sunucu-paneli').hidden = !window.kabuk.panelAc;
         document.getElementById('panel-ipucu').hidden = false;
       })
       .catch(() => setTimeout(panelAra, 5000));

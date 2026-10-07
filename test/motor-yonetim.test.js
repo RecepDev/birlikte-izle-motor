@@ -18,11 +18,13 @@ test('Motor seçimi: varsayılan boş ve bekçi kapalı; yazılan dosyadan geri 
   const a = createMotorSecim({ file, log: sessiz });
   assert.equal(a.motor(), null);
   assert.equal(a.bekci(), false);
+  assert.equal(a.siteden(), true); // kullanıcı istedi (2026-10-07)
   assert.equal(a.yaz({ motor: 'kaplumbaga' }).error, 'badValue');
-  assert.deepEqual(a.yaz({ motor: 'stremio', bekci: true }), { ok: true, motor: 'stremio', bekci: true });
+  assert.deepEqual(a.yaz({ motor: 'stremio', bekci: true, siteden: false }), { ok: true, motor: 'stremio', bekci: true, siteden: false });
   const b = createMotorSecim({ file, log: sessiz });
   assert.equal(b.motor(), 'stremio');
   assert.equal(b.bekci(), true);
+  assert.equal(b.siteden(), false);
 });
 
 test('Önbellek: kullanım toplam bayt ve film sayısını verir, boşalt hepsini siler', async () => {
@@ -144,4 +146,73 @@ test('TorrServer bekçisi: açıksa beklenmedik kapanışta yeniden açar; durdu
   son.emit('exit', 0);
   await bekle(2300);
   assert.equal(d.surecler.length, 3);
+});
+
+// Küçük ama geçerli bir .torrent (bencode) ve kimliği.
+async function ornekTorrent() {
+  const crypto = await import('node:crypto');
+  const info = Buffer.concat([
+    Buffer.from('d6:lengthi20e4:name8:film.mkv12:piece lengthi16384e6:pieces20:'),
+    Buffer.alloc(20, 7),
+    Buffer.from('e'),
+  ]);
+  const veri = Buffer.concat([Buffer.from('d8:announce3:abc4:info'), info, Buffer.from('e')]);
+  return { veri, ih: crypto.createHash('sha1').update(info).digest('hex') };
+}
+
+test('Torrent dosyası: kimlik bencode info bölümünden hesaplanır; bozuk ve yarım veri null', async () => {
+  const { infoAraligi, torrentKimligi } = await import('../src/motor/torrent-dosyasi.js');
+  const { veri, ih } = await ornekTorrent();
+  assert.equal(torrentKimligi(veri), ih);
+  assert.equal(infoAraligi(Buffer.from('<!DOCTYPE html>')), null);
+  assert.equal(infoAraligi(veri.subarray(0, veri.length - 10)), null);
+  assert.equal(infoAraligi(Buffer.from('d4:infoi5')), null);
+  assert.equal(infoAraligi(Buffer.from('d999999:x')), null);
+});
+
+test('Torrent dosyası: siteden gelen doğrulanır ve diske yazılır, sonraki istek siteye gitmez; yanlış kimlik atılır', async () => {
+  const { createTorrentDosyasi } = await import('../src/motor/torrent-dosyasi.js');
+  const { veri, ih } = await ornekTorrent();
+  const istenen = [];
+  const td = createTorrentDosyasi({
+    klasor: gecici('torrentler'),
+    log: sessiz,
+    siteler: [(h) => `https://a/${h}`, (h) => `https://b/${h}`],
+    indirImpl: async (url) => {
+      istenen.push(url);
+      if (url.startsWith('https://a/')) return Buffer.from('d4:infod4:name1:xee'); // başka torrent
+      return veri;
+    },
+  });
+  const ilk = await td.bul(ih);
+  assert.equal(ilk.kaynak, 'site');
+  assert.deepEqual(istenen, [`https://a/${ih}`, `https://b/${ih}`]);
+  const ikinci = await td.bul(ih);
+  assert.equal(ikinci.kaynak, 'disk');
+  assert.equal(istenen.length, 2);
+  assert.equal(await td.bul('c'.repeat(40)), null);
+});
+
+test('TorrServer: siteden açıksa magnet eklenince film bilgisi dosyası da yüklenir, kapalıysa yüklenmez', async () => {
+  const { veri, ih } = await ornekTorrent();
+  for (const acik of [true, false]) {
+    const d = sahteTs();
+    const yuklenen = [];
+    const asil = d.fetchImpl;
+    d.fetchImpl = async (url, opt = {}) => {
+      if (new URL(url).pathname === '/torrent/upload') {
+        yuklenen.push(opt.body.get('file'));
+        return new Response('{}');
+      }
+      if (new URL(url).pathname === '/torrents') return new Response('{}');
+      return asil(url, opt);
+    };
+    const { ts } = yeniTs(d, { siteden: () => acik, torrentDosyasi: { bul: async (h) => (h === ih ? { veri, kaynak: 'site', ms: 1 } : null) } });
+    await ts.baslat();
+    await ts.ekle(ih, []);
+    await bekle(50);
+    assert.equal(yuklenen.length, acik ? 1 : 0);
+    if (acik) assert.equal(Buffer.from(await yuklenen[0].arrayBuffer()).equals(veri), true);
+    ts.durdur();
+  }
 });

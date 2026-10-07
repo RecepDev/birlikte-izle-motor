@@ -136,6 +136,7 @@ export function createPanelApp({
     const yeni = {};
     if (req.body?.motor !== undefined) yeni.motor = req.body.motor;
     if (req.body?.bekci !== undefined) yeni.bekci = req.body.bekci;
+    if (req.body?.siteden !== undefined) yeni.siteden = req.body.siteden;
     const r = motorPanel.ayarla(yeni);
     res.status(r.error ? 400 : 200).json(r);
   });

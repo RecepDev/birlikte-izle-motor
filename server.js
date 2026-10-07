@@ -91,6 +91,7 @@ if (MOTOR === 'torrserver') {
     log,
     trackerlar: () => torrentHiz.kaynaklar().map((t) => t.slice('tracker:'.length)),
     bekci: () => motorSecim.bekci(),
+    siteden: () => motorSecim.siteden(),
   });
   process.on('exit', () => torrServer?.durdur());
   // Video önbelleği (Stremio'nun disk önbelleği gibi): izlenen yerler diskte kalıyor; aynı film / yarım
@@ -820,6 +821,7 @@ const motorPanel = {
       kullanilan: motorAyri ? 'torrserver' : 'stremio',
       secim: motorSecim.motor(),
       bekci: motorSecim.bekci(),
+      siteden: motorSecim.siteden(),
       ortam: process.env.MOTOR || null,
       ts: torrServer ? await torrServer.durum() : null,
       onbellek: ob,

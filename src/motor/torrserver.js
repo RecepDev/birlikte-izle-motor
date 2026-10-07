@@ -12,6 +12,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { createTorrentDosyasi } from './torrent-dosyasi.js';
 
 export const SURUM = 'MatriX.145.2';
 const INDIRME = `https://github.com/YouROK/TorrServer/releases/download/${SURUM}/TorrServer-windows-amd64.exe`;
@@ -72,11 +73,29 @@ function bosMu(p) {
 
 // trackerlar: güncel tracker listesi (fonksiyon, açılışta okunur).
 // bekci: true dönerse TorrServer beklenmedik kapanınca kendini yeniden açar (panelden; varsayılan kapalı).
+// siteden: true dönerse film bilgisi (.torrent) itorrents'ten de istenir (bkz. torrent-dosyasi.js).
 export function createTorrServer({
   klasor, port = 8097, log, fetchImpl = fetch, spawnImpl = spawn, trackerlar = () => [], bekci = () => false, portBosMu = bosMu,
+  siteden = () => false, torrentDosyasi = null,
 }) {
   const exe = path.join(klasor, 'araclar', 'TorrServer.exe');
   const veri = path.join(klasor, 'torrserver');
+  const dosyalar = torrentDosyasi || createTorrentDosyasi({ klasor: path.join(veri, 'torrentler'), log });
+
+  // Film bilgisi dosyası bulunursa TorrServer'a yüklenir: magnet'le eklenmiş torrent'e birleşip
+  // metadata'yı hemen verir. Bulunamazsa magnet her zamanki gibi kişilerden alır.
+  async function dosyaYukle(infoHash) {
+    const d = await dosyalar.bul(infoHash);
+    if (!d) {
+      log.info('Film bilgisi sitede yok', { infoHash });
+      return;
+    }
+    const form = new FormData();
+    form.append('file', new Blob([d.veri]), `${infoHash}.torrent`);
+    const res = await fetchImpl(`${adres}/torrent/upload`, { method: 'POST', body: form, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    log.info('Film bilgisi hazır', { infoHash, kaynak: d.kaynak, ms: d.ms });
+  }
   const portDosyasi = path.join(veri, 'peer-port.txt');
   const adres = `http://127.0.0.1:${port}`;
   let cocuk = null;
@@ -215,6 +234,7 @@ export function createTorrServer({
     async ekle(infoHash, trackerlar = []) {
       const magnet = `magnet:?xt=urn:btih:${infoHash}${trackerlar.map((t) => `&tr=${encodeURIComponent(t)}`).join('')}`;
       await api('/torrents', { action: 'add', link: magnet, save_to_db: false });
+      if (siteden()) dosyaYukle(infoHash).catch((err) => log.warn('Film bilgisi yüklenemedi', { infoHash, error: err.message }));
     },
     async kapat(infoHash) {
       await api('/torrents', { action: 'drop', hash: infoHash }).catch(() => {});

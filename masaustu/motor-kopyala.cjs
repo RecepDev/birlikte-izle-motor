@@ -6,5 +6,5 @@ const path = require('node:path');
 const kaynak = path.join(__dirname, '..', 'src', 'motor');
 const hedef = path.join(__dirname, 'motor');
 fs.mkdirSync(hedef, { recursive: true });
-for (const ad of ['torrserver.js', 'stremio-taklidi.js', 'onbellek.js']) fs.copyFileSync(path.join(kaynak, ad), path.join(hedef, ad));
+for (const ad of ['torrserver.js', 'stremio-taklidi.js', 'onbellek.js', 'torrent-dosyasi.js']) fs.copyFileSync(path.join(kaynak, ad), path.join(hedef, ad));
 console.log('motor kopyalandı');

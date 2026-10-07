@@ -13,6 +13,10 @@ window.kabuk = {
   isim: () => ipcRenderer.sendSync('kabuk:isim'),
   otoKaynak: () => ipcRenderer.sendSync('kabuk:oto'),
   otoKaynakYaz: (acik) => ipcRenderer.send('kabuk:oto-yaz', Boolean(acik)),
+  hizliBaslat: () => ipcRenderer.sendSync('kabuk:hizli-baslat'),
+  hizliBaslatYaz: (acik) => ipcRenderer.send('kabuk:hizli-baslat-yaz', Boolean(acik)),
+  // Sunucu paneli ayrı bir uygulama penceresinde (Edge yerine).
+  panelAc: () => ipcRenderer.send('kabuk:panel-ac'),
   isimYaz: (ad) => ipcRenderer.send('kabuk:isim-yaz', ad),
   kaliteYaz: (q) => ipcRenderer.send('kabuk:kalite-yaz', q),
   onbellek: () => ipcRenderer.sendSync('kabuk:onbellek'),

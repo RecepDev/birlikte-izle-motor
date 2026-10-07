@@ -58,6 +58,12 @@ If Err.Number = 0 Then
 End If
 Err.Clear
 
+' Panel in the Birlikte Izle Motor app's own window instead of Edge (scripts\panel-ac.mjs).
+' Exit code 1 = app not found: fall back to Edge below.
+shell.CurrentDirectory = dir
+If shell.Run("cmd /c node scripts\panel-ac.mjs", 0, True) = 0 Then WScript.Quit 0
+Err.Clear
+
 ' Separate, empty profile: no extensions, and Edge exits when the window closes.
 shell.Run "msedge --app=http://127.0.0.1:7301/ --window-size=1200,860 --user-data-dir=""" & dir & "\data\edge-panel"" --no-first-run --no-default-browser-check", 1, False
 If Err.Number <> 0 Then
