@@ -68,7 +68,8 @@ export function opensubHash(boyut, bas, son) {
 const YEREL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 // onbellek: src/motor/onbellek.js (verilmezse her şey doğrudan TorrServer'dan).
-export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null, onbellek = null }) {
+// birak: verilirse (masaüstü uygulaması) POST /birak gelince çağrılır; sunucu 11470'i almak istiyor.
+export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null, onbellek = null, birak = null }) {
   const kimlik = crypto.randomBytes(8).toString('hex'); // 127.0.0.1'e cevap verenin biz olduğunu doğrulamak için
   const ekleniyor = new Map(); // hash -> ekleme sözü (aynı torrent iki kez eklenmesin)
   const secilen = new Map(); // `${hash}/${sıra}` -> { id, length }
@@ -284,7 +285,14 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     const yol = adres.pathname;
     if (yol === '/settings') {
       if (req.method === 'POST') req.resume();
-      return json(res, 200, { options: [], values: { serverVersion: 'torrserver', motor: 'torrserver', kimlik } });
+      return json(res, 200, { options: [], values: { serverVersion: 'torrserver', motor: 'torrserver', kimlik, birakilabilir: Boolean(birak) } });
+    }
+    // Masaüstü uygulamasının motoru: aynı bilgisayardaki sunucu açılınca 11470'i ona bırakır.
+    if (yol === '/birak' && req.method === 'POST' && birak) {
+      req.resume();
+      json(res, 200, { ok: true });
+      setImmediate(birak);
+      return undefined;
     }
     if (yol === '/stats.json') {
       const liste = await ts.torrentler().catch(() => []);

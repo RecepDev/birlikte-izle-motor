@@ -99,9 +99,17 @@ if (MOTOR === 'torrserver') {
   onbellek = createOnbellek({ klasor: path.join(DATA, 'onbellek'), sinirBayt: onbellekAyar.gb() * GB, log });
   onbellek.temizle();
   setInterval(() => onbellek.temizle(), 10 * 60_000).unref();
-  stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: Number(new URL(STREMIO_BASE).port) || 11470, log, dosyaAdi, onbellek });
+  const taklitPort = Number(new URL(STREMIO_BASE).port) || 11470;
+  stremioTaklidi = createStremioTaklidi({ ts: torrServer, port: taklitPort, log, dosyaAdi, onbellek });
   try {
-    await stremioTaklidi.baslat();
+    try {
+      await stremioTaklidi.baslat();
+    } catch (err) {
+      // 11470'i bu bilgisayardaki masaüstü uygulamasının kendi motoru tutuyorsa (uygulama sunucudan önce
+      // açıldı) bırakmasını iste: uygulama da 11470'i kullandığı için sunucunun motoruna geçmiş olur.
+      if (err.code !== 'EADDRINUSE' || !(await masaustuMotoruBiraktir(taklitPort))) throw err;
+      await stremioTaklidi.baslat();
+    }
     await torrServer.baslat();
     motorAyri = true;
   } catch (err) {
@@ -112,6 +120,22 @@ if (MOTOR === 'torrserver') {
       ? 'TorrServer motoru açılamadı: 11470 dolu (Stremio açık). Stremio\'yu kapatıp sunucuyu yeniden başlat; şimdilik Stremio kullanılıyor.'
       : 'TorrServer motoru açılamadı; Stremio kullanılıyor', { error: err.message });
   }
+}
+// Masaüstü uygulamasının Stremio taklidi (motor-baslat.cjs) "birakilabilir" diyor: POST /birak ile kapanıyor.
+// Stremio'nun kendisi değil, ona dokunulmuyor. Port boşalınca true.
+async function masaustuMotoruBiraktir(port) {
+  try {
+    const v = (await (await fetch(`http://127.0.0.1:${port}/settings`, { signal: AbortSignal.timeout(2000) })).json())?.values;
+    if (!v?.birakilabilir) return false;
+    log.warn('11470 masaüstü uygulamasının motorunda; sunucuya bırakması isteniyor');
+    await fetch(`http://127.0.0.1:${port}/birak`, { method: 'POST', signal: AbortSignal.timeout(2000) });
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      const dolu = await fetch(`http://127.0.0.1:${port}/settings`, { signal: AbortSignal.timeout(500) }).then(() => true, () => false);
+      if (!dolu) return true;
+    }
+  } catch { /* cevap yok: olduğu gibi */ }
+  return false;
 }
 const stremioRestarter = torrServer
   ? {

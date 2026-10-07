@@ -29,7 +29,13 @@ Son güncelleme: 2026-10-07 · Son commit: d9b5a41 · Masaüstü 0.7.38 · Andro
   - Telefon (APK 0.33.0): önden okuma ≈51 MB, boşta kapanma 2 dk, güncel tracker listesi.
   - **Film bilgisi siteden** (`src/motor/torrent-dosyasi.js`, varsayılan açık, kullanıcı istedi): itorrents.net'ten .torrent, kimlik doğrulanıp TorrServer'a yükleniyor, diskte de saklanıyor. Metadata 9.4 sn → 0.26 sn (yeni açılmış TorrServer); itorrents 13 torrent'in 12'sinde vardı. Yalnız sunucuda; masaüstünün kendi motorunda ve telefonda yok.
   - **Hızlı başlat** (masaüstü, varsayılan açık, açılış ekranından kapatılır): mpv 30 sn biriktirmek yerine hız/ihtiyaç ≥2 → 5 sn, ≥1.5 → 10 sn. Gerçek odada veri 36-61 Mbps gelirken video 25 sn sonra başlıyordu. Canlı oynatmada henüz denenmedi.
-- **Panel Edge yerine uygulamada:** sunucu kısayolu (`baslat.vbs`) `scripts/panel-ac.mjs` ile uygulamayı `--panel` açar; panel ayrı pencerede, oynatıcı penceresi gizli kalır (kısayola basınca görünür). Uygulama yoksa Edge. Açılış ekranında "🛠️ Sunucu paneli" düğmesi. Yalıtılmış Electron denemesiyle doğrulandı.
+- **Sunucu uygulamanın içinde (Kurulumsuz):**
+  - Açılış ekranında "🖥️ Sunucuyu başlat" / "🛠️ Sunucu paneli". Sunucu kapalıysa uygulama `node server.js`'i arka planda açar (uygulama kapansa da çalışır; panelde ⏻ Kapat).
+  - Panel aynı pencerede açılıyor. Sunucu sayfalarında sol altta "← Ana ekran" düğmesi, ayrıca Alt+←.
+  - Panelin "Kapat"ı pencereyi değil sunucuyu kapatıyor, uygulama ana ekrana dönüyor.
+  - Sunucu kısayolu (`baslat.vbs` → `scripts/panel-ac.mjs` → `--panel`) de aynı pencerede açıyor. Odadayken ayrı pencerede açıyor. Uygulama yoksa Edge.
+  - Yalıtılmış Electron denemesiyle doğrulandı. Uygulamadan sunucu başlatma canlıda denenmedi (sunucu açıktı).
+- **11470 çakışması düzeltildi:** uygulama sunucudan önce açılınca 11470'i kendi TorrServer'ıyla tutuyordu. Sunucu bunu Stremio sanıp ona düşüyor, panelde "Stremio kullanılıyor" yazıyordu. Artık uygulamanın taklidi "bırakılabilir": sunucu `POST /birak` ile portu alıyor, uygulama sunucunun motoruna geçiyor. Yalıtılmış denemede 0.3 sn.
 - **Düzeltme:** TorrServer'da ayar yazmak bütün torrent'leri kapatıyor (`SetSettings` → `dropAllTorrent`).
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.

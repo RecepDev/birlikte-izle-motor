@@ -28,7 +28,7 @@ Portlar: 7300 herkese açık (oda sayfası, addon, relay; cloudflared tüneli) �
 - `src/indir.js` — masaüstü güncelleme listesi `MASAUSTU_DOSYALARI`.
 - `src/masaustu-baslat.js` — paneldeki "uygulamayı aç"; `scripts/panel-ac.mjs` bununla paneli uygulamanın "Panel" penceresinde açar (`--panel`), `baslat.vbs` uygulama yoksa Edge'e düşer.
 - `public/room.html`, `public/js/room.js` (3400 satır — Grep kullan), `public/js/shared/` (sync-core, stream-url: DOM'suz, istemcilerle ortak).
-- `masaustu/` — Electron + gömülü mpv. `electron/ana.cjs` ana süreç, `motor-baslat.cjs` 11470 boşsa TorrServer açar, `stremio-vekil.cjs`, `baslangic.html` açılış ekranı, `onyukleme-kabuk.cjs`. `ana.cjs` `tamponAyarla()`: hızlı başlat (mpv `cache-pause-wait` hız/ihtiyaca göre 5/10/30 sn), `panelAc()`: sunucu paneli penceresi.
+- `masaustu/` — Electron + gömülü mpv. `electron/ana.cjs` ana süreç, `motor-baslat.cjs` 11470 boşsa TorrServer açar, `stremio-vekil.cjs`, `baslangic.html` açılış ekranı, `onyukleme-kabuk.cjs`. `ana.cjs` `tamponAyarla()`: hızlı başlat (mpv `cache-pause-wait` hız/ihtiyaca göre 5/10/30 sn), `sunucuBaslat()`/`panelAc()`: Kurulumsuz'da sunucuyu (depo kökü) başlatır, paneli aynı pencerede açar; geri düğmesi `onyukleme-kabuk.cjs` `sunucuSayfasi()`. Uygulamanın motoru sunucu açılınca 11470'i bırakır (`/birak`, server.js `masaustuMotoruBiraktir`).
 - `android/app/src/main/java/xyz/birlikteizle/mobil/` — Kotlin, Media3. `Motor.kt` (TorrServer + Kotlin taklit + önbellek), `Onbellek.kt`, `OdaActivity.kt`, `MainActivity.kt`.
 - `deneme/motor/` — motor karşılaştırma betikleri (ürüne girmez).
 

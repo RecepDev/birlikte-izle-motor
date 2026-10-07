@@ -15,8 +15,9 @@ window.kabuk = {
   otoKaynakYaz: (acik) => ipcRenderer.send('kabuk:oto-yaz', Boolean(acik)),
   hizliBaslat: () => ipcRenderer.sendSync('kabuk:hizli-baslat'),
   hizliBaslatYaz: (acik) => ipcRenderer.send('kabuk:hizli-baslat-yaz', Boolean(acik)),
-  // Sunucu paneli ayrı bir uygulama penceresinde (Edge yerine).
-  panelAc: () => ipcRenderer.send('kabuk:panel-ac'),
+  // Sunucu (Kurulumsuz'da kodu yanında): kapalıysa başlatır, paneli bu pencerede açar. { ok } | { error }
+  sunucuKodu: () => ipcRenderer.sendSync('kabuk:sunucu-kodu'),
+  sunucuAc: () => ipcRenderer.invoke('kabuk:sunucu-ac'),
   isimYaz: (ad) => ipcRenderer.send('kabuk:isim-yaz', ad),
   kaliteYaz: (q) => ipcRenderer.send('kabuk:kalite-yaz', q),
   onbellek: () => ipcRenderer.sendSync('kabuk:onbellek'),
@@ -187,7 +188,32 @@ function ortuKur() {
   bak();
 }
 
+// Sunucu sayfaları (panel, film ara, oda aç) uygulamanın penceresinde: sol altta "← Ana ekran"
+// (Alt+← de geri gider). Panelin "Kapat" düğmesi pencereyi kapatıyordu (Edge penceresi içindi):
+// burada uygulama kapanmasın, ana ekrana dönülsün.
+function sunucuSayfasi() {
+  if (location.origin !== 'http://127.0.0.1:7301') return;
+  const anaEkran = () => ipcRenderer.send('kabuk:baslangic');
+  window.close = anaEkran;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = '← Ana ekran';
+  b.title = "Uygulamanın açılış ekranına dön (Alt+← bir önceki sayfa)";
+  b.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;padding:8px 14px;border-radius:999px;'
+    + 'border:1px solid #2a2e39;background:#232633;color:#e8e9ee;font:500 13px system-ui,sans-serif;cursor:pointer;'
+    + 'box-shadow:0 4px 16px rgba(0,0,0,.45)';
+  b.addEventListener('click', anaEkran);
+  document.body.appendChild(b);
+  window.addEventListener('keydown', (e) => {
+    if (!e.altKey || e.key !== 'ArrowLeft') return;
+    e.preventDefault();
+    if (history.length > 1) history.back();
+    else anaEkran();
+  });
+}
+
 function kur() {
+  sunucuSayfasi();
   if (!document.getElementById('video')) return;
   stilEkle();
   olcumKur();

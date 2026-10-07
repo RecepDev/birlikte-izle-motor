@@ -770,12 +770,58 @@ else {
   });
 }
 
-// Sunucu paneli (127.0.0.1:7301) Edge yerine burada, ayrı bir pencerede. Sunucu kısayolu
-// "--panel" ile açıyor; açılış ekranında da düğmesi var. Uygulama yalnız panel için açıldıysa
-// panel kapanınca uygulama da kapanır.
+// Sunucu paneli (127.0.0.1:7301) Edge yerine uygulamanın içinde, aynı pencerede: açılış ekranındaki
+// "Sunucu" düğmesi ve sunucu kısayolu (baslat.vbs → "--panel"). Panel sayfalarında "← Ana ekran"
+// düğmesi var (onyukleme-kabuk.cjs). Odadayken (video oynarken) ayrı pencerede açılır, oda bozulmasın.
+// Kurulumsuz uygulamada sunucunun kodu da yanında (depo kökü): sunucu kapalıysa düğme onu başlatır.
 const PANEL_URL = 'http://127.0.0.1:7301/';
-let panelPencere = null;
+const SUNUCU_KOK = path.join(__dirname, '..', '..');
+const sunucuKoduVar = () => fs.existsSync(path.join(SUNUCU_KOK, 'server.js')) && fs.existsSync(path.join(SUNUCU_KOK, 'node_modules'));
+async function sunucuCalisiyor() {
+  try {
+    return (await fetch(`${PANEL_URL}api/ping`, { signal: AbortSignal.timeout(1000) })).ok;
+  } catch {
+    return false;
+  }
+}
+// baslat.vbs gibi arka planda açar: uygulama kapansa da çalışır (kapatmak için panelde ⏻ Kapat).
+// Açılışı TorrServer'ı da beklediği için 30 sn'ye kadar sürebilir.
+async function sunucuBaslat() {
+  if (await sunucuCalisiyor()) return { ok: true };
+  if (!sunucuKoduVar()) return { error: 'kodYok' };
+  try {
+    fs.mkdirSync(path.join(SUNUCU_KOK, 'data', 'logs'), { recursive: true });
+    const cikti = fs.openSync(path.join(SUNUCU_KOK, 'data', 'logs', 'stdout.log'), 'a');
+    const ortam = { ...process.env };
+    delete ortam.ELECTRON_RUN_AS_NODE;
+    require('node:child_process').spawn('node', ['server.js'], {
+      cwd: SUNUCU_KOK, detached: true, stdio: ['ignore', cikti, cikti], windowsHide: true, env: ortam,
+    }).unref();
+    fs.closeSync(cikti);
+    gunluk('sunucu: uygulamadan başlatıldı');
+  } catch (err) {
+    gunluk(`sunucu açılamadı: ${err.message}`);
+    return { error: 'acilmadi' };
+  }
+  for (let i = 0; i < 120; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    if (await sunucuCalisiyor()) return { ok: true };
+  }
+  return { error: 'acilmadi' };
+}
 function panelAc() {
+  if (!ana || ana.isDestroyed()) return;
+  if (odadaMi) panelPenceresiAc(); // odadaMi: ana pencere oda sayfasında (yukarıda tutuluyor)
+  else odayaGit(PANEL_URL);
+}
+ipcMain.on('kabuk:sunucu-kodu', (e) => { e.returnValue = sunucuKoduVar(); });
+ipcMain.handle('kabuk:sunucu-ac', async () => {
+  const r = await sunucuBaslat();
+  if (r.ok) panelAc();
+  return r;
+});
+let panelPencere = null;
+function panelPenceresiAc() {
   if (panelPencere && !panelPencere.isDestroyed()) {
     if (panelPencere.isMinimized()) panelPencere.restore();
     panelPencere.show();
@@ -825,6 +871,10 @@ app.whenReady().then(() => {
     gunluk,
     onbellekGb: ayarOku().videoOnbellekGb ?? 5,
     bekci: () => ayarOku().motorBekci === true,
+    onBirak: () => {
+      motor = null;
+      gunluk('motor: 11470 bu bilgisayardaki sunucuya bırakıldı');
+    },
   })
     .then((m) => {
       motor = m;
@@ -835,11 +885,10 @@ app.whenReady().then(() => {
       gunluk(`motor açılamadı: ${err.message}`);
     })
     .finally(() => { motorAciliyor = false; });
-  // Yalnız panel için açıldıysa (sunucu kısayolu) ana pencere gizli kalır; kısayola tekrar basınca görünür.
-  const yalnizPanel = process.argv.includes('--panel');
+  // Sunucu kısayolu "--panel" ile açtıysa pencere doğrudan panelle açılır ("← Ana ekran" ile dönülür).
+  const panelIle = process.argv.includes('--panel');
   ana = new BrowserWindow({
     width: 1280, height: 800, backgroundColor: '#0e0f13', title: 'Birlikte İzle',
-    show: !yalnizPanel,
     webPreferences: {
       preload: path.join(__dirname, 'onyukleme-kabuk.cjs'),
       // Köprü, sayfadaki <video> öğesinin özelliklerini değiştirmek zorunda. Yalıtılmış
@@ -1112,8 +1161,8 @@ app.whenReady().then(() => {
   const semaUrl = semadanUrl(process.argv);
   if (semaUrl) ana.loadURL(semaUrl);
   else if (ODA_URL) ana.loadURL(ODA_URL);
+  else if (panelIle) ana.loadURL(PANEL_URL);
   else ana.loadFile(path.join(__dirname, 'baslangic.html'));
-  if (yalnizPanel) panelAc();
 });
 
 ipcMain.on('kabuk:odaya-git', (_e, url) => ana?.loadURL(url));

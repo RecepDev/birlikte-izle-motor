@@ -220,13 +220,31 @@
   document.getElementById('panel').addEventListener('click', () => {
     window.kabuk.odayaGit('http://127.0.0.1:7301/ara');
   });
-  document.getElementById('sunucu-paneli').addEventListener('click', () => window.kabuk.panelAc?.());
+  // Sunucu: Kurulumsuz uygulamada kodu yanında, kapalıysa düğme başlatır; açıksa paneli bu pencerede açar.
+  const sunucuDugme = document.getElementById('sunucu-paneli');
+  if (window.kabuk.sunucuKodu?.() === true) {
+    sunucuDugme.textContent = '🖥️ Sunucuyu başlat';
+    sunucuDugme.hidden = false;
+  }
+  sunucuDugme.addEventListener('click', async () => {
+    const yazi = sunucuDugme.textContent;
+    sunucuDugme.disabled = true;
+    sunucuDugme.textContent = 'Sunucu açılıyor… (30 sn sürebilir)';
+    const r = await window.kabuk.sunucuAc?.();
+    if (r?.ok) return; // pencere panele geçti
+    sunucuDugme.disabled = false;
+    sunucuDugme.textContent = yazi;
+    alert(r?.error === 'kodYok' ? 'Bu kurulumda sunucu yok.' : 'Sunucu açılamadı. Ayrıntı: sunucu klasöründe data\\logs\\stdout.log');
+  });
   // Sunucu uygulamadan sonra açılırsa düğme de sonradan görünsün: bulunana kadar 5 sn'de bir bakılıyor.
   function panelAra() {
     fetch('http://127.0.0.1:7301/api/ping', { mode: 'no-cors', cache: 'no-store' })
       .then(() => {
         document.getElementById('panel').hidden = false;
-        document.getElementById('sunucu-paneli').hidden = !window.kabuk.panelAc;
+        if (window.kabuk.sunucuAc) {
+          sunucuDugme.textContent = '🛠️ Sunucu paneli';
+          sunucuDugme.hidden = false;
+        }
         document.getElementById('panel-ipucu').hidden = false;
       })
       .catch(() => setTimeout(panelAra, 5000));

@@ -28,7 +28,9 @@ async function acikMi(port) {
 // tsPort: sunucunun TorrServer'ı (8097) aynı bilgisayarda olsa da çakışmasın diye ayrı.
 // onbellekGb: video önbelleği boyutu (açılış ekranından elle; 0 = kapalı).
 // bekci: true dönerse TorrServer çökünce kendini yeniden açar (açılış ekranından; varsayılan kapalı).
-async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbellekGb = 5, bekci = () => false }) {
+// onBirak: aynı bilgisayardaki sunucu sonradan açılıp 11470'i isteyince motor kapanır, sonra bu çağrılır.
+// Uygulama 11470'i kullanmaya devam eder, artık sunucunun motoruna gider.
+async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbellekGb = 5, bekci = () => false, onBirak = () => {} }) {
   if (await acikMi(port)) return null;
   const kok = motorKlasoru();
   if (!kok) {
@@ -46,7 +48,19 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbe
   const onbellek = createOnbellek({ klasor: path.join(klasor, 'onbellek'), sinirBayt: gb * 1024 ** 3, log });
   onbellek.temizle();
   const temizlik = setInterval(() => onbellek.temizle(), 10 * 60_000);
-  const taklit = createStremioTaklidi({ ts, port, log, onbellek });
+  function durdur() {
+    clearInterval(temizlik);
+    taklit.durdur();
+    ts.durdur();
+  }
+  const taklit = createStremioTaklidi({
+    ts, port, log, onbellek,
+    birak: () => {
+      log.info('11470 bu bilgisayardaki sunucuya bırakılıyor');
+      durdur();
+      onBirak();
+    },
+  });
   // Önce 11470'i tut (o arada Stremio açılırsa burada hata verir), sonra TorrServer'ı aç.
   await taklit.baslat();
   try {
@@ -62,11 +76,7 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbe
       gb = yeni;
       return onbellek.sinirAyarla(yeni * 1024 ** 3);
     },
-    durdur() {
-      clearInterval(temizlik);
-      taklit.durdur();
-      ts.durdur();
-    },
+    durdur,
   };
 }
 
