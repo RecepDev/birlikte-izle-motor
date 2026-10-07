@@ -24,7 +24,11 @@ Son güncelleme: 2026-10-07 · Son commit: 5348ca3 · Masaüstü 0.7.40 · Andro
   - Metadata yoklaması 300 ms'den 100 ms'ye indi.
   - Okuyan kalmayan torrent 30 sn yerine 2 dk sonra kapanıyor (duraklatıp dönünce peer'ler sıfırlanmasın).
   - Günlükte her yeni torrent için "Torrent açılışı" satırı var: `metadataSn` ve `ilkVeriSn`.
-  - Oda: video hiç başlamadı ve veri gelmiyorsa, ölçülmüş iyi kaynağa 15 sn'de geçiliyor (eskisi 45 sn).
+  - Oda: video hiç başlamadı ve 15 sn kesintisiz hiç veri gelmediyse, ölçülmüş iyi kaynağa geçiliyor (eskisi 45 sn).
+    - Düzeltme (2026-10-07, Silo odası 86J4BT): veri 12-29 Mbps gelirken iki kaynak arasında 5 sn'de bir 4 kez geçti.
+    - Sebep 1: yalnız sunucunun torrent istatistiğine bakıyordu. Artık oynatıcının ölçtüğü hız da sayılıyor (`liveDownload`).
+    - Sebep 2: kaynak değişince sayaç sıfırlanmıyordu. Artık sıfırlanıyor.
+    - Otomatik geçişten sonra 60 sn yeni geçiş yok. 45 sn'lik zayıf kaynak yolunda da "şimdiki hız" oynatıcının hızını sayıyor.
   - Önden okuma %95 → %10 (≈51 MB). Ölçümde sıralı izleme 25.5 → 44.8 Mbps (`docs/stremiosuz-plan.md` "üçüncü tur"). uTP açık kaldı.
   - Telefon (APK 0.33.0): önden okuma ≈51 MB, boşta kapanma 2 dk, güncel tracker listesi.
   - **Film bilgisi siteden** (`src/motor/torrent-dosyasi.js`, varsayılan açık, kullanıcı istedi): itorrents.net'ten .torrent, kimlik doğrulanıp TorrServer'a yükleniyor, diskte de saklanıyor. Metadata 9.4 sn → 0.26 sn (yeni açılmış TorrServer); itorrents 13 torrent'in 12'sinde vardı. Yalnız sunucuda; masaüstünün kendi motorunda ve telefonda yok.

@@ -2313,6 +2313,12 @@ let weakSince = null;
 let weakCheckedFor = null;
 let weakSuggestion = null;
 let hizliDenenen = null;
+let weakFor = null; // sayaçların ait olduğu kaynak: kaynak değişince sıfırlanıyor
+let oluSince = null; // hiç veri gelmeyen kesintisiz süre başlangıcı
+let sonOtoGecis = 0;
+// Otomatik geçişten sonra bu kadar süre yenisi yok: yeni kaynak da önce biriktirsin (2026-10-07: sayaç
+// sıfırlanmadığı için iki kaynak arasında 5 sn'de bir gidip geldi, 4 kez).
+const OTO_GECIS_ARASI_MS = 60_000;
 // Açılışta ölü kaynak: video hiç başlamadı ve hiç veri gelmiyor. Son 15 dakikada ölçülüp veri verdiği
 // bilinen bir kaynak varsa 45 sn beklemeden ona geçilir (yeniden ölçüm yok, oda aynı yerden açılır).
 async function oluKaynaktanGec(s) {
@@ -2326,6 +2332,7 @@ async function oluKaynaktanGec(s) {
   const hedef = streamById(iyi.streamId);
   const res = await request('setHostStream', { streamId: hedef.streamId });
   if (res?.error) return false;
+  sonOtoGecis = Date.now();
   tani.kaydet('oto-gecis', { from: s.quality, to: hedef.quality, mbps: iyi.downMbps, cur: 0, neden: 'acilmadi' });
   toast(`Kaynak açılmadı; veri verdiği bilinen kaynağa geçildi (${hedef.quality || '?'} · ${iyi.downMbps.toFixed(0)} Mbps).`, 6000);
   playAfterSwitch();
@@ -2337,19 +2344,31 @@ async function checkWeakSource() {
     weakSince = null;
     return;
   }
+  // Kaynak değişti (elle ya da otomatik): yeni kaynağın süresi sıfırdan başlar.
+  if (weakFor !== s.streamId) {
+    weakFor = s.streamId;
+    weakSince = null;
+    oluSince = null;
+  }
+  if (Date.now() - sonOtoGecis < OTO_GECIS_ARASI_MS) return;
   const ts = state.room.torrentStats?.[s.streamId];
   const need = requiredMbps(s.sizeBytes, player.duration()) || 8;
+  // Gelen hız: sunucunun torrent istatistiği ya da oynatıcının kendi ölçtüğü, hangisi yüksekse. Yalnız
+  // istatistiğe bakınca veri önbellekten gelirken ya da istatistik gecikince 0 sanılıyordu.
+  const gelen = Math.max(Number(ts?.downMbps) || 0, Number(liveDownload().downMbps) || 0);
   // Zayıf: az kişi ve yavaş, ya da video hiç başlayamıyor (yükleniyor/donuyor).
   const st = player.status();
-  const stuck = ['loading', 'buffering'].includes(st.state) && (Number(ts?.downMbps) || 0) < need;
-  const weak = (ts && ts.peers < 5 && (Number(ts.downMbps) || 0) < need) || stuck;
+  const stuck = ['loading', 'buffering'].includes(st.state) && gelen < need;
+  const weak = (ts && ts.peers < 5 && gelen < need) || stuck;
+  const olu = st.state === 'loading' && (video.currentTime || 0) < 2 && gelen < 0.5;
+  oluSince = olu ? (oluSince || Date.now()) : null;
   if (!weak) {
     weakSince = null;
     return;
   }
   weakSince ||= Date.now();
-  const olu = st.state === 'loading' && (video.currentTime || 0) < 2 && (Number(ts?.downMbps) || 0) < 0.5;
-  if (olu && Date.now() - weakSince >= 15_000 && hizliDenenen !== s.streamId && await oluKaynaktanGec(s)) return;
+  // 15 sn boyunca kesintisiz hiç veri gelmediyse.
+  if (olu && Date.now() - oluSince >= 15_000 && hizliDenenen !== s.streamId && await oluKaynaktanGec(s)) return;
   // Önce seçilen kaynağa süre tanı: 45 sn boyunca zayıf kalırsa diğerlerini ara.
   if (Date.now() - weakSince < 45_000 || weakCheckedFor === s.streamId) return;
   weakCheckedFor = s.streamId;
@@ -2360,7 +2379,7 @@ async function checkWeakSource() {
     .filter((x) => x.kind === 'torrent' && x.streamId !== s.streamId && x.infoHash !== s.infoHash)
     .sort((a, b) => score(b) - score(a))
     .slice(0, 8);
-  const cur0 = Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0;
+  const cur0 = gelen;
   const esik = (c) => Math.max(c * 1.5, c + 5);
   // Önce daha önce ölçülenler (oda açılırken, telefonun testi, kalite denetimi; son 15 dk):
   // yeterince hızlısı varsa yeniden ölçmeden hemen ona.
@@ -2380,7 +2399,7 @@ async function checkWeakSource() {
       .filter((x) => x.r?.alive && Number.isFinite(x.r.downMbps))
       .sort((a, b) => b.r.downMbps - a.r.downMbps)[0];
   }
-  const cur = Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0;
+  const cur = Math.max(Number(state.room.torrentStats?.[s.streamId]?.downMbps) || 0, Number(liveDownload().downMbps) || 0);
   if (!best || best.r.downMbps < Math.max(cur * 1.5, cur + 5)) {
     // Daha iyisi yok: bir süre sonra tekrar bakılabilsin.
     setTimeout(() => { if (weakCheckedFor === s.streamId) weakCheckedFor = null; }, 3 * 60_000);
@@ -2391,6 +2410,7 @@ async function checkWeakSource() {
   if (otoModAcik() || (player.status().state === 'loading' && (video.currentTime || 0) < 2)) {
     const res = await request('setHostStream', { streamId: best.s.streamId });
     if (!res?.error) {
+      sonOtoGecis = Date.now();
       tani.kaydet('oto-gecis', { from: s.quality, to: best.s.quality, mbps: best.r.downMbps, cur });
       toast(`Kaynak zayıftı; daha hızlısına geçildi (${best.s.quality || '?'} · ${best.r.downMbps.toFixed(0)} Mbps).`, 6000);
       playAfterSwitch();
