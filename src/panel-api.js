@@ -333,6 +333,8 @@ export function createPanelApp({
   // Oda aç ekranı: seçilen torrent'leri denetle (Stremio'da açıp kaynak aramaya başlat).
   app.post('/api/torrent-denetle', wrap(async (req, res) => {
     const { type, id, streamIds } = req.body || {};
+    // bas: okumanın başladığı bayt (doğrulamadan sonra devam eden adaylar okunmuş kısmı yeniden okumasın).
+    const bas = Math.max(0, Math.floor(Number(req.body?.bas) || 0));
     if (!validContent(type, id) || !Array.isArray(streamIds)) return res.status(400).json({ error: 'Geçersiz' });
     const entry = streamCache.get(`${type}|${id}`);
     if (!entry) return res.status(404).json({ error: 'Liste yok' });
@@ -346,7 +348,7 @@ export function createPanelApp({
     for (const sid of streamIds.slice(0, 12)) {
       const s = entry.streams.find((x) => x.streamId === sid);
       if (s?.kind === 'torrent') {
-        isit(s, bayt);
+        isit(s, bayt, { bas });
         n += 1;
       }
     }
