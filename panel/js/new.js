@@ -335,8 +335,17 @@ let otoSecim = null;
 // ölçülüyor (bağlanılan kişi, gerçek hız); en hızlı olan seçiliyor.
 let otoAdaylar = [];
 let otoOlcumBasi = 0;
+// "Yeterince hızlı" kaynağa göre: videonun ihtiyacı (boyut / süre) x 1.5; süre bilinmiyorsa sabit 15 Mbps.
+// Sabit 15, 2 GB'lık 1080p bölüm için gereksiz bekletiyor (5 Mbps yetiyor), 20 GB'lık 4K için azdı.
 const OTO_IYI_MBPS = 15;
-const OTO_OLCUM_MS = 20_000;
+let sureSn = null; // içeriğin süresi (Cinemeta), meta satırıyla geliyor
+function yeterliMbps(s) {
+  const ihtiyac = sureSn && s.sizeBytes ? (s.sizeBytes * 8) / sureSn / 1e6 : null;
+  return ihtiyac ? Math.max(4, ihtiyac * 1.5) : OTO_IYI_MBPS;
+}
+// Dalga başına ölçüm süresi. Film bilgisi artık siteden ~0.3 sn'de geldiği için 20 sn'den 12 sn'ye indi.
+const OTO_OLCUM_MS = 12_000;
+const OTO_EN_COK = 12;
 const otoPuan = (s) => (Number(s.seeders) || 0) * (s.pack ? 0.35 : 1);
 function otoAdayBul() {
   const torrents = streams.filter((s) => s.kind === 'torrent');
@@ -355,9 +364,34 @@ let otoTumAdaylar = [];
 // Dizide önceki bölümlerde iyi indiren kaynağın grubu: önce onlar ölçülüyor.
 let kaynakHafiza = null;
 if (type === 'series') api(`/api/kaynak-hafiza?${new URLSearchParams({ id })}`).then((h) => { kaynakHafiza = h; }).catch(() => {});
+// Sıradaki 4 aday. Havuz her dalgada yeniden hesaplanıyor: ölçüm yavaş eklentiyi beklemeden başladığı
+// için sonradan gelen eklentilerin kaynakları da sıraya giriyor.
+function otoHavuz() {
+  const olculen = new Set(otoAdaylar.map((s) => s.infoHash));
+  const kalan = otoAdayBul().filter((s) => !olculen.has(s.infoHash));
+  return kalan.slice(0, Math.max(0, OTO_EN_COK - otoAdaylar.length));
+}
+// Yeni dalga başlarken önceki adayların en iyisi dışındakiler kapatılıyor: aynı anda açık torrent
+// azalınca yenileri daha çabuk bağlanıyor (ölçüm: 8 torrent birden açıkken film bilgisi 6 kat geç geldi).
+// Ölçülen değerleri listede kalıyor; en iyisi seçilme ihtimaline karşı açık.
+const otoKapatilan = new Set();
+function oncekileriKapat() {
+  if (!otoAdaylar.length) return;
+  const puan = (s) => [olcum(s)?.downMbps || 0, olcum(s)?.peers || 0];
+  const enIyisi = [...otoAdaylar].sort((a, b) => puan(b)[0] - puan(a)[0] || puan(b)[1] - puan(a)[1])[0];
+  for (const s of otoAdaylar) {
+    if (s === enIyisi || otoKapatilan.has(s.infoHash)) continue;
+    otoKapatilan.add(s.infoHash);
+    if (!sonuclar.has(s.infoHash)) sonuclar.set(s.infoHash, enIyi.get(s.infoHash) || { peers: 0, downMbps: 0 });
+    api('/api/torrent-kapat', { method: 'POST', body: { infoHash: s.infoHash } }).catch(() => {});
+  }
+}
 function otoDalgaBaslat() {
-  const yeni = otoTumAdaylar.slice(otoAdaylar.length, otoAdaylar.length + OTO_DALGA);
+  oncekileriKapat();
+  const havuz = otoHavuz();
+  const yeni = havuz.slice(0, OTO_DALGA);
   otoAdaylar = [...otoAdaylar, ...yeni];
+  otoTumAdaylar = [...otoAdaylar, ...havuz.slice(OTO_DALGA)];
   otoOlcumBasi = Date.now();
   const olcumsuz = yeni.filter((s) => !durum[s.infoHash] && !sonuclar.has(s.infoHash)).map((s) => s.streamId);
   if (olcumsuz.length) api('/api/torrent-denetle', { method: 'POST', body: { type, id, streamIds: olcumsuz } }).catch(() => {});
@@ -374,8 +408,14 @@ function otoDene() {
   if (!otoKutu.checked || otoIptal || otoHata || otoSayac) return;
   if (olusturuluyor) return otoYaz('🤖 Oda açılıyor…');
   if (!tercihKalite && $('#kalite-sor').open) return otoYaz('🤖 Önce tercih ettiğin kaliteyi seç.');
+  // Bütün eklentileri beklemeden başla: seçilen kalitede en az 4 aday geldiyse (çoğunlukla Torrentio,
+  // 1-2 sn) ölçüm başlıyor; yavaş eklenti (ThePirateBay+ vb.) 12 sn'ye kadar bekletiyordu.
   const beklendi = otoIlkCevap && Date.now() - otoIlkCevap > 12_000;
-  if (!loadDone && !beklendi) return otoYaz(`🤖 Otomatik mod: kaynaklar aranıyor… (${addonsReplied} eklenti cevap verdi)`);
+  const ilkAdaylar = otoAdaylar.length ? [] : otoAdayBul().slice(0, OTO_DALGA);
+  const erken = ilkAdaylar.length === OTO_DALGA && ilkAdaylar.every((s) => s.quality === ilkAdaylar[0].quality);
+  if (!loadDone && !beklendi && !erken && !otoAdaylar.length) {
+    return otoYaz(`🤖 Otomatik mod: kaynaklar aranıyor… (${addonsReplied} eklenti cevap verdi)`);
+  }
   if (!otoAdaylar.length) {
     otoTumAdaylar = otoAdayBul();
     if (!otoTumAdaylar.length) {
@@ -389,19 +429,20 @@ function otoDene() {
     }
     otoDalgaBaslat();
   }
-  // Ölçüm: biri çok hızlıysa hemen, yoksa hepsi bitince ya da 20 sn dolunca karar.
+  // Ölçüm: biri videoya yetecek kadar hızlıysa hemen, yoksa hepsi bitince ya da 12 sn dolunca karar.
   const sonuc = otoAdaylar.map((s) => ({ s, o: olcum(s) }));
-  const hizli = sonuc.some((x) => (x.o?.downMbps || 0) >= OTO_IYI_MBPS);
+  const hizli = sonuc.some((x) => (x.o?.downMbps || 0) >= yeterliMbps(x.s));
   const bitti = otoAdaylar.every((s) => sonuclar.has(s.infoHash));
   // Bu dalga bitti, hızlı kaynak yok ve sırada aday var: sonraki 4'ü ölç.
-  if (!hizli && (bitti || Date.now() - otoOlcumBasi >= OTO_OLCUM_MS) && otoAdaylar.length < otoTumAdaylar.length) {
+  if (!hizli && (bitti || Date.now() - otoOlcumBasi >= OTO_OLCUM_MS) && otoHavuz().length) {
     otoDalgaBaslat();
     return;
   }
   if (!hizli && !bitti && Date.now() - otoOlcumBasi < OTO_OLCUM_MS) {
     const olculen = sonuc.filter((x) => x.o?.peers).length;
+    const hedef = Math.round(yeterliMbps(otoAdaylar[0]));
     otoYaz(`🤖 En iyi kaynak ölçülüyor… (${otoAdaylar.length}/${otoTumAdaylar.length} aday, ${olculen} tanesi bağlandı, `
-      + `${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
+      + `hedef ${hedef} Mbps, ${Math.ceil((OTO_OLCUM_MS - (Date.now() - otoOlcumBasi)) / 1000)} sn)`);
     return;
   }
   const sirali = sonuc.sort((a, b) => (b.o?.downMbps || 0) - (a.o?.downMbps || 0)
@@ -458,6 +499,7 @@ try {
   render();
   await apiStream(`/api/streams?${new URLSearchParams({ type, id })}`, (line) => {
     if (line.type === 'meta') {
+      sureSn = Number(line.meta.sureSn) || null;
       document.title = `${line.meta.name} · Oda aç`;
       $('#title').textContent = line.meta.name;
       sessionStorage.setItem(`ad:${String(id).split(':')[0]}`, line.meta.name.replace(/\s+S\d+E\d+.*$/, '').trim());

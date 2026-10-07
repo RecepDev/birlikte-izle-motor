@@ -3,6 +3,15 @@
 const CINEMETA = 'https://v3-cinemeta.strem.io';
 const KNOWN_RESOURCES = ['stream', 'subtitles'];
 
+// Cinemeta "runtime": "148 min", "2h 28min", "45 min" -> saniye; anlaşılmazsa null.
+export function sureSnCoz(runtime) {
+  const m = String(runtime || '').toLowerCase();
+  const saat = Number(m.match(/(\d+)\s*h/)?.[1] || 0);
+  const dakika = Number(m.match(/(\d+)\s*m/)?.[1] || 0);
+  const sn = (saat * 60 + dakika) * 60;
+  return sn >= 60 && sn <= 12 * 3600 ? sn : null;
+}
+
 export function addonBase(manifestUrl) {
   return manifestUrl.replace(/\/manifest\.json$/, '');
 }
@@ -128,9 +137,10 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
           const title = video?.name || video?.title;
           name = `${name} ${code}${title ? ` · ${title}` : ''}`;
         }
-        return { name, poster: meta?.poster || null };
+        // Süre (sn): "Oda aç" otomatik seçimi kaynağın ihtiyacını (boyut / süre) bununla hesaplıyor.
+        return { name, poster: meta?.poster || null, sureSn: sureSnCoz(meta?.runtime) };
       } catch {
-        return { name: id, poster: null };
+        return { name: id, poster: null, sureSn: null };
       }
     },
   };

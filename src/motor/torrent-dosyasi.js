@@ -15,6 +15,7 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 
@@ -79,10 +80,13 @@ export function torrentKimligi(b) {
 }
 
 // IPv4 ile: bu bilgisayarda Node'un fetch'i sitenin (Cloudflare) IPv6 adresine bağlanmaya çalışıp
-// takılıyordu. Bir yönlendirme izleniyor (itorrents.org -> .net).
-function indir(url, { zamanAsimi = 4000, yonlendirme = 1 } = {}) {
+// takılıyordu. İki yönlendirme izleniyor (itorrents.org -> .net, bazen http:// adrese).
+// Dönüş: Buffer (dosya), null (sitede yok) ya da HATA (zaman aşımı / bağlantı: site kısıtlıyor olabilir).
+export const HATA = Symbol('hata');
+function indir(url, { zamanAsimi = 3000, yonlendirme = 2 } = {}) {
   return new Promise((resolve) => {
-    const istek = https.get(url, { family: 4, headers: { 'user-agent': 'Mozilla/5.0' }, timeout: zamanAsimi }, (r) => {
+    const modul = url.startsWith('http:') ? http : https;
+    const istek = modul.get(url, { family: 4, headers: { 'user-agent': 'Mozilla/5.0' }, timeout: zamanAsimi }, (r) => {
       if ([301, 302, 307, 308].includes(r.statusCode) && r.headers.location && yonlendirme > 0) {
         r.resume();
         resolve(indir(new URL(r.headers.location, url).href, { zamanAsimi, yonlendirme: yonlendirme - 1 }));
@@ -90,7 +94,7 @@ function indir(url, { zamanAsimi = 4000, yonlendirme = 1 } = {}) {
       }
       if (r.statusCode !== 200) {
         r.resume();
-        resolve(null);
+        resolve(r.statusCode === 404 ? null : HATA);
         return;
       }
       const parcalar = [];
@@ -103,10 +107,10 @@ function indir(url, { zamanAsimi = 4000, yonlendirme = 1 } = {}) {
         } else parcalar.push(p);
       });
       r.on('end', () => resolve(Buffer.concat(parcalar)));
-      r.on('error', () => resolve(null));
+      r.on('error', () => resolve(HATA));
     });
     istek.on('timeout', () => istek.destroy());
-    istek.on('error', () => resolve(null));
+    istek.on('error', () => resolve(HATA));
   });
 }
 
@@ -140,20 +144,41 @@ export function createTorrentDosyasi({ klasor, log, indirImpl = indir, siteler =
     }
   }
 
+  // Site aynı anda çok isteği kısıtlıyor (2026-10-07: 10 istek birden gidince sonrakiler dakikalarca
+  // zaman aşımına düştü): istekler sırayla, tek tek. Üst üste 2 hata olursa site 5 dk sorulmuyor.
+  let sira = Promise.resolve();
+  let arkaArkaHata = 0;
+  let araSonu = 0;
+
+  async function sitedenAl(ih) {
+    if (Date.now() < araSonu) return null;
+    for (const site of siteler) {
+      const b = await indirImpl(site(ih));
+      if (b === HATA) continue; // sıradaki site
+      arkaArkaHata = 0;
+      if (b === null) return null; // sitede yok (öteki site aynı arşiv)
+      if (torrentKimligi(b) === ih) return b;
+    }
+    if (++arkaArkaHata >= 2) {
+      araSonu = Date.now() + 5 * 60_000;
+      arkaArkaHata = 0;
+      log?.warn?.('Film bilgisi sitesi cevap vermiyor; 5 dk sorulmayacak');
+    }
+    return null;
+  }
+
   return {
     // { veri, kaynak: 'disk' | 'site', ms } ya da null (hiçbir yerde yok / site cevap vermedi).
     async bul(ih) {
       const t0 = Date.now();
       const d = diskten(ih);
       if (d) return { veri: d, kaynak: 'disk', ms: Date.now() - t0 };
-      for (const site of siteler) {
-        const b = await indirImpl(site(ih));
-        if (b && torrentKimligi(b) === ih) {
-          sakla(ih, b);
-          return { veri: b, kaynak: 'site', ms: Date.now() - t0 };
-        }
-      }
-      return null;
+      const is = sira.then(() => sitedenAl(ih));
+      sira = is.catch(() => null);
+      const b = await is;
+      if (!b) return null;
+      sakla(ih, b);
+      return { veri: b, kaynak: 'site', ms: Date.now() - t0 };
     },
   };
 }

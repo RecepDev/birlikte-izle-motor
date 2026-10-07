@@ -216,3 +216,25 @@ test('TorrServer: siteden açıksa magnet eklenince film bilgisi dosyası da yü
     ts.durdur();
   }
 });
+
+test('Torrent dosyası: istekler sırayla gider; üst üste 2 hatadan sonra site bir süre sorulmaz', async () => {
+  const { createTorrentDosyasi, HATA } = await import('../src/motor/torrent-dosyasi.js');
+  let ayni = 0;
+  let enCok = 0;
+  let cagri = 0;
+  const td = createTorrentDosyasi({
+    klasor: gecici('torrentler-sira'),
+    log: sessiz,
+    siteler: [(h) => `https://a/${h}`],
+    indirImpl: async () => {
+      cagri++;
+      enCok = Math.max(enCok, ++ayni);
+      await bekle(20);
+      ayni--;
+      return HATA;
+    },
+  });
+  await Promise.all(['1', '2', '3', '4'].map((x) => td.bul(x.repeat(40))));
+  assert.equal(enCok, 1, 'aynı anda tek istek');
+  assert.equal(cagri, 2, 'iki hatadan sonra sorulmuyor');
+});

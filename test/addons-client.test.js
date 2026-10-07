@@ -98,17 +98,26 @@ test('subtitles passes video hash as extra and tags addon name', async () => {
 
 test('meta reads Cinemeta, adds episode label for series', async () => {
   const fetchImpl = fakeFetch({
-    'https://v3-cinemeta.strem.io/meta/movie/tt1.json': { meta: { name: 'Dune', poster: 'https://p/1.jpg' } },
+    'https://v3-cinemeta.strem.io/meta/movie/tt1.json': { meta: { name: 'Dune', poster: 'https://p/1.jpg', runtime: '155 min' } },
     'https://v3-cinemeta.strem.io/meta/series/tt2.json': {
-      meta: { name: 'Dark', poster: null, videos: [{ season: 1, episode: 2, name: 'Lies' }] },
+      meta: { name: 'Dark', poster: null, runtime: '1h 0min', videos: [{ season: 1, episode: 2, name: 'Lies' }] },
     },
   });
   const client = createAddonsClient({ fetchImpl });
-  assert.deepEqual(await client.meta('movie', 'tt1'), { name: 'Dune', poster: 'https://p/1.jpg' });
-  assert.deepEqual(await client.meta('series', 'tt2:1:2'), { name: 'Dark S01E02 · Lies', poster: null });
+  assert.deepEqual(await client.meta('movie', 'tt1'), { name: 'Dune', poster: 'https://p/1.jpg', sureSn: 155 * 60 });
+  assert.deepEqual(await client.meta('series', 'tt2:1:2'), { name: 'Dark S01E02 · Lies', poster: null, sureSn: 3600 });
 });
 
 test('meta falls back to the id on failure', async () => {
   const client = createAddonsClient({ fetchImpl: fakeFetch({}) });
-  assert.deepEqual(await client.meta('movie', 'tt404'), { name: 'tt404', poster: null });
+  assert.deepEqual(await client.meta('movie', 'tt404'), { name: 'tt404', poster: null, sureSn: null });
+});
+
+test('sureSnCoz: Cinemeta süre yazısı', async () => {
+  const { sureSnCoz } = await import('../src/addons-client.js');
+  assert.equal(sureSnCoz('148 min'), 148 * 60);
+  assert.equal(sureSnCoz('2h 28min'), 148 * 60);
+  assert.equal(sureSnCoz(''), null);
+  assert.equal(sureSnCoz(undefined), null);
+  assert.equal(sureSnCoz('N/A'), null);
 });

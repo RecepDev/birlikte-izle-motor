@@ -38,6 +38,14 @@ Son güncelleme: 2026-10-07 · Son commit: f0d63e1 · Masaüstü 0.7.40 · Andro
 - **11470 çakışması düzeltildi:** uygulama sunucudan önce açılınca 11470'i kendi TorrServer'ıyla tutuyordu. Sunucu bunu Stremio sanıp ona düşüyor, panelde "Stremio kullanılıyor" yazıyordu. Artık uygulamanın taklidi "bırakılabilir": sunucu `POST /birak` ile portu alıyor, uygulama sunucunun motoruna geçiyor. Yalıtılmış denemede 0.3 sn.
 - **Kurulumsuz eski motorla çalışıyordu:** `motor-baslat.cjs` önce `masaustu/motor`'u (paketlemede kopyalanan, gitignore'lu, 6 Ekim tarihli) okuyordu. Kurulumsuz'da bugünkü motor iyileştirmeleri yoktu, `durum()` olmadığı için açılış ekranındaki motor rozeti boş kalıyordu, `/birak` da yoktu. Artık önce `src/motor` okunuyor.
 - Panelde addon satırları ve uzun torrent adları kartın dışına taşıyordu (ızgara öğesinin en küçük genişliği). Açılış ekranında bekçi satırı `hidden` iken de görünüyordu. İkisi de düzeltildi, ekran görüntüsüyle doğrulandı.
+- **Otomatik kaynak bulma (Oda aç, `panel/js/new.js`):**
+  - Yavaş eklentiyi beklemiyor: seçilen kalitede 4 aday gelince ölçüm başlıyor. Geç gelen eklentinin kaynakları sonraki dalgalara giriyor.
+  - "Yeterince hızlı" ölçütü videoya göre: ihtiyaç (boyut / Cinemeta süresi) × 1.5, en az 4 Mbps. Süre bilinmiyorsa eskisi gibi 15 Mbps. Meta satırında `sureSn` var (`src/addons-client.js` `sureSnCoz`).
+  - Dalga süresi 20 sn'den 12 sn'ye indi. Yeni dalgada önceki dalganın en iyisi dışındakiler kapanıyor.
+  - Film seçilince önceden açılan aday sayısı 6/10'dan 3/5'e indi (`src/panel-api.js`).
+  - Ölçüm (tek TorrServer): tek tek açılan torrent'te film bilgisi medyan 1.6 sn. 8'i birden açılınca 10 sn, 8'in 2'si 20 sn'de gelmedi.
+  - Yalıtılmış denemede (Matrix 4K, soğuk motor) ölçüm 4.3 yerine ~2.5 sn'de başladı, karar 43 yerine 39 sn'de verildi. O anki 4K adaylar zaten çok kötü bağlanıyordu (çoğu 0 kişi).
+- **Siteden film bilgisi:** itorrents aynı anda çok isteği kısıtlıyor (10 istekten sonra dakikalarca zaman aşımı). Artık istekler sırayla gidiyor, üst üste 2 hatada site 5 dk sorulmuyor. `http://` yönlendirmesi de izleniyor (önceden "Protocol http: not supported" veriyordu).
 - **Düzeltme:** TorrServer'da ayar yazmak bütün torrent'leri kapatıyor (`SetSettings` → `dropAllTorrent`).
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.

@@ -259,14 +259,16 @@ export function createPanelApp({
       // başlıyor: hangisi seçilirse seçilsin oda açılınca beklemeden oynasın. En iyi aday +
       // en çok kaynaklı 3 tek bölüm; seçilmeyenleri oda açılınca temizlik kapatıyor.
       entry.isitildi ||= new Set();
-      // Eldeki listenin ilk 6'sı: önce tercih edilen kalite (yoksa 4K) içinden en çok kaynaklılar, yetmezse
-      // diğerleri. Sonra gelen addon daha iyisini getirirse o da açılıyor (toplam en fazla 10).
+      // Eldeki listenin ilk 3'ü: önce tercih edilen kalite (yoksa 4K) içinden en çok kaynaklılar, yetmezse
+      // diğerleri. Sonra gelen addon daha iyisini getirirse o da açılıyor (toplam en fazla 5). Eskiden 6/10:
+      // aynı anda çok torrent bağlanmayı yavaşlatıyor (ölçüm 2026-10-07: tek tek açılan torrent'te film
+      // bilgisi medyan 1.6 sn, 8'i birden açılınca 10 sn ve 8'in 2'si 20 sn'de gelmedi).
       const hedef = tercih.kalite() || '2160p';
       const k4 = (s) => (s.quality === hedef ? 1 : 0);
       const adaylar = entry.streams.filter((s) => s.kind === 'torrent')
-        .sort((a, b) => k4(b) - k4(a) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0)).slice(0, 6);
+        .sort((a, b) => k4(b) - k4(a) || (Number(b.seeders) || 0) - (Number(a.seeders) || 0)).slice(0, 3);
       for (const s of adaylar) {
-        if (s?.kind !== 'torrent' || entry.isitildi.has(s.infoHash) || entry.isitildi.size >= 10) continue;
+        if (s?.kind !== 'torrent' || entry.isitildi.has(s.infoHash) || entry.isitildi.size >= 5) continue;
         entry.isitildi.add(s.infoHash);
         isit(s);
       }
