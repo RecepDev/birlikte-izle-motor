@@ -38,6 +38,7 @@
   .ayarlar { display:grid; gap:0; border:1px solid #2a2e39; border-radius:12px; overflow:hidden; }
   .ayar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; font-size:14px; }
   .ayar + .ayar { border-top:1px solid #2a2e39; }
+  .ayar[hidden] { display:none; } /* display:flex "hidden"ı eziyordu (bekçi satırı hep görünüyordu) */
   .ayar small { display:block; color:#9096a6; font-size:12px; margin-top:2px; }
   .ayar select, .ayar input[type=number] { background:#0e0f13; color:inherit; border:1px solid #2a2e39; border-radius:6px; padding:6px 8px; font:inherit; }
   .ayar input[type=number] { width:90px; text-align:right; }

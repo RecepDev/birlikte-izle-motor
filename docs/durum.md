@@ -31,11 +31,13 @@ Son güncelleme: 2026-10-07 · Son commit: 6f92097 · Masaüstü 0.7.39 · Andro
   - **Hızlı başlat** (masaüstü, varsayılan açık, açılış ekranından kapatılır): mpv 30 sn biriktirmek yerine hız/ihtiyaç ≥2 → 5 sn, ≥1.5 → 10 sn. Gerçek odada veri 36-61 Mbps gelirken video 25 sn sonra başlıyordu. Canlı oynatmada henüz denenmedi.
 - **Sunucu uygulamanın içinde (Kurulumsuz):**
   - Açılış ekranında "🖥️ Sunucuyu başlat" / "🛠️ Sunucu paneli". Sunucu kapalıysa uygulama `node server.js`'i arka planda açar (uygulama kapansa da çalışır; panelde ⏻ Kapat).
-  - Panel aynı pencerede açılıyor. Sunucu sayfalarında sol altta "← Ana ekran" düğmesi, ayrıca Alt+←.
+  - Panel aynı pencerede açılıyor. Sunucu sayfalarında başlık çubuğunun solunda "← Ana ekran" düğmesi, ayrıca Alt+←.
   - Panelin "Kapat"ı pencereyi değil sunucuyu kapatıyor, uygulama ana ekrana dönüyor.
   - Sunucu kısayolu (`baslat.vbs` → `scripts/panel-ac.mjs` → `--panel`) de aynı pencerede açıyor. Odadayken ayrı pencerede açıyor. Uygulama yoksa Edge.
   - Yalıtılmış Electron denemesiyle doğrulandı. Uygulamadan sunucu başlatma canlıda denenmedi (sunucu açıktı).
 - **11470 çakışması düzeltildi:** uygulama sunucudan önce açılınca 11470'i kendi TorrServer'ıyla tutuyordu. Sunucu bunu Stremio sanıp ona düşüyor, panelde "Stremio kullanılıyor" yazıyordu. Artık uygulamanın taklidi "bırakılabilir": sunucu `POST /birak` ile portu alıyor, uygulama sunucunun motoruna geçiyor. Yalıtılmış denemede 0.3 sn.
+- **Kurulumsuz eski motorla çalışıyordu:** `motor-baslat.cjs` önce `masaustu/motor`'u (paketlemede kopyalanan, gitignore'lu, 6 Ekim tarihli) okuyordu. Kurulumsuz'da bugünkü motor iyileştirmeleri yoktu, `durum()` olmadığı için açılış ekranındaki motor rozeti boş kalıyordu, `/birak` da yoktu. Artık önce `src/motor` okunuyor.
+- Panelde addon satırları ve uzun torrent adları kartın dışına taşıyordu (ızgara öğesinin en küçük genişliği). Açılış ekranında bekçi satırı `hidden` iken de görünüyordu. İkisi de düzeltildi, ekran görüntüsüyle doğrulandı.
 - **Düzeltme:** TorrServer'da ayar yazmak bütün torrent'leri kapatıyor (`SetSettings` → `dropAllTorrent`).
   - Ayar artık yalnız değiştiyse yazılıyor.
   - İzleme sırasında istenen yükleme sınırı torrent kalmayınca uygulanıyor; önceden oynatma kopuyordu.

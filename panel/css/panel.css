@@ -142,3 +142,7 @@ body.oto-mod .oto-bar { font-size: 17px; padding: 22px 18px; justify-content: ce
 .motor-liste .name small { white-space: normal; }
 select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 #motor-ayar .field.inline { grid-template-columns: auto 1fr; }
+/* Liste satırı ızgara öğesi: en küçük genişliği adresin tamamı kadar olup kartın dışına taşıyordu
+   (↑ ↓ Sil kesiliyordu). Uzun torrent adları (infohash) da satırı aşıyordu. */
+.addons li { min-width: 0; }
+.addons .name { overflow-wrap: anywhere; }

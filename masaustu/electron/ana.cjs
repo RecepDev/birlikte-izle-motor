@@ -674,7 +674,8 @@ ipcMain.handle('kabuk:video-onbellek', async () => {
 // stremio: Stremio · aciliyor · yok (11470'te kimse yok, motor da açılamadı).
 ipcMain.handle('kabuk:motor', async () => {
   const bekci = ayarOku().motorBekci === true;
-  if (motor) return { tur: 'kendi', bekci, ...(await motor.durum().catch(() => ({}))) };
+  // Ayrıntı alınamazsa da rozet boş kalmasın (eski motor dosyasında durum() yoktu, hata fırlatıyordu).
+  if (motor) return { tur: 'kendi', bekci, ...(await Promise.resolve().then(() => motor.durum()).catch(() => ({}))) };
   if (motorAciliyor) return { tur: 'aciliyor', bekci };
   const v = await yerelMotor();
   if (!v) return { tur: 'yok', bekci, hata: motorHatasi };

@@ -11,8 +11,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
+// Depodan çalışırken (Kurulumsuz) önce src/motor: masaustu/motor paketlemede kopyalanan eski bir
+// kopya olabiliyor (2026-10-07: Kurulumsuz bir günlük eski motorla çalışıyordu, durum()/birak yoktu).
 function motorKlasoru() {
-  const adaylar = [path.join(__dirname, '..', 'motor'), path.join(__dirname, '..', '..', 'src', 'motor')];
+  const adaylar = [path.join(__dirname, '..', '..', 'src', 'motor'), path.join(__dirname, '..', 'motor')];
   return adaylar.find((k) => fs.existsSync(path.join(k, 'torrserver.js'))) || null;
 }
 

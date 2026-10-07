@@ -188,9 +188,9 @@ function ortuKur() {
   bak();
 }
 
-// Sunucu sayfaları (panel, film ara, oda aç) uygulamanın penceresinde: sol altta "← Ana ekran"
-// (Alt+← de geri gider). Panelin "Kapat" düğmesi pencereyi kapatıyordu (Edge penceresi içindi):
-// burada uygulama kapanmasın, ana ekrana dönülsün.
+// Sunucu sayfaları (panel, film ara, oda aç) uygulamanın penceresinde: başlık çubuğunun solunda
+// "← Ana ekran" (Alt+← de geri gider). Panelin "Kapat" düğmesi pencereyi kapatıyordu (Edge penceresi
+// içindi): burada uygulama kapanmasın, ana ekrana dönülsün.
 function sunucuSayfasi() {
   if (location.origin !== 'http://127.0.0.1:7301') return;
   const anaEkran = () => ipcRenderer.send('kabuk:baslangic');
@@ -198,12 +198,22 @@ function sunucuSayfasi() {
   const b = document.createElement('button');
   b.type = 'button';
   b.textContent = '← Ana ekran';
-  b.title = "Uygulamanın açılış ekranına dön (Alt+← bir önceki sayfa)";
-  b.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:2147483647;padding:8px 14px;border-radius:999px;'
-    + 'border:1px solid #2a2e39;background:#232633;color:#e8e9ee;font:500 13px system-ui,sans-serif;cursor:pointer;'
-    + 'box-shadow:0 4px 16px rgba(0,0,0,.45)';
+  b.title = 'Uygulamanın açılış ekranına dön (Alt+← bir önceki sayfa)';
   b.addEventListener('click', anaEkran);
-  document.body.appendChild(b);
+  const ortak = 'padding:7px 14px;border-radius:999px;border:1px solid #2a2e39;background:#232633;color:#e8e9ee;'
+    + 'font:500 13px system-ui,sans-serif;cursor:pointer;white-space:nowrap;';
+  // Başlık çubuğu (header.head: solda başlık, sağda düğmeler) varsa solundaki başlıkla yan yana.
+  const bas = document.querySelector('header.head');
+  if (bas?.firstElementChild) {
+    b.style.cssText = ortak;
+    const sol = document.createElement('div');
+    sol.style.cssText = 'display:flex;align-items:center;gap:14px;min-width:0';
+    bas.insertBefore(sol, bas.firstElementChild);
+    sol.append(b, sol.nextElementSibling);
+  } else {
+    b.style.cssText = `${ortak}position:fixed;left:12px;top:12px;z-index:2147483647;box-shadow:0 4px 16px rgba(0,0,0,.45)`;
+    document.body.appendChild(b);
+  }
   window.addEventListener('keydown', (e) => {
     if (!e.altKey || e.key !== 'ArrowLeft') return;
     e.preventDefault();
