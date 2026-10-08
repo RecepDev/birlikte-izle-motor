@@ -1,6 +1,6 @@
 # Durum — Motor kopyası
 
-Son güncelleme: 2026-10-07 · Son commit: ca368bc · Masaüstü 0.7.47 · Android 0.33.0 (versionCode 33)
+Son güncelleme: 2026-10-08 · Son commit: ca368bc · Masaüstü 0.7.48 · Android 0.33.0 (versionCode 33)
 
 ## Biten
 - Motor seçimi: TorrServer (ölçüm `deneme/motor/olc2.mjs`; ayrıntı `docs/stremiosuz-plan.md`).
@@ -8,6 +8,7 @@ Son güncelleme: 2026-10-07 · Son commit: ca368bc · Masaüstü 0.7.47 · Andro
 - Disk önbelleği + elle boyut: oda ayarlarında (host), masaüstü açılış ekranında, telefon ana ekranında, sunucu panelinin Motor kartında. 0 = kapalı.
 - **Önbellek yeri** (2026-10-07): panelde Motor kartı (sunucunun önbelleği; `POST /api/motor/onbellek {gb, klasor}`, `data/onbellek.json` `klasor`) ve masaüstü açılış ekranı (kendi motoru; ayar `videoOnbellekKlasor`). Seçilen klasörün içinde `BirlikteIzle-onbellek` açılıyor; boşaltma/taşıma yalnız torrent kimliği adlı klasörlere dokunuyor. Aynı diskte filmler taşınıyor, başka diske taşınamayanlar siliniyor. Seçilen disk yoksa varsayılan yer. Masaüstünde mpv'nin disk tamponu da oraya (`BirlikteIzle-oynatici`). Uygulamada yer yalnız klasör seçme penceresinden gelen yol olabiliyor.
 - **Sarmada dosyanın kalanını indirme düzeltildi** (2026-10-07, Matrix KHHQVZ ve Revolutions 6DXPP8: veri 60 Mbps gelirken video 00:00'da). Sebep: masaüstü ara katmanı (`stremio-vekil.cjs`) motorun `connection: keep-alive` başlığını mpv'ye aktarıyordu. mpv 0.41'in FFmpeg'i bu yüzden sarmada yeni bağlantı açmak yerine cevabın kalanını indirip atıyordu ("Soft-seeking ... by draining 6685576289 byte"): MKV dizinine (Cues, dosya sonunda) gidip gelmek için 6.7 GB sırayla iniyordu. Bağlantı başlıkları artık aktarılmıyor (`stremio-parca.js` de). Yalıtılmış denemede: düzeltmeden önce 150 sn'de 53. dakikaya gidemedi; sonra 12 sn'de oynadı. **Aynı hata asıl Birlikte İzle'nin (stremio-birlikte-izle) vekilinde de var**, orada düzeltilmedi.
+- **Tam ekran düğmesi bazen çalışmıyordu** (2026-10-08, masaüstü 0.7.48). Videonun üstündeki kontrol çubuğu ayrı bir pencerede (ayna); tıklama sayfaya IPC ile `el.click()` olarak gidiyordu, kullanıcı hareketi sayılmıyordu. Tam ekrandan çıktıktan kısa süre sonra (~5 sn) hareketsiz `requestFullscreen` "Permissions check failed" ile reddediliyor, `room.js` hatayı yuttuğu için basış sessizce boşa gidiyordu. Artık aynadan gelen tıklamalar ana süreçten `executeJavaScript(..., userGesture=true)` ile uygulanıyor (`ana.cjs` 'kontrol:olay', `onyukleme-kabuk.cjs` `__kabukKontrolOlay`). Gerçek kabuk + test odasıyla denendi: düzeltmeden önce hızlı iki basıştan sonra 3 basış boşa gitti; sonra hepsi çalıştı. F tuşu ve çift tık zaten gerçek girişti, etkilenmiyordu.
 - Oda "Hız ve kaynak" kutusu satır satır: Görüntü (4K 3840×1600; çözünürlük genişlikten de: sinema oranlı 4K "1440p" görünüyordu), İndirme (hız · video ~X Mbps istiyor · yetiyor/sınırda/yetmiyor), Hazır (sn; masaüstünde "atlanan yere gidiliyor"/"dolduruluyor"), Kaynak (bağlı kişi · eklentiye göre paylaşan), Dosya (boyut · süre).
 - Panel motor durumunu gösteriyor; "uygulamayı aç" kurulu uygulama yoksa kaynak klasörden açıyor.
 - **Panelde Motor kartı:**

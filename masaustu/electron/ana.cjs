@@ -991,7 +991,14 @@ app.whenReady().then(() => {
   ipcMain.on('kabuk:kontrol-html', (_e, veri) => {
     if (kontrolPenceresi && !kontrolPenceresi.isDestroyed()) kontrolPenceresi.webContents.send('kontrol:html', veri);
   });
-  ipcMain.on('kontrol:olay', (_e, olay) => ana?.webContents.send('kabuk:kontrol-olay', olay));
+  ipcMain.on('kontrol:olay', (_e, olay) => {
+    if (!ana || ana.isDestroyed()) return;
+    // Tıklama kullanıcı hareketi sayılsın (userGesture): tam ekran düğmesine çıkar çıkmaz yeniden
+    // basınca istek "Permissions check failed" ile reddediliyor, düğme birkaç basış çalışmıyordu.
+    if (olay?.tur === 'click') {
+      ana.webContents.executeJavaScript(`window.__kabukKontrolOlay?.(${JSON.stringify(olay)})`, true).catch(() => {});
+    } else ana.webContents.send('kabuk:kontrol-olay', olay);
+  });
 
   // Canlı yayın sesi: yalnız mpv'nin sesi (tüm bilgisayar sesi değil). Yardımcı PCM veriyor,
   // sayfaya parça parça gidiyor; sayfa bunu yayının ses izine çeviriyor (bkz. onyukleme-kabuk.cjs).

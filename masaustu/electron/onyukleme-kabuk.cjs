@@ -159,7 +159,12 @@ function kontrolAynasi() {
   ipcRenderer.on('kabuk:kontrol-yenile', () => { sonHtml = ''; yolla(); });
 
   const bul = (yol) => yol.reduce((el, i) => el?.children[i], kok);
-  ipcRenderer.on('kabuk:kontrol-olay', (_e, o) => {
+  // Tıklamalar ana süreçten executeJavaScript(..., userGesture) ile geliyor (bkz. ana.cjs
+  // 'kontrol:olay'): IPC'den gelen el.click() kullanıcı hareketi sayılmıyordu, tam ekrandan çıkar
+  // çıkmaz yeniden açma "Permissions check failed" ile reddediliyordu.
+  window.__kabukKontrolOlay = (o) => kontrolOlayi(o);
+  ipcRenderer.on('kabuk:kontrol-olay', (_e, o) => kontrolOlayi(o));
+  function kontrolOlayi(o) {
     if (o.tur === 'leave') {
       document.getElementById('seek')?.dispatchEvent(new PointerEvent('pointerleave'));
       return;
@@ -178,7 +183,7 @@ function kontrolAynasi() {
     } else if (o.tur === 'wheel') {
       el.dispatchEvent(new WheelEvent('wheel', { ...konum, deltaY: o.deltaY, cancelable: true }));
     }
-  });
+  }
 }
 
 // mpv yerel pencerede çizdiği için HTML katmanı onun üstüne gelemiyor: bir diyalog
