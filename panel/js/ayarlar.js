@@ -32,7 +32,7 @@ $('#afis-sifirla').addEventListener('click', () => {
 });
 if (!kabuk?.surum) {
   $('#uygulama-yok').hidden = false;
-  for (const id of ['#bolum-genel', '#bolum-oynatma', '#bolum-motor', '#bolum-bildirim', '#satir-guncelle']) $(id).hidden = true;
+  for (const id of ['#bolum-genel', '#bolum-oynatma', '#bolum-motor', '#bolum-bildirim', '#satir-guncelle', '#satir-guncelle-link']) $(id).hidden = true;
 }
 
 // Bildirim ayarları (masaüstü): her anahtar değişince hemen kaydolur (ana süreç ayar.json'a yazar).
@@ -196,11 +196,13 @@ if (kabuk?.surum) {
   });
 
   // Güncelleme
+  const guncelleLink = $('#guncelle-link');
+  if (guncelleLink) guncelleLink.value = kabuk.guncelleLinki?.() || '';
   $('#guncelle').addEventListener('click', async (e) => {
     const b = e.target;
     b.disabled = true;
     b.textContent = 'Denetleniyor…';
-    await kabuk.guncelle();
+    await kabuk.guncelle($('#guncelle-link')?.value ?? '');
     b.disabled = false;
     b.textContent = 'Güncellemeleri denetle';
   });

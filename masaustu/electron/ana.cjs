@@ -1180,10 +1180,29 @@ ipcMain.on('kabuk:kalite-yaz', (_e, q) => {
   if (['2160p', '1080p', '720p'].includes(q)) ayarYaz({ kalite: q });
 });
 // "Güncellemeleri denetle" düğmesi: yerel sunucu (host'ta) ya da bulunan sunucu.
-ipcMain.handle('kabuk:guncelle', async () => {
-  const liste = await sunucular();
-  let kok = null;
-  for (const s of liste) {
+// Ayarlardaki "güncelleme linki": kişinin kendi sunucusu. Tam oda linki ya da alan adı da olsa kökü (origin) alınır.
+function guncellemeKoku(link) {
+  const duz = String(link || '').trim();
+  if (!duz) return '';
+  try {
+    return new URL(/^https?:\/\//i.test(duz) ? duz : `https://${duz}`).origin;
+  } catch {
+    return null;
+  }
+}
+ipcMain.on('kabuk:guncelle-linki', (e) => { e.returnValue = ayarOku().guncellemeLinki || ''; });
+ipcMain.handle('kabuk:guncelle', async (_e, link) => {
+  const girilen = guncellemeKoku(link);
+  if (link !== undefined) ayarYaz({ guncellemeLinki: girilen || '' });
+  if (girilen === null) {
+    const { dialog } = require('electron');
+    dialog.showMessageBox(ana, { type: 'warning', title: 'Güncelleme', message: 'Link geçersiz.', detail: 'Örnek: https://sunucum.trycloudflare.com' });
+    return;
+  }
+  // Link girildiyse yalnız oraya bakılır (otomatik sunucu aramasına düşülmez); boşsa eskisi gibi.
+  const liste = girilen ? [girilen] : await sunucular();
+  let kok = girilen || null;
+  for (const s of girilen ? [] : liste) {
     try {
       const yanit = await fetch(`${s}/indir/surum.json`, { signal: AbortSignal.timeout(4000) });
       if (yanit.ok) { kok = s; break; }

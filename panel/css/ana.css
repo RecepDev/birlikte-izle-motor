@@ -40,6 +40,7 @@ body.ekran { background: radial-gradient(1200px 700px at 30% -10%, #1d1b3f, #121
 .ayar-satir { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 11px 0; border-top: 1px solid #23244a; }
 .ayar-satir small { display: block; color: var(--muted); margin-top: 2px; font-size: 12px; max-width: 460px; }
 .ayar-satir input[type=number] { width: 110px; }
+.ayar-satir input[type=text] { width: min(320px, 46%); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; color: inherit; font: inherit; }
 .ayar-satir select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; color: inherit; font: inherit; }
 .ayar-satir input[type=checkbox] { width: 20px; height: 20px; }
 .ayar-rozet { padding: 3px 10px; border-radius: 999px; background: #2a2e39; font-size: 12px; }
