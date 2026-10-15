@@ -1180,6 +1180,56 @@ ipcMain.on('kabuk:kalite-yaz', (_e, q) => {
   if (['2160p', '1080p', '720p'].includes(q)) ayarYaz({ kalite: q });
 });
 // "Güncellemeleri denetle" düğmesi: yerel sunucu (host'ta) ya da bulunan sunucu.
+// GitHub'daki herkese açık sürüm deposu: son sürüm etiketi (v0.7.63) bu uygulamanınkinden yeniyse kurulum dosyası indirilir,
+// çalıştırılır (kurulum eskisinin üstüne yazar). true: işlem yapıldı (kullanıcıya soruldu), false: yeni sürüm yok / ulaşılamadı.
+const SURUM_DEPOSU = 'RecepDev/birlikte-izle-motor-surum';
+async function githubdanGuncelle() {
+  const { dialog } = require('electron');
+  let son;
+  try {
+    const yanit = await fetch(`https://api.github.com/repos/${SURUM_DEPOSU}/releases/latest`, { signal: AbortSignal.timeout(8000), headers: { Accept: 'application/vnd.github+json' } });
+    if (!yanit.ok) throw new Error(`HTTP ${yanit.status}`);
+    son = await yanit.json();
+  } catch (err) {
+    gunluk(`github denetimi başarısız: ${err.message}`);
+    return false;
+  }
+  const surum = String(son.tag_name || '').replace(/^v/i, '');
+  const dosya = (son.assets || []).find((a) => /\.exe$/i.test(a.name));
+  gunluk(`github denetimi: son ${surum}, bu ${kabuk.surum}`);
+  if (!surum || !dosya || !kabuk.dahaYeni(surum, kabuk.surum)) return false;
+  const secim = await dialog.showMessageBox(ana, {
+    type: 'info', title: 'Güncelleme', message: `Yeni sürüm var: ${surum} (şu an ${kabuk.surum}).`,
+    detail: `Kurulum dosyası (${Math.round((dosya.size || 0) / 1048576)} MB) indirilip çalıştırılacak, uygulama kapanıp yeni sürümle açılır.`,
+    buttons: ['İndir ve kur', 'Sonra'], defaultId: 0, cancelId: 1,
+  });
+  if (secim.response !== 0) return true;
+  try {
+    const yanit = await fetch(dosya.browser_download_url);
+    if (!yanit.ok) throw new Error(`HTTP ${yanit.status}`);
+    const hedef = path.join(app.getPath('temp'), dosya.name);
+    const toplam = Number(yanit.headers.get('content-length')) || dosya.size || 0;
+    const akis = fs.createWriteStream(hedef);
+    let inen = 0;
+    for await (const parca of yanit.body) {
+      akis.write(parca);
+      inen += parca.length;
+      if (toplam) ana?.setProgressBar(Math.min(1, inen / toplam));
+    }
+    await new Promise((coz, red) => { akis.end((e) => (e ? red(e) : coz())); });
+    ana?.setProgressBar(-1);
+    if (toplam && inen < toplam) throw new Error('indirme yarım kaldı');
+    gunluk(`kurulum indirildi: ${hedef}`);
+    require('node:child_process').spawn(hedef, [], { detached: true, stdio: 'ignore' }).unref();
+    kapatmaOnayli = true;
+    app.exit(0);
+  } catch (err) {
+    ana?.setProgressBar(-1);
+    gunluk(`kurulum indirilemedi: ${err.message}`);
+    dialog.showMessageBox(ana, { type: 'error', title: 'Güncelleme', message: 'Kurulum dosyası indirilemedi.', detail: err.message });
+  }
+  return true;
+}
 // Ayarlardaki "güncelleme linki": kişinin kendi sunucusu. Tam oda linki ya da alan adı da olsa kökü (origin) alınır.
 function guncellemeKoku(link) {
   const duz = String(link || '').trim();
@@ -1199,6 +1249,8 @@ ipcMain.handle('kabuk:guncelle', async (_e, link) => {
     dialog.showMessageBox(ana, { type: 'warning', title: 'Güncelleme', message: 'Link geçersiz.', detail: 'Örnek: https://sunucum.trycloudflare.com' });
     return;
   }
+  // Link yoksa önce GitHub'daki sürüm deposuna bakılır; yeni kurulum varsa o yol (sunucu aramasına geçilmez).
+  if (!girilen && await githubdanGuncelle()) return;
   // Link girildiyse yalnız oraya bakılır (otomatik sunucu aramasına düşülmez); boşsa eskisi gibi.
   const liste = girilen ? [girilen] : await sunucular();
   let kok = girilen || null;
