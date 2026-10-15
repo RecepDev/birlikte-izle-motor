@@ -5,7 +5,13 @@
 //
 // Not: ana süreç CommonJS olmalı - Electron 33'te ESM ana süreç 'electron' modülünü
 // çözemiyor. ESM modüllerimiz dinamik import() ile alınır.
-const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, screen, Tray, Menu, dialog, Notification, nativeTheme } = require('electron');
+// Koyu tema: Windows'un pencere çerçevesi/kenar çizgisi açık (beyaz) kalmasın, sistem menüleri de koyu olsun.
+nativeTheme.themeSource = 'dark';
+// Windows görev çubuğu simgesi: uygulamaya özgü kimlik. Kimlik verilmezse (özellikle kurulumsuz çalışmada) bütün
+// electron.exe uygulamaları aynı kimliği paylaşıyor ve görev çubuğunda başka bir Electron uygulamasının (ör. canlı
+// Birlikte İzle) eski simgesi/kısayolu altında toplanabiliyor. Kurulumun appId'siyle aynı: sabitlenmiş kısayol eşleşir.
+if (process.platform === 'win32') app.setAppUserModelId('xyz.birlikteizle.motor.masaustu');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -65,7 +71,7 @@ async function kareGoster() {
 }
 function videoGorunurluk() {
   if (!videoPenceresi || videoPenceresi.isDestroyed() || !ana) return;
-  if (!mpv || !odadaMi || ortuluMu || yukleniyor || ana.isMinimized()) {
+  if (!mpv || !odadaMi || ortuluMu || yukleniyor || ana.isMinimized() || !ana.isVisible()) {
     videoPenceresi.hide();
     kontrolGorunurluk();
     return;
@@ -77,7 +83,235 @@ function videoGorunurluk() {
 // Kontrol çubuğu penceresi: video görünürken ve çubuk açıkken (fare hareket edince), çubuğun
 // sayfadaki yerinde. Video gizliyken sayfanın kendi çubuğu görünüyor, bu pencere gizli.
 let kontrolPenceresi = null;
+// ---- Tepsi (Windows bildirim alanı) + indirme sürerken kapatma uyarısı -----------------------------------------------
+let tepsi = null;
+let kapatmaOnayli = false;
+let kapatmaSorulacak = false;
+
+function tepsiyeAl() {
+  if (!ana || ana.isDestroyed()) return;
+  tepsiKur();
+  ana.hide();
+  videoGorunurluk();
+}
+function tepsidenAc() {
+  if (!ana || ana.isDestroyed()) return;
+  if (ana.isMinimized()) ana.restore();
+  ana.show();
+  ana.focus();
+  videoGorunurluk();
+}
+function tamamenCik() {
+  kapatmaOnayli = true;
+  app.quit();
+}
+function tepsiKur() {
+  if (tepsi) return;
+  tepsi = new Tray(path.join(__dirname, 'simge.ico'));
+  tepsi.setToolTip('Birlikte İzle');
+  tepsi.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Uygulamayı aç', click: tepsidenAc },
+    { type: 'separator' },
+    { label: 'Tamamen çık (indirmeler ve sunucu kapanır)', click: tamamenCik },
+  ]));
+  tepsi.on('click', tepsidenAc);
+}
+// Sunucudaki indirme kayıtları; sunucuya ulaşılamazsa boş liste.
+async function indirmeKayitlari() {
+  try {
+    const sayfa = await (await fetch(`${PANEL_URL}ana`, { signal: AbortSignal.timeout(1500) })).text();
+    const anahtar = sayfa.match(/name="panel-key" content="([^"]+)"/)?.[1];
+    if (!anahtar) return [];
+    const d = await (await fetch(`${PANEL_URL}api/indirme`, { headers: { 'x-panel-key': anahtar }, signal: AbortSignal.timeout(1500) })).json();
+    return d.kayitlar || [];
+  } catch {
+    return [];
+  }
+}
+// Sunucuda sürmekte olan (iniyor/sırada) indirme sayısı; sunucuya ulaşılamazsa 0.
+async function suregelenIndirme() {
+  return (await indirmeKayitlari()).filter((k) => k.durum === 'iniyor' || k.durum === 'kuyrukta').length;
+}
+
+// Disk dolduğu için indirmeler durursa HER YERDEN (hangi sayfada olursa olsun, tepsideyken de) uyarı: sistem bildirimi (sesli),
+// görev çubuğu yanıp söner, bip. Aynı hata için bir kez; yeni bir kayıt daha düşerse ya da 10 dk sonra hâlâ doluysa yeniden.
+const diskUyarilan = new Map(); // kayıt kimliği -> uyarı zamanı
+let sonDiskUyarisi = 0;
+// Bildirim ayarları (Ayarlar > Bildirimler, ayar.json "bildirim"). Eski davranışlar açık, yeni olan (indirme bitti) kapalı gelir.
+const BILDIRIM_VARSAYILAN = { diskBildirim: true, diskSes: true, diskPencere: true, diskSerit: true, indirmeBitti: false, indirmeBittiSes: false };
+function bildirimAyari() {
+  const k = ayarOku().bildirim;
+  return { ...BILDIRIM_VARSAYILAN, ...(k && typeof k === 'object' ? k : {}) };
+}
+ipcMain.on('kabuk:bildirim', (e) => { e.returnValue = bildirimAyari(); });
+ipcMain.on('kabuk:bildirim-yaz', (_e, kismi) => {
+  const yeni = { ...bildirimAyari() };
+  for (const ad of Object.keys(BILDIRIM_VARSAYILAN)) if (kismi && typeof kismi[ad] === 'boolean') yeni[ad] = kismi[ad];
+  ayarYaz({ bildirim: yeni });
+});
+
+// İndirme bitti bildirimi (varsayılan kapalı): durumu iniyor/sırada iken "bitti"ye dönen kayıtlar için bir kez.
+const onceDurum = new Map(); // kayıt kimliği -> son görülen durum
+let ilkYoklama = true;
+function bitenleriBildir(kayitlar) {
+  const ayar = bildirimAyari();
+  const bitenler = [];
+  for (const k of kayitlar) {
+    const once = onceDurum.get(k.id);
+    if (!ilkYoklama && (once === 'iniyor' || once === 'kuyrukta') && k.durum === 'bitti') bitenler.push(k);
+    onceDurum.set(k.id, k.durum);
+  }
+  ilkYoklama = false;
+  if (!bitenler.length || !ayar.indirmeBitti) return;
+  const ad = bitenler.length === 1 ? bitenler[0].ad : `${bitenler.length} indirme`;
+  try {
+    new Notification({ title: 'İndirme tamamlandı', body: bitenler.length === 1 ? `${ad} indirildi.` : `${ad} tamamlandı.`, silent: !ayar.indirmeBittiSes })
+      .on('click', tepsidenAc).show();
+  } catch { /* bildirim desteklenmiyor */ }
+}
+
+async function diskUyarisiDenetle() {
+  if (!app.isReady() || !ana || ana.isDestroyed()) return;
+  const kayitlar = await indirmeKayitlari();
+  bitenleriBildir(kayitlar);
+  const dusen = kayitlar.filter((k) => k.durum === 'hata' && /ENOSPC|no space left|yetersiz disk/i.test(String(k.hata || '')));
+  if (!dusen.length) { diskUyarilan.clear(); return; }
+  const simdi = Date.now();
+  // Yalnız bir kez: disk dolu durumu başladığında. Aynı dönem içinde başka indirme düşse ya da zaman geçse tekrar uyarılmaz;
+  // yer açılıp hata kalkınca (liste boşalınca) sıfırlanır, sonraki dolma yeniden uyarır.
+  const ilkUyari = diskUyarilan.size === 0;
+  for (const k of dusen) if (!diskUyarilan.has(k.id)) diskUyarilan.set(k.id, simdi);
+  if (!ilkUyari) return;
+  sonDiskUyarisi = simdi;
+  gunluk(`disk dolu uyarısı: ${dusen.length} indirme durdu`);
+  const ayar = bildirimAyari();
+  if (ayar.diskBildirim) {
+    try {
+      new Notification({
+        title: 'Disk dolu: indirmeler durdu',
+        body: `${dusen.length} indirme disk alanı bittiği için durdu. Yer açıp İndirilenler'den "Hepsini sürdür"e bas.`,
+        silent: !ayar.diskSes, urgency: 'critical',
+      }).on('click', tepsidenAc).show();
+    } catch { /* bildirim desteklenmiyorsa bip yine çalar */ }
+    ana.flashFrame(true);
+  }
+  if (ayar.diskSes) shell.beep(); // tek bip
+  if (ayar.diskPencere) diskPenceresi(dusen.length);
+}
+
+// Uygulama temalı "disk dolu" penceresi (bildirim + bip'in yanında, hangi sayfada olursan ol ekranda görünsün).
+// Ana pencere tepsideyse ya da küçültülmüşse de görünür (bağımsız, her zaman üstte, görev çubuğunda yer almaz).
+let diskPenceresiAcik = null;
+function diskPenceresi(sayi) {
+  if (diskPenceresiAcik && !diskPenceresiAcik.isDestroyed()) return;
+  const w = new BrowserWindow({
+    width: 500, height: 250, frame: false, resizable: false, minimizable: false, maximizable: false, transparent: true, backgroundColor: '#00000000',
+    alwaysOnTop: true, skipTaskbar: true, show: false, hasShadow: true,
+    webPreferences: { preload: path.join(__dirname, 'disk-onyukleme.cjs'), contextIsolation: false, sandbox: false },
+  });
+  diskPenceresiAcik = w;
+  const dinle = (e, v) => {
+    if (e.sender !== w.webContents) return;
+    if (v === 'git') {
+      tepsidenAc();
+      // Odadaysan oynatmayı bölme: yalnız pencereyi öne getir. Değilse İndirilenler'e git.
+      if (!odadaMi) ana?.loadURL(`${PANEL_URL}indirilenler`).catch(() => {});
+    }
+    if (!w.isDestroyed()) w.destroy();
+  };
+  ipcMain.on('disk:secim', dinle);
+  w.on('closed', () => { ipcMain.removeListener('disk:secim', dinle); diskPenceresiAcik = null; });
+  w.once('ready-to-show', () => w.showInactive());
+  w.loadFile(path.join(__dirname, 'disk.html'), { query: { sayi: String(sayi) } });
+}
+setInterval(() => { diskUyarisiDenetle().catch(() => {}); }, 5000).unref?.();
+// Uygulama temalı kapatma uyarısı (Windows'un MessageBox'ı uyarı sesi çalıyordu ve temaya uymuyordu).
+// 'tepsi' | 'kapat' | 'vazgec' döner; pencere kapatılırsa ya da Esc ile 'vazgec'.
+function kapatmaPenceresi(sayi) {
+  return new Promise((coz) => {
+    const w = new BrowserWindow({
+      parent: ana, modal: true, width: 500, height: 232, frame: false, resizable: false, minimizable: false, maximizable: false,
+      transparent: true, backgroundColor: '#00000000', hasShadow: true, skipTaskbar: true, show: false,
+      webPreferences: { preload: path.join(__dirname, 'kapat-onyukleme.cjs'), contextIsolation: false, sandbox: false },
+    });
+    let bitti = false;
+    const bitir = (v) => {
+      if (bitti) return;
+      bitti = true;
+      ipcMain.removeListener('kapat:secim', dinle);
+      if (!w.isDestroyed()) w.destroy();
+      coz(v);
+    };
+    const dinle = (e, v) => { if (e.sender === w.webContents) bitir(['tepsi', 'kapat'].includes(v) ? v : 'vazgec'); };
+    ipcMain.on('kapat:secim', dinle);
+    w.on('closed', () => bitir('vazgec'));
+    w.once('ready-to-show', () => w.show());
+    w.loadFile(path.join(__dirname, 'kapat.html'), { query: { sayi: String(sayi) } });
+  });
+}
+async function kapatmaSor() {
+  if (kapatmaSorulacak) return;
+  kapatmaSorulacak = true;
+  try {
+    const sayi = await suregelenIndirme();
+    if (!sayi) { kapatmaOnayli = true; ana?.close(); return; }
+    const secim = await kapatmaPenceresi(sayi);
+    if (secim === 'tepsi') tepsiyeAl();
+    else if (secim === 'kapat') { kapatmaOnayli = true; ana?.close(); }
+  } finally {
+    kapatmaSorulacak = false;
+  }
+}
+ipcMain.on('kabuk:tepsi', tepsiyeAl);
+
+// Pencere içi tam ekranda kontroller gizliyken sağ üstteki pencere düğmelerinin simgeleri de gizlenir (sayfa bildirir).
+// Düğmeler yerel olduğundan fare üstlerindeyken sayfaya olay gitmez; bu yüzden imleç o köşeye gelince biz geri açıyoruz.
+let ustDugmelerGizli = false;
+let ustDugmeSimgeGorunur = true;
+function ustDugmeGuncelle() {
+  if (!ana || ana.isDestroyed() || typeof ana.setTitleBarOverlay !== 'function') return;
+  let gorunur = !ustDugmelerGizli;
+  if (!gorunur) {
+    const p = screen.getCursorScreenPoint();
+    const b = ana.getContentBounds();
+    gorunur = p.x >= b.x + b.width - 160 && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + 44;
+  }
+  if (gorunur === ustDugmeSimgeGorunur) return;
+  ustDugmeSimgeGorunur = gorunur;
+  try { ana.setTitleBarOverlay({ color: '#00000000', symbolColor: gorunur ? '#ffffff' : '#00000000', height: 40 }); } catch {}
+}
+ipcMain.on('kabuk:ust-dugmeler-gizli', (_e, gizli) => { ustDugmelerGizli = Boolean(gizli); ustDugmeGuncelle(); });
+setInterval(() => { if (ustDugmelerGizli) ustDugmeGuncelle(); }, 120).unref?.();
+
+// Pencere içi tam ekranın geri düğmesi: video görünürken, sayfadaki düğmenin yerinde saydam ayrı pencere.
+let geriPenceresi = null;
+function geriGorunurluk() {
+  if (!geriPenceresi || geriPenceresi.isDestroyed() || !ana) return;
+  const g = sonAlan?.geri;
+  if (!g || !videoPenceresi?.isVisible()) {
+    if (geriPenceresi.isVisible()) geriPenceresi.hide();
+    return;
+  }
+  const b = ana.getContentBounds();
+  const yeni = { x: Math.round(b.x + g.x), y: Math.round(b.y + g.y), width: Math.max(1, Math.round(g.width)), height: Math.max(1, Math.round(g.height)) };
+  const simdiki = geriPenceresi.getBounds();
+  if (simdiki.x !== yeni.x || simdiki.y !== yeni.y || simdiki.width !== yeni.width || simdiki.height !== yeni.height) geriPenceresi.setBounds(yeni);
+  if (!geriPenceresi.isVisible()) geriPenceresi.showInactive();
+}
+// Geri düğmesi odak almayan saydam ayrı pencerede: Chromium'un :hover'ı bu pencerede bazen güncellenmiyor (fare zaten
+// düğmenin üstündeyken pencere yeniden gösterilince ya da oynatma sırasında). Hover'ı imleç konumundan biz hesaplayıp yolluyoruz.
+let geriUstunde = false;
+setInterval(() => {
+  if (!geriPenceresi || geriPenceresi.isDestroyed() || !geriPenceresi.isVisible()) { geriUstunde = false; return; }
+  const p = screen.getCursorScreenPoint();
+  const b = geriPenceresi.getBounds();
+  const icinde = p.x >= b.x && p.x < b.x + b.width && p.y >= b.y && p.y < b.y + b.height;
+  if (icinde === geriUstunde) return;
+  geriUstunde = icinde;
+  geriPenceresi.webContents.send('geri:hover', icinde);
+}, 60).unref?.();
 function kontrolGorunurluk() {
+  geriGorunurluk();
   if (!kontrolPenceresi || kontrolPenceresi.isDestroyed() || !ana) return;
   const k = sonAlan?.kontrol;
   if (!k || !videoPenceresi?.isVisible()) {
@@ -86,11 +320,35 @@ function kontrolGorunurluk() {
   }
   const b = ana.getContentBounds();
   const yeni = { x: Math.round(b.x + k.x), y: Math.round(b.y + k.y), width: Math.max(1, Math.round(k.width)), height: Math.max(1, Math.round(k.height)) };
+  kenardanIceri(yeni, b);
   const simdiki = kontrolPenceresi.getBounds();
   if (simdiki.x !== yeni.x || simdiki.y !== yeni.y || simdiki.width !== yeni.width || simdiki.height !== yeni.height) {
     kontrolPenceresi.setBounds(yeni);
   }
+  // Aynanın alt köşeleri oynatıcıyla aynı yuvarlaklıkta (aksi hâlde dikdörtgen pencere sayfanın yuvarlak köşelerini örter).
+  const r = Math.max(Number(sonAlan?.yaricap) || 0, pencereAltYaricapi(b.y + b.height, yeni.y + yeni.height));
+  const bicim = `${yeni.width}x${yeni.height}x${r}`;
+  if (bicim !== sonKontrolBicim && !boyutDegisiyor()) {
+    sonKontrolBicim = bicim;
+    try {
+      kontrolPenceresi.setShape(r > 0 ? altKoseleriYuvarla(yeni.width, yeni.height, r) : [{ x: 0, y: 0, width: yeni.width, height: yeni.height }]);
+      gunluk(`kontrol biçimi ${bicim}`);
+    } catch (err) {
+      gunluk(`kontrol biçimi verilemedi: ${err.message}`);
+    }
+  }
   if (!kontrolPenceresi.isVisible()) kontrolPenceresi.showInactive();
+}
+let sonKontrolBicim = '';
+function altKoseleriYuvarla(w, h, r) {
+  r = Math.min(r, Math.floor(h / 2));
+  const sonuc = [{ x: 0, y: 0, width: w, height: Math.max(0, h - r) }];
+  for (let y = h - r; y < h; y++) {
+    const dy = y + 0.5 - (h - r);
+    const girinti = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
+    if (w - 2 * girinti > 0) sonuc.push({ x: girinti, y, width: w - 2 * girinti, height: 1 });
+  }
+  return sonuc;
 }
 // Seçili altyazının geçici dosyası. loadfile her yeni dosyada altyazıyı düşürdüğü
 // için 'file-loaded' olayında yeniden eklenir.
@@ -99,12 +357,17 @@ let altyaziSayaci = 0;
 // Yazdığımız tüm geçici altyazı dosyaları. mpv dosyayı açık tuttuğu için silme,
 // eski parça mpv'den çıkarıldıktan sonra yapılır; kalanlar kapanışta temizlenir.
 const altyaziDosyalari = [];
+// İkinci altyazı (alt satır, çeviri): mpv'nin kendi "ikincil altyazı" desteğiyle
+// çiziliyor. Sayfa hizalanmış dosyayı veriyor, gecikmesi ayrı (secondary-sub-delay).
+let altyazi2Dosyasi = null;
 
 function eskiAltyazilariSil() {
   while (altyaziDosyalari.length > 1) fs.rm(altyaziDosyalari.shift(), { force: true }, () => {});
 }
 // Sayfa stili mpv açılmadan önce yolluyor; son değeri saklayıp mpv hazır olunca uyguluyoruz.
 let sonStil = null;
+// İkinci altyazı açıkken asıl altyazının yukarı kaydırılacağı pay (sub-pos birimi).
+const IKINCI_SATIR_BOSLUK = 6;
 
 // Sayfanın görüntü oranı modları -> mpv. "Doldur" kırparak ekranı kaplar (panscan),
 // "Uzat" oranı bozar (keepaspect kapalı), sabit oranlar görüntüyü o şekle zorlar.
@@ -259,11 +522,21 @@ async function altyaziKonumUygula() {
   // iniyor, dışarı taşıp kaybolmuyor.
   const bosluk = pos > 100 ? Math.max(0, Math.round(34 - ((pos - 100) / 100) * 720)) : 34;
   pos = Math.round(Math.max(0, Math.min(100, pos)) * 10) / 10;
-  const anahtar = `${pos}|${bosluk}`;
+  // İkinci altyazı açıkken asıl altyazı yukarı çıkıyor, çeviri onun altına (dibe) geliyor.
+  // mpv ikincil altyazıyı varsayılan olarak ekranın üstüne koyuyor; istenen alt alta.
+  const ikinciVar = Boolean(altyazi2Dosyasi);
+  const anaPos = ikinciVar ? Math.max(0, pos - IKINCI_SATIR_BOSLUK) : pos;
+  const anahtar = `${anaPos}|${bosluk}|${ikinciVar ? pos : ''}`;
   if (anahtar === sonSubPos) return;
   sonSubPos = anahtar;
   mpv?.set('sub-margin-y', bosluk).catch(() => {});
-  mpv?.set('sub-pos', pos).catch((e) => console.error('altyazi-stil sub-pos', e.message));
+  mpv?.set('sub-pos', anaPos).catch((e) => console.error('altyazi-stil sub-pos', e.message));
+  if (ikinciVar) {
+    mpv?.set('secondary-sub-pos', pos).catch((e) => console.error('altyazi-stil secondary-sub-pos', e.message));
+    // Çeviri satırı asıl satırdan küçük: hangisinin asıl olduğu belli olsun (sayfadaki
+    // .sub-line-2 ile aynı oran).
+    mpv?.set('secondary-sub-scale', Math.round((Number(sonStil?.size) || 1) * 0.78 * 100) / 100).catch(() => {});
+  }
 }
 
 async function altyaziEkle() {
@@ -278,11 +551,50 @@ async function altyaziEkle() {
   await mpv.set('sub-visibility', true).catch((e) => console.error('sub-visibility:', e.message));
 }
 
+// İkinci altyazıyı ekler ve mpv'nin ikincil kanalına atar. Ana altyazıyla aynı
+// yöntem: her seçimde eski parça çıkarılmazsa mpv'de birikiyor.
+async function altyazi2Ekle() {
+  if (!mpv) return;
+  const eski = await mpv.get('secondary-sid').catch(() => null);
+  if (!altyazi2Dosyasi) {
+    if (Number.isFinite(eski)) {
+      await mpv.set('secondary-sid', 'no').catch(() => {});
+      await mpv.command('sub-remove', eski).catch(() => {});
+    }
+    altyaziKonumUygula();
+    return;
+  }
+  // 'auto' seçtirmiyor: parçayı ekleyip ikincil kanala elle atıyoruz, birinci yerinde kalsın.
+  await mpv.command('sub-add', altyazi2Dosyasi, 'auto').catch((e) => console.error('sub-add (ikinci):', e.message));
+  const parcalar = await mpv.get('track-list').catch(() => null);
+  const dis = (Array.isArray(parcalar) ? parcalar : [])
+    .filter((t) => t.type === 'sub' && t.external)
+    .map((t) => t.id);
+  const yeni = dis.length ? Math.max(...dis) : null;
+  if (yeni === null) return;
+  await mpv.set('secondary-sid', yeni).catch((e) => console.error('secondary-sid:', e.message));
+  if (Number.isFinite(eski) && eski !== yeni) await mpv.command('sub-remove', eski).catch(() => {});
+  await mpv.set('secondary-sub-visibility', true).catch(() => {});
+  eskiAltyazilariSil();
+  altyaziKonumUygula();
+}
+
 const hwndOf = (win) => {
   const buf = win.getNativeWindowHandle();
   return buf.length === 8 ? Number(buf.readBigUInt64LE()) : buf.readUInt32LE();
 };
 
+// Ayrı yerel pencereler (mpv, kontrol çubuğu) içerik alanının tam kenarına değince, ölçek yuvarlaması yüzünden bir piksel
+// taşıp uygulama penceresinin ince çerçeve çizgisini örtüyordu. Normal (büyütülmemiş) pencerede kenara değen yanlar 1 px içeri alınır.
+function kenardanIceri(k, b) {
+  if (!ana || ana.isMaximized() || ana.isFullScreen()) return k;
+  if (k.x <= b.x) { k.x += 1; k.width -= 1; }
+  if (k.x + k.width >= b.x + b.width) k.width -= 1;
+  if (k.y + k.height >= b.y + b.height) k.height -= 1;
+  k.width = Math.max(1, k.width);
+  k.height = Math.max(1, k.height);
+  return k;
+}
 function hizala(rect) {
   if (!videoPenceresi || videoPenceresi.isDestroyed() || !ana) return;
   if (ana.isMinimized()) return;
@@ -302,6 +614,7 @@ function hizala(rect) {
     width: Math.max(1, Math.round(sag - sol)),
     height: Math.max(1, Math.round(alt - ust)),
   };
+  kenardanIceri(yeni, b);
   // Aynı sınırları tekrar yazmak pencereyi boşuna taşıyor ve oynatmayı takıltıyor.
   const simdiki = videoPenceresi.getBounds();
   if (!(simdiki.x === yeni.x && simdiki.y === yeni.y && simdiki.width === yeni.width && simdiki.height === yeni.height)) {
@@ -309,22 +622,91 @@ function hizala(rect) {
   }
   const delikler = (rect.delikler || (rect.delik ? [rect.delik] : []))
     .map((d) => ({ ...d, x: b.x + d.x - yeni.x, y: b.y + d.y - yeni.y }));
-  delikAc(yeni, delikler);
+  if (boyutDegisiyor()) {
+    // Pencere boyutu sürüklenirken her karede yüzlerce parçalı biçim hesaplamak ve uygulamak (SetWindowRgn) kasıyordu:
+    // tek dikdörtgen veriyoruz, asıl biçim sürükleme durunca (gecikmeli hizala) uygulanır.
+    sonBicim = 'hizli';
+    try { videoPenceresi.setShape([{ x: 0, y: 0, width: yeni.width, height: yeni.height }]); } catch {}
+  } else {
+    delikAc(yeni, delikler, Number(rect.yaricap) || 0, pencereAltYaricapi(b.y + b.height, yeni.y + yeni.height));
+  }
   kontrolGorunurluk();
 }
+// Pencere boyutu/konumu son 150 ms'de değiştiyse sürükleme sürüyor sayılır.
+let sonBoyutOlayi = 0;
+let sonHizalama = 0;
+let sonOlcumIstegi = 0;
+const boyutDegisiyor = () => Date.now() - sonBoyutOlayi < 150;
 
 // HTML (kontrol kutuları, tam ekranda kontrol çubuğu) mpv'nin üstünde görünsün diye mpv
 // penceresinin o kısımlarını kesiyoruz (pencere biçimi). Video küçülmüyor; altyazının
 // yeri değişmiyor. Birden çok delik: pencere yatay şeritlere bölünüp her şeritte
 // deliklerin dışında kalan aralıklar bırakılıyor.
 let sonBicim = '';
-function delikAc(boyut, delikler) {
+// Uygulama penceresinin kendi köşeleri (Windows 11'de 8 px yuvarlak). Oynatıcı pencere içi tam ekranda alt kenara kadar iniyor;
+// mpv'nin ve kontrol çubuğunun ayrı yerel pencereleri dikdörtgen olduğundan, alt kenara değiyorlarsa onların da alt köşeleri
+// aynı yarıçapla kesilir (aksi hâlde pencerenin yuvarlak köşesinin üstünde keskin köşeler görünür). Büyütülmüş/tam ekranda köşe yok.
+const PENCERE_KOSE_YARICAPI = 8;
+function pencereAltYaricapi(pencereAlt, altKenar) {
+  if (!ana || ana.isDestroyed() || ana.isMaximized() || ana.isFullScreen() || ana.isMinimized()) return 0;
+  return Math.abs(pencereAlt - altKenar) <= 1 ? PENCERE_KOSE_YARICAPI : 0;
+}
+// Parçalardan oluşan biçimin alt köşelerini keser (ustKoseleriYuvarla'nın aynası).
+function altKoseleriKes(parcalar, w, h, r) {
+  const sonuc = [];
+  for (const p of parcalar) {
+    if (p.y + p.height <= h - r) { sonuc.push(p); continue; }
+    const baslangic = Math.max(p.y, h - r);
+    if (baslangic > p.y) sonuc.push({ x: p.x, y: p.y, width: p.width, height: baslangic - p.y });
+    for (let y = baslangic; y < p.y + p.height; y++) {
+      const dy = (y + 0.5) - (h - r);
+      const girinti = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
+      const sol = Math.max(p.x, girinti);
+      const sag = Math.min(p.x + p.width, w - girinti);
+      if (sag > sol) sonuc.push({ x: sol, y, width: sag - sol, height: 1 });
+    }
+  }
+  return sonuc;
+}
+
+// Oynatıcının üst köşeleri sayfada yuvarlak (border-radius) ama mpv'nin yerel penceresi dikdörtgen, köşeler keskin
+// kalıyordu. Pencere biçimi yalnız dikdörtgenlerden oluştuğu için köşe, 1 piksellik yatay şeritlerle yaklaşıklanıyor.
+function ustKoseleriYuvarla(parcalar, w, r) {
+  const sonuc = [];
+  for (const p of parcalar) {
+    if (p.y >= r) { sonuc.push(p); continue; }
+    const bitis = Math.min(p.y + p.height, r);
+    for (let y = p.y; y < bitis; y++) {
+      const dy = r - (y + 0.5);
+      const girinti = Math.ceil(r - Math.sqrt(Math.max(0, r * r - dy * dy)));
+      const sol = Math.max(p.x, girinti);
+      const sag = Math.min(p.x + p.width, w - girinti);
+      if (sag > sol) sonuc.push({ x: sol, y, width: sag - sol, height: 1 });
+    }
+    if (p.y + p.height > r) sonuc.push({ x: p.x, y: r, width: p.width, height: p.y + p.height - r });
+  }
+  return sonuc;
+}
+function delikAc(boyut, delikler, yaricap = 0, altYaricap = 0) {
   const w = boyut.width;
   const h = boyut.height;
-  const kutular = (delikler || []).map((d) => ({
-    sol: Math.max(0, Math.round(d.x)), ust: Math.max(0, Math.round(d.y)),
-    sag: Math.min(w, Math.round(d.x + d.width)), alt: Math.min(h, Math.round(d.y + d.height)),
-  })).filter((k) => k.sag > k.sol && k.alt > k.ust);
+  const kutular = [];
+  for (const d of delikler || []) {
+    const sol = Math.max(0, Math.round(d.x));
+    const ust = Math.max(0, Math.round(d.y));
+    const sag = Math.min(w, Math.round(d.x + d.width));
+    const alt = Math.min(h, Math.round(d.y + d.height));
+    if (!(sag > sol && alt > ust)) continue;
+    // Yuvarlak köşeli delik (sağ tık menüsü): köşe satırları 1 pikselik, içeri girintili kutulara bölünüyor.
+    const r = Math.min(Number(d.r) || 0, Math.floor((sag - sol) / 2), Math.floor((alt - ust) / 2));
+    if (r <= 0) { kutular.push({ sol, ust, sag, alt }); continue; }
+    kutular.push({ sol, ust: ust + r, sag, alt: alt - r });
+    for (let i = 0; i < r; i++) {
+      const g = Math.ceil(r - Math.sqrt(Math.max(0, r * r - (r - i - 0.5) ** 2)));
+      kutular.push({ sol: sol + g, ust: ust + i, sag: sag - g, alt: ust + i + 1 });
+      kutular.push({ sol: sol + g, ust: alt - i - 1, sag: sag - g, alt: alt - i });
+    }
+  }
   const parcalar = [];
   const ysler = [...new Set([0, h, ...kutular.flatMap((k) => [k.ust, k.alt])])].sort((p, q) => p - q);
   for (let i = 0; i < ysler.length - 1; i++) {
@@ -338,11 +720,13 @@ function delikAc(boyut, delikler) {
     }
     if (x < w) parcalar.push({ x, y: y0, width: w - x, height: y1 - y0 });
   }
-  const anahtar = JSON.stringify(parcalar);
+  let sekil = yaricap > 0 ? ustKoseleriYuvarla(parcalar, w, yaricap) : parcalar;
+  if (altYaricap > 0) sekil = altKoseleriKes(sekil, w, h, altYaricap);
+  const anahtar = JSON.stringify(sekil);
   if (anahtar === sonBicim) return;
   sonBicim = anahtar;
   try {
-    videoPenceresi.setShape(parcalar);
+    videoPenceresi.setShape(sekil);
   } catch (e) {
     console.error('setShape:', e.message);
   }
@@ -488,8 +872,8 @@ async function mpvBaslat() {
       // Açılışta ve her sarmadan sonra da önce 30 sn hazırla, sonra oynat: sarınca hemen
       // oynayıp saniyede bir takılmasın (bu arada oda o kişiyi bekliyor).
       '--cache-pause-initial=yes',
-      // Ayar bilgileri (oran, ses…) görüntünün alt ortasında.
-      '--osd-align-x=center', '--osd-align-y=bottom', '--osd-margin-y=48', '--osd-font-size=34',
+      // Ayar bilgileri (oran, ses…) görüntünün ÜST ortasında: altta kontrol çubuğu (ayrı saydam pencere) bunları örtüyordu.
+      '--osd-align-x=center', '--osd-align-y=top', '--osd-margin-y=36', '--osd-font-size=34',
     ],
   });
   try {
@@ -515,6 +899,8 @@ async function mpvBaslat() {
   tamponSn = 30;
   hizOrnekleri.length = 0;
   mpv.on('file-loaded', altyaziEkle);
+  // loadfile dış altyazıları düşürüyor: ikinci satır da yeniden eklenir.
+  mpv.on('file-loaded', altyazi2Ekle);
   // Pencere/oran değişince videonun yeri değişiyor: altyazı konumu yeniden hesaplanır.
   sonSubPos = null;
   mpv.observe(71, 'osd-dimensions').catch(() => {});
@@ -692,6 +1078,13 @@ ipcMain.on('kabuk:internet-mbps-yaz', (_e, mbps) => {
   ayarYaz({ internetMbps: n >= 1 && n <= 10_000 ? Math.round(n * 10) / 10 : null });
 });
 // Hızlı başlat (bkz. tamponAyarla): ana ekrandan açılıp kapatılıyor, varsayılan açık.
+// Uygulama açılınca sunucu kendiliğinden başlasın (varsayılan açık; Ayarlar'dan kapatılır).
+ipcMain.on('kabuk:sunucu-oto', (e) => { e.returnValue = ayarOku().sunucuOtoAc !== false; });
+ipcMain.on('kabuk:sunucu-oto-yaz', (_e, acik) => ayarYaz({ sunucuOtoAc: acik !== false }));
+ipcMain.on('kabuk:zoom', (e) => { e.returnValue = Number(ayarOku().zoom) || 1; });
+ipcMain.on('kabuk:zoom-yaz', (_e, z) => { if (z >= 0.5 && z <= 2.5) ayarYaz({ zoom: z }); });
+ipcMain.on('kabuk:oto-tam-ekran', (e) => { e.returnValue = ayarOku().otoTamEkran !== false; });
+ipcMain.on('kabuk:oto-tam-ekran-yaz', (_e, acik) => ayarYaz({ otoTamEkran: acik !== false }));
 ipcMain.on('kabuk:hizli-baslat', (e) => { e.returnValue = hizliBaslat(); });
 ipcMain.on('kabuk:hizli-baslat-yaz', (_e, acik) => ayarYaz({ hizliBaslat: acik === true }));
 // Otomatik kaynak seçimi (Oda aç): ana ekrandan açılıp kapatılıyor, varsayılan açık.
@@ -835,6 +1228,7 @@ else {
   app.on('second-instance', (_e, arglar) => {
     if (process.env.KABUK_DEBUG) console.log('ikinci-ornek', JSON.stringify(arglar));
     // Sunucu kısayolu (baslat.vbs) paneli istiyor: oynatıcı penceresine dokunma (odada olabilir).
+    tepsidenAc(); // tepsiye küçültülmüşse pencereyi geri getir
     if (arglar.includes('--panel')) return panelAc();
     odayaGit(semadanUrl(arglar));
   });
@@ -845,7 +1239,12 @@ else {
 // düğmesi var (onyukleme-kabuk.cjs). Odadayken (video oynarken) ayrı pencerede açılır, oda bozulmasın.
 // Kurulumsuz uygulamada sunucunun kodu da yanında (depo kökü): sunucu kapalıysa düğme onu başlatır.
 const PANEL_URL = 'http://127.0.0.1:7301/';
-const SUNUCU_KOK = path.join(__dirname, '..', '..');
+// Kurulu uygulamada sunucu kodu resources/sunucu-paket'te (masaustu/sunucu-hazirla.cjs); Node yerine uygulamanın
+// kendi exe'si ELECTRON_RUN_AS_NODE ile çalışır, veri kullanıcı klasörüne (güncellemede silinmesin) yazılır.
+const PAKET_KOK = path.join(process.resourcesPath || '', 'sunucu-paket');
+const SUNUCU_PAKETLI = fs.existsSync(path.join(PAKET_KOK, 'server.js'));
+const SUNUCU_KOK = SUNUCU_PAKETLI ? PAKET_KOK : path.join(__dirname, '..', '..');
+const SUNUCU_VERI = SUNUCU_PAKETLI ? path.join(app.getPath('userData'), 'sunucu-veri') : path.join(SUNUCU_KOK, 'data');
 const sunucuKoduVar = () => fs.existsSync(path.join(SUNUCU_KOK, 'server.js')) && fs.existsSync(path.join(SUNUCU_KOK, 'node_modules'));
 async function sunucuCalisiyor() {
   try {
@@ -860,11 +1259,12 @@ async function sunucuBaslat() {
   if (await sunucuCalisiyor()) return { ok: true };
   if (!sunucuKoduVar()) return { error: 'kodYok' };
   try {
-    fs.mkdirSync(path.join(SUNUCU_KOK, 'data', 'logs'), { recursive: true });
-    const cikti = fs.openSync(path.join(SUNUCU_KOK, 'data', 'logs', 'stdout.log'), 'a');
+    fs.mkdirSync(path.join(SUNUCU_VERI, 'logs'), { recursive: true });
+    const cikti = fs.openSync(path.join(SUNUCU_VERI, 'logs', 'stdout.log'), 'a');
     const ortam = { ...process.env };
     delete ortam.ELECTRON_RUN_AS_NODE;
-    require('node:child_process').spawn('node', ['server.js'], {
+    if (SUNUCU_PAKETLI) { ortam.ELECTRON_RUN_AS_NODE = '1'; ortam.DATA_DIR = SUNUCU_VERI; }
+    require('node:child_process').spawn(SUNUCU_PAKETLI ? process.execPath : 'node', ['server.js'], {
       cwd: SUNUCU_KOK, detached: true, stdio: ['ignore', cikti, cikti], windowsHide: true, env: ortam,
     }).unref();
     fs.closeSync(cikti);
@@ -887,7 +1287,10 @@ function panelAc() {
 ipcMain.on('kabuk:sunucu-kodu', (e) => { e.returnValue = sunucuKoduVar(); });
 ipcMain.handle('kabuk:sunucu-ac', async () => {
   const r = await sunucuBaslat();
-  if (r.ok) panelAc();
+  if (r.ok) {
+    if (odadaMi) panelAc();
+    else odayaGit((await anaSayfaVar()) ? `${PANEL_URL}ana` : PANEL_URL); // Stremio tarzı ana sayfa (eski sunucuda panel)
+  }
   return r;
 });
 let panelPencere = null;
@@ -934,6 +1337,46 @@ let motorAciliyor = true;
 let motorHatasi = null;
 app.on('will-quit', () => motor?.durdur());
 
+// Uygulama kapanınca sunucu da kapansın (ayar "sunucuyu uygulamayla aç/kapat" açıkken, varsayılan).
+// Sunucunun kendi /api/shutdown'ı çağrılıyor (tünel, TorrServer, indirmeler düzgün kapanır); anahtar
+// panel sayfasından okunuyor. En çok 4 sn beklenir, sonra uygulama yine kapanır.
+async function sunucuKapat() {
+  const http = require('node:http');
+  const istek = (yol, yontem, basliklar = {}) => new Promise((coz) => {
+    const r = http.request({ host: '127.0.0.1', port: 7301, path: yol, method: yontem, headers: basliklar, timeout: 2500 }, (cevap) => {
+      let govde = '';
+      cevap.on('data', (p) => { govde += p; });
+      cevap.on('end', () => coz({ kod: cevap.statusCode, govde }));
+    });
+    r.on('error', () => coz(null));
+    r.on('timeout', () => { r.destroy(); coz(null); });
+    r.end();
+  });
+  const sayfa = await istek('/ana', 'GET'); // '/' artık /sunucu'ya yönleniyor (gövde boş, anahtar bulunamaz)
+  const anahtar = sayfa?.govde.match(/name="panel-key" content="([^"]+)"/)?.[1];
+  if (!anahtar) return;
+  await istek('/api/shutdown', 'POST', { 'x-panel-key': anahtar, origin: 'http://127.0.0.1:7301' });
+  gunluk('sunucu: uygulama kapanırken kapatıldı');
+}
+// Kapanış iki yoldan tetikleniyor (pencere 'closed' + 'window-all-closed'): ikinci app.quit() sunucu
+// kapanmadan uygulamayı bitirmesin diye, iş bitene kadar her before-quit engelleniyor.
+let sunucuKapanis = 'yok'; // yok -> suruyor -> bitti
+let cikiyor = false; // gerçekten çıkılıyor: pencere 'close' olayı artık engellenmez, tepsi simgesi kaldırılır
+app.on('before-quit', (e) => {
+  cikiyor = true;
+  tepsi?.destroy();
+  tepsi = null;
+  // İkinci örnek (tek örnek kilidini alamayan) hemen kapanıyor: o kapanış sunucuyu kapatmamalı.
+  if (!tekOrnek || sunucuKapanis === 'bitti' || ayarOku().sunucuOtoAc === false) return;
+  e.preventDefault();
+  if (sunucuKapanis === 'suruyor') return;
+  sunucuKapanis = 'suruyor';
+  sunucuCalisiyor()
+    .then((acik) => (acik ? Promise.race([sunucuKapat(), new Promise((r) => setTimeout(r, 4000))]) : null))
+    .catch(() => {})
+    .finally(() => { sunucuKapanis = 'bitti'; app.quit(); });
+});
+
 app.whenReady().then(() => {
   if (!tekOrnek) return; // pencere açmadan kapanıyoruz
   motoruHazirla({
@@ -959,7 +1402,12 @@ app.whenReady().then(() => {
   // Sunucu kısayolu "--panel" ile açtıysa pencere doğrudan panelle açılır ("← Ana ekran" ile dönülür).
   const panelIle = process.argv.includes('--panel');
   ana = new BrowserWindow({
-    width: 1280, height: 800, backgroundColor: '#0e0f13', title: 'Birlikte İzle',
+    width: 1280, height: 800, backgroundColor: '#12122a', title: 'Birlikte İzle',
+    icon: path.join(__dirname, 'simge.ico'),
+    // Windows'un mavi/gri başlık çubuğu yerine uygulamanın rengi: çubuk sayfanın parçası (sürükleme alanı sayfa
+    // stilinde, bkz. onyukleme-kabuk.cjs barStili), kapat/küçült/büyüt düğmeleri sağ üstte temaya boyalı.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#00000000', symbolColor: '#ffffff', height: 40 }, // saydam: afişli sayfalarda (detay) düz bir blok görünmesin
     webPreferences: {
       preload: path.join(__dirname, 'onyukleme-kabuk.cjs'),
       // Köprü, sayfadaki <video> öğesinin özelliklerini değiştirmek zorunda. Yalıtılmış
@@ -985,6 +1433,15 @@ app.whenReady().then(() => {
     parent: videoPenceresi, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
     resizable: false, movable: false, minimizable: false, maximizable: false, skipTaskbar: true, focusable: false, show: false,
     webPreferences: { preload: path.join(__dirname, 'kontrol-onyukleme.cjs'), contextIsolation: false, sandbox: false },
+  });
+  geriPenceresi = new BrowserWindow({
+    parent: videoPenceresi, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
+    resizable: false, movable: false, minimizable: false, maximizable: false, skipTaskbar: true, focusable: false, show: false,
+    webPreferences: { preload: path.join(__dirname, 'geri-onyukleme.cjs'), contextIsolation: false, sandbox: false },
+  });
+  geriPenceresi.loadFile(path.join(__dirname, 'geri.html'));
+  ipcMain.on('geri:tikla', () => {
+    ana?.webContents.executeJavaScript("document.getElementById('genis-geri')?.click()", true).catch(() => {});
   });
   kontrolPenceresi.loadFile(path.join(__dirname, 'kontrol.html'));
   kontrolPenceresi.webContents.on('did-finish-load', () => ana?.webContents.send('kabuk:kontrol-yenile'));
@@ -1049,7 +1506,9 @@ app.whenReady().then(() => {
 
   ipcMain.on('kabuk:video-alani', async (_e, rect) => {
     sonAlan = rect;
-    hizala(rect);
+    const simdi = Date.now();
+    // Boyut sürüklenirken ölçümler kare kare geliyor; yerleştirme ~60/sn'ye iner, son ölçüm gecikmeli hizala ile uygulanır.
+    if (!boyutDegisiyor() || simdi - sonHizalama >= 16) { sonHizalama = simdi; hizala(rect); }
     if (!mpv) await mpvBaslat();
     // Simge durumundayken göstermeye çalışmak görev çubuğunu yakıp söndürüyordu;
     // karar videoGorunurluk'te, gösterirken de odak çalınmıyor (showInactive).
@@ -1121,6 +1580,22 @@ app.whenReady().then(() => {
     altyaziDosyasi = null;
     mpv?.set('sub-visibility', false).catch(() => {});
   });
+  ipcMain.on('mpv:altyazi2', async (_e, metin) => {
+    const yeni = path.join(os.tmpdir(), `birlikte-izle-altyazi2-${process.pid}-${++altyaziSayaci}.vtt`);
+    try {
+      fs.writeFileSync(yeni, metin, 'utf8');
+    } catch { return; }
+    altyazi2Dosyasi = yeni;
+    altyaziDosyalari.push(yeni);
+    await altyazi2Ekle();
+  });
+  ipcMain.on('mpv:altyazi2-kapat', async () => {
+    altyazi2Dosyasi = null;
+    sonSubPos = null; // asıl altyazı eski yerine dönsün
+    await altyazi2Ekle();
+  });
+  ipcMain.on('mpv:altyazi2-gecikme', (_e, saniye) =>
+    mpv?.set('secondary-sub-delay', Number(saniye) || 0).catch(() => {}));
   ipcMain.on('mpv:bilgi', (_e, metin) => mpv?.command('show-text', metin, 1500).catch(() => {}));
   ipcMain.on('mpv:sohbet', (_e, kim, metin) => sohbetEkle(kim, metin));
   ipcMain.on('mpv:gomulu-sec', async (_e, id) => {
@@ -1193,10 +1668,17 @@ app.whenReady().then(() => {
     ana.on(olay, () => {
       // Pencere taşınınca sayfadaki ölçü değişmiyor, dolayısıyla yeni ölçüm gelmiyor:
       // mpv penceresini son bilinen alanla hemen kendimiz yerine koyuyoruz.
-      if (sonAlan) hizala(sonAlan);
-      ana.webContents.send('kabuk:olcum-iste');
+      const simdi = Date.now();
+      sonBoyutOlayi = simdi;
+      // Windows sürüklerken saniyede yüzlerce olay veriyor: pencere yerleştirmeyi ~60/sn, sayfaya ölçüm isteğini ~20/sn ile sınırlıyoruz.
+      // Taşırken (move) sınır yok: ayrı pencereler sahibini zaten bir tık geriden izliyor, her olayda yerine koyuyoruz.
+      if (sonAlan && (olay === 'move' || simdi - sonHizalama >= 16)) { sonHizalama = simdi; hizala(sonAlan); }
+      if (simdi - sonOlcumIstegi >= 50) { sonOlcumIstegi = simdi; ana.webContents.send('kabuk:olcum-iste'); }
       clearTimeout(gecikmeli);
       gecikmeli = setTimeout(() => {
+        sonBoyutOlayi = 0;
+        sonBicim = '';
+        sonKontrolBicim = '';
         if (sonAlan) hizala(sonAlan);
         ana?.webContents.send('kabuk:olcum-iste');
       }, 150);
@@ -1206,6 +1688,13 @@ app.whenReady().then(() => {
   ana.on('minimize', () => videoPenceresi?.hide());
   ana.on('restore', videoGorunurluk);
 
+  // Pencerenin X'ine basılınca: indirme sürüyorsa uyar (tepsiye küçült / kapat / vazgeç); yoksa normal kapanır
+  // (uygulama ve sunucu birlikte kapanır).
+  ana.on('close', (e) => {
+    if (cikiyor || kapatmaOnayli) return;
+    e.preventDefault();
+    kapatmaSor();
+  });
   ana.on('closed', () => {
     clearInterval(durumZamanlayici);
     for (const dosya of altyaziDosyalari.splice(0)) fs.rmSync(dosya, { force: true });
@@ -1243,8 +1732,33 @@ app.whenReady().then(() => {
   if (semaUrl) ana.loadURL(semaUrl);
   else if (ODA_URL) ana.loadURL(ODA_URL);
   else if (panelIle) ana.loadURL(PANEL_URL);
-  else ana.loadFile(path.join(__dirname, 'baslangic.html'));
+  else anaEkranAc({ acilis: true });
 });
+
+// Ana ekran: sunucu bu bilgisayarda çalışıyorsa Stremio tarzı ana sayfa (PANEL_URL/ana), yoksa açılış
+// ekranı (misafir ya da sunucusuz kullanım). Uygulama ilk açılırken ayar açıksa ve sunucu kodu varsa
+// sunucu da kendiliğinden başlatılır; o sırada açılış ekranı "sunucu açılıyor" der.
+async function anaEkranAc({ acilis = false } = {}) {
+  if (!ana || ana.isDestroyed()) return;
+  // Eski açılış ekranı yok: sunucu çalışıyorsa ana sayfa, değilse bekleme ekranı (hata olursa aynı ekranda
+  // mesaj + "Yeniden dene").
+  const hata = (kod) => ana.loadFile(path.join(__dirname, 'acilis.html'), { query: { hata: kod } });
+  if (await sunucuCalisiyor()) return (await anaSayfaVar()) ? ana.loadURL(`${PANEL_URL}ana`) : hata('eski');
+  ana.loadFile(path.join(__dirname, 'acilis.html'));
+  const r = await sunucuBaslat();
+  if (ana.isDestroyed()) return;
+  if (r.ok) ana.loadURL(`${PANEL_URL}ana`);
+  else hata(r.error === 'kodYok' ? 'kodYok' : 'acilmadi');
+}
+ipcMain.on('kabuk:cik', () => app.quit());
+ipcMain.on('kabuk:yeniden-dene', () => anaEkranAc({ acilis: true }));
+async function anaSayfaVar() {
+  try {
+    return (await fetch(`${PANEL_URL}ana`, { signal: AbortSignal.timeout(2000) })).ok;
+  } catch {
+    return false;
+  }
+}
 
 ipcMain.on('kabuk:odaya-git', (_e, url) => ana?.loadURL(url));
 // Oda kapandı: oynatmayı durdur, açılış ekranına dön (açık odalar listesi tazelenir).
@@ -1255,6 +1769,6 @@ ipcMain.on('kabuk:baslangic', () => {
   mpv?.command('stop').catch(() => {});
   yukleniyor = false;
   videoPenceresi?.hide();
-  ana.loadFile(path.join(__dirname, 'baslangic.html'));
+  anaEkranAc();
 });
 app.on('window-all-closed', () => app.quit());

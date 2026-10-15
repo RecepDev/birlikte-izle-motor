@@ -450,3 +450,86 @@ test('yayını izleyenin kendi kaynağı kullanımda sayılmıyor (torrent kapan
   assert.ok(!room.statsStreamIds().includes('s2'));
   assert.equal(room.users.get(ali.id).status.yayin.mbps, 4.2);
 });
+
+// ---- ikinci altyazı (alt satır) -----------------------------------------------------
+
+const IKI_ALTYAZI = [
+  { subId: 'eng1', lang: 'eng', label: 'İngilizce', source: 'addon', matched: true },
+  { subId: 'tur1', lang: 'tur', label: 'Türkçe', source: 'addon', matched: false },
+];
+
+test('host ikinci altyazıyı seçer, odaya yayılır', () => {
+  const { room, host, join } = setup();
+  const ali = join('ali');
+  room.setSubtitles(IKI_ALTYAZI);
+  room.setHostSubtitle(host.id, { subId: 'eng1' });
+
+  assert.deepEqual(room.setHostSubtitle2(ali.id, { subId: 'tur1' }), { error: 'notHost' });
+
+  const res = room.setHostSubtitle2(host.id, { subId: 'tur1', offset: 1.5 });
+  assert.deepEqual(room.hostSubtitle2, { subId: 'tur1', offset: 1.5 });
+  const ev = events(res.msgs, 'hostSubtitle2')[0];
+  assert.deepEqual(ev.data, { subId: 'tur1', offset: 1.5 });
+  assert.equal(ev.to, 'room');
+  // Üst satır değişmedi.
+  assert.deepEqual(room.hostSubtitle, { subId: 'eng1', offset: 0 });
+  // Sonradan katılan da görüyor.
+  assert.deepEqual(room.snapshot(ali.id).hostSubtitle2, { subId: 'tur1', offset: 1.5 });
+});
+
+test('aynı altyazı iki satırda olamaz', () => {
+  const { room, host } = setup();
+  room.setSubtitles(IKI_ALTYAZI);
+  room.setHostSubtitle(host.id, { subId: 'eng1' });
+  assert.deepEqual(room.setHostSubtitle2(host.id, { subId: 'eng1' }), { error: 'ayniAltyazi' });
+  assert.equal(room.hostSubtitle2, null);
+
+  // Üst satıra alt satırdaki altyazı seçilirse alt satır düşer (çakışma kalmaz).
+  room.setHostSubtitle2(host.id, { subId: 'tur1' });
+  const res = room.setHostSubtitle(host.id, { subId: 'tur1' });
+  assert.equal(room.hostSubtitle2, null);
+  assert.equal(events(res.msgs, 'hostSubtitle2').length, 1);
+});
+
+test('ikinci altyazı kapatılır ve geçersiz değerler reddedilir', () => {
+  const { room, host } = setup();
+  room.setSubtitles(IKI_ALTYAZI);
+  room.setHostSubtitle2(host.id, { subId: 'tur1' });
+  assert.deepEqual(room.setHostSubtitle2(host.id, { subId: 'yok' }), { error: 'badSubtitle' });
+  assert.deepEqual(room.setHostSubtitle2(host.id, { subId: 'tur1', offset: 900 }), { error: 'badOffset' });
+  room.setHostSubtitle2(host.id, { subId: null });
+  assert.equal(room.hostSubtitle2, null);
+});
+
+test('liste yenilenince kaybolan ikinci altyazı seçimi düşer', () => {
+  const { room, host } = setup();
+  room.setSubtitles(IKI_ALTYAZI);
+  room.setHostSubtitle(host.id, { subId: 'eng1' });
+  room.setHostSubtitle2(host.id, { subId: 'tur1' });
+  const msgs = room.setSubtitles([IKI_ALTYAZI[0]]);
+  assert.equal(room.hostSubtitle2, null);
+  assert.deepEqual(room.hostSubtitle, { subId: 'eng1', offset: 0 });
+  assert.equal(events(msgs, 'hostSubtitle2')[0].data, null);
+});
+
+test('film değişince ikinci altyazı da sıfırlanır', () => {
+  const { room, host } = setup();
+  room.setSubtitles(IKI_ALTYAZI);
+  room.setHostSubtitle2(host.id, { subId: 'tur1' });
+  const res = room.setContent(host.id, {
+    type: 'movie', contentId: 'tt555', meta: {}, streams: STREAMS, hostStreamId: 's1',
+  });
+  assert.equal(room.hostSubtitle2, null);
+  assert.equal(events(res.msgs, 'hostSubtitle2')[0].data, null);
+});
+
+test('dosyanın içindeki altyazı ikinci satıra da seçilebilir', () => {
+  const { room, host } = setup();
+  room.setSubtitles(IKI_ALTYAZI);
+  room.setHostSubtitle(host.id, { subId: 'eng1' });
+  room.setHostSubtitle2(host.id, { subId: 'gomulu:Türkçe:0' });
+  assert.deepEqual(room.hostSubtitle2, { subId: 'gomulu:Türkçe:0', offset: 0 });
+  // Liste yenilense bile gömülü seçim düşmüyor (listede hiç olmuyor).
+  room.setSubtitles(IKI_ALTYAZI);
+  assert.deepEqual(room.hostSubtitle2, { subId: 'gomulu:Türkçe:0', offset: 0 });
+});

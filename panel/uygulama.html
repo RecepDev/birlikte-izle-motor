@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="panel-key" content="%%PANEL_KEY%%">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>Birlikte İzle</title>
+  <link rel="stylesheet" href="/css/panel.css">
+  <link rel="stylesheet" href="/css/ana.css">
+  <script src="/js/perde-yedek.js"></script>
+  <script type="module" src="/js/uygulama.js"></script>
+</head>
+<body>
+  <!-- Açılışta bütün görünümler bir kez yüklenir; hazır olana kadar yalnız logo görünür. -->
+  <div id="acilis-perde" class="acilis-perde"><img src="/favicon.svg" alt=""></div>
+  <main class="icerik" id="uygulama-icerik">
+    <section class="gorunum" id="gorunum-ana" data-gorunum="ana"><div id="icerik"></div></section>
+    <section class="gorunum" id="gorunum-kesfet" data-gorunum="kesfet" hidden><div class="kesfet-secim">
+      <select id="kesfet-tur"><option value="movie">Film</option><option value="series">Dizi</option></select>
+      <select id="kesfet-katalog"></select>
+      <select id="kesfet-genre"></select>
+    </div>
+    <div id="kesfet-izgara" class="afis-izgara"></div>
+    <p id="kesfet-durum" class="muted"></p>
+    <div id="kesfet-son"></div></section>
+    <section class="gorunum" id="gorunum-kutuphane" data-gorunum="kutuphane" hidden><div id="kutuphane-suzgec" class="kut-suzgec"></div>
+    <div id="kutuphane-izgara" class="afis-izgara"></div>
+    <p id="kutuphane-bos" class="muted" hidden>Kütüphanen boş. Bir afişe sağ tıklayıp "Kütüphaneye ekle"yi seç.</p></section>
+    <section class="gorunum" id="gorunum-indirilenler" data-gorunum="indirilenler" hidden><div class="dl-baslik">
+      <h1>İndirilenler</h1>
+      <div class="dl-sag">
+        <div id="dl-ozet" class="dl-ozet"></div>
+        <div class="dl-gorunum" role="group" aria-label="Görünüm">
+          <button type="button" id="dl-izgara-dugme" title="Izgara">▦ Izgara</button>
+          <button type="button" id="dl-liste-dugme" title="Alt alta">☰ Liste</button>
+        </div>
+        <a class="button" href="/ayarlar#bolum-indirme">⚙️ İndirme ayarları</a>
+      </div>
+    </div>
+
+    <div class="dl-serit">
+      <label class="dl-kutu">Aynı anda <select id="dl-es-zamanli" title="Birden fazla seçersen bölümler aynı anda iner (hat paylaşılır)"></select> indirme</label>
+      <label class="dl-kutu" title="Bütün indirmelerin toplam hızı bu değeri geçmez. 0 ya da boş = sınırsız.">Hız limiti <input type="number" id="dl-hiz-limit" min="0" max="100000" step="1" placeholder="sınırsız"> Mbps</label>
+      <span class="dl-kutu dl-anlik" id="dl-anlik" title="Şu an bütün indirmelerin toplam hızı"><span class="dl-nabiz"></span><span id="dl-anlik-deger">0.0 Mbps</span> kullanılıyor</span>
+    </div>
+
+    <div id="dl-icerik"></div></section>
+    <section class="gorunum" id="gorunum-ayarlar" data-gorunum="ayarlar" hidden><h1 style="font-size:24px;margin-top:10px">Ayarlar</h1>
+    <p id="uygulama-yok" class="muted" hidden>Bu ayarlar yalnızca masaüstü uygulamasında çalışır. Sunucu ayarları için <a href="/">Sunucu paneli</a>'ni kullan.</p>
+
+    <div class="ayar-duzen">
+      <nav class="ayar-nav" aria-label="Ayar bölümleri">
+        <a href="#bolum-genel" data-hedef="bolum-genel">Genel</a>
+        <a href="#bolum-oynatma" data-hedef="bolum-oynatma">Oynatma</a>
+        <a href="#bolum-oda" data-hedef="bolum-oda">Oda varsayılanları</a>
+        <a href="#bolum-gorunum" data-hedef="bolum-gorunum">Görünüm</a>
+        <a href="#bolum-indirme" data-hedef="bolum-indirme">İndirme</a>
+        <a href="#bolum-bildirim" data-hedef="bolum-bildirim">Bildirimler</a>
+        <a href="#bolum-motor" data-hedef="bolum-motor">Motor ve önbellek</a>
+        <a href="#bolum-kisayollar" data-hedef="bolum-kisayollar">Kısayollar</a>
+        <a href="#bolum-uygulama" data-hedef="bolum-uygulama">Uygulama</a>
+      </nav>
+      <div class="ayar-icerik">
+    <section class="ayar-bolum" id="bolum-genel">
+      <h2>Genel</h2>
+      <div class="ayar-satir">
+        <div>👤 Adın<small>Odada diğer kişilerin göreceği ad</small></div>
+        <button type="button" id="isim-degis">—</button>
+      </div>
+      <div class="ayar-satir">
+        <div>🖥️ Sunucuyu uygulamayla birlikte aç ve kapat<small>Açıkken uygulamayı açınca sunucu kendiliğinden başlar ve doğrudan ana sayfa açılır; uygulamayı kapatınca sunucu da kapanır. Kapalıysa sunucuyu sen yönetirsin (kısayoldan açılır, panelden kapanır).</small></div>
+        <input type="checkbox" id="sunucu-oto">
+      </div>
+    </section>
+    <section class="ayar-bolum" id="bolum-oynatma">
+      <h2>Oynatma</h2>
+      <div class="ayar-satir">
+        <div>🎞️ Tercih edilen kalite<small>Kaynak listesinde bu kalite en üstte olur ve önce onun kaynakları aranır</small></div>
+        <select id="kalite"><option value="2160p">4K (2160p)</option><option value="1080p">1080p</option><option value="720p">720p</option></select>
+      </div>
+      <div class="ayar-satir">
+        <div>🤖 Kaynağı otomatik seç<small>Oda açarken en uygun kaynağı kendisi bulup seçer</small></div>
+        <input type="checkbox" id="oto">
+      </div>
+      <div class="ayar-satir">
+        <div>🌐 İnternet hızın (Mbps)<small>Girersen videonun ihtiyacı bundan fazla olan kaynaklar otomatik seçimde hiç denenmez</small></div>
+        <input type="number" id="internet-hiz" min="1" max="10000" step="1" placeholder="?">
+      </div>
+      <div class="ayar-satir">
+        <div>🖥️ Odayı pencerede tam ekran aç<small>Odaya girince oynatıcı pencerenin tamamını kaplar (üst çubuk ve yan panel gizlenir). Kontrol çubuğundaki düğme ya da P tuşu paneli geri getirir.</small></div>
+        <input type="checkbox" id="oto-tam-ekran">
+      </div>
+      <div class="ayar-satir">
+        <div>⚡ Hızlı başlat<small>Yeterince hızlı kaynakta görüntüyü daha kısa tamponla başlatır</small></div>
+        <input type="checkbox" id="hizli-baslat">
+      </div>
+    </section>
+    <section class="ayar-bolum" id="bolum-oda">
+      <h2>Oda varsayılanları</h2>
+      <p class="muted small">Yeni açtığın odalar bu ayarlarla başlar (odadaki ayarlardan sonradan değiştirilebilir).</p>
+      <form id="defaults" class="form">
+        <label class="field"><span>Adın (odada görünür)</span><input id="d-nickname" maxlength="30"></label>
+        <label class="check"><input type="checkbox" id="d-locked"> <span>Oynatmayı sadece host kontrol etsin</span></label>
+        <fieldset>
+          <legend>Biri donarsa</legend>
+          <label class="check"><input type="radio" name="d-wait" value="wait"> <span>Herkes beklesin</span></label>
+          <label class="check"><input type="radio" name="d-wait" value="continue"> <span>Beklemeden devam, sonra yetişsin</span></label>
+        </fieldset>
+        <div hidden>
+          <label class="check"><input type="checkbox" id="d-relay"> <span>Host üzerinden izlemeye (relay) izin ver</span></label>
+          <label class="field inline"><span>Relay kişi sınırı</span><input id="d-relay-limit" type="number" min="0" max="10"></label>
+        </div>
+        <div class="row"><button type="submit" class="primary">Kaydet</button><span id="defaults-msg" class="muted small"></span></div>
+      </form>
+    </section>
+    <section class="ayar-bolum" id="bolum-gorunum">
+      <h2>Görünüm</h2>
+      <div class="ayar-satir">
+        <div>🖼️ Afiş boyutu<small>Ctrl + fare tekeriyle değiştirdiğin afiş boyutunu varsayılana döndürür.</small></div>
+        <button type="button" id="afis-sifirla">Sıfırla</button>
+      </div>
+    </section>
+    <section class="ayar-bolum" id="bolum-indirme">
+      <h2>İndirme</h2>
+      <div class="ayar-satir">
+        <div>📁 İndirme klasörü<small id="dl-yer">…</small></div>
+        <button type="button" id="dl-klasor">Klasör seç</button>
+      </div>
+      <p id="dl-not" class="muted small" hidden></p>
+      <div class="ayar-satir">
+        <div>İzlerken indirmeleri duraklat<small>Açıkken: indirilmemiş bir şey izlerken indirmeler durur, izleme bitince kaldığı yerden sürer</small></div>
+        <input type="checkbox" id="dl-izlerken">
+      </div>
+      <h3 class="ayar-alt">İndirme seçenekleri</h3>
+      <div id="dl-secenek-kap"></div>
+    </section>
+    <section class="ayar-bolum" id="bolum-bildirim">
+      <h2>Bildirimler</h2>
+      <h3 class="ayar-alt">Disk dolduğunda (indirmeler durunca)</h3>
+      <div class="ayar-satir">
+        <div>Windows bildirimi gönder<small>Sağ altta bildirim çıkar, görev çubuğu simgesi yanıp söner.</small></div>
+        <input type="checkbox" id="bil-disk-bildirim">
+      </div>
+      <div class="ayar-satir">
+        <div>Uyarı sesi çal<small>Tek bip. Kapalıysa bildirim sessiz gelir.</small></div>
+        <input type="checkbox" id="bil-disk-ses">
+      </div>
+      <div class="ayar-satir">
+        <div>Uyarı penceresi aç<small>Hangi sayfada olursan ol, ekranda küçük uyarı penceresi açılır.</small></div>
+        <input type="checkbox" id="bil-disk-pencere">
+      </div>
+      <div class="ayar-satir">
+        <div>Sayfanın üstünde uyarı şeridi göster<small>Disk dolu olduğu sürece panel sayfalarında kırmızı şerit durur.</small></div>
+        <input type="checkbox" id="bil-disk-serit">
+      </div>
+      <h3 class="ayar-alt">İndirme tamamlandığında</h3>
+      <div class="ayar-satir">
+        <div>Bildirim gönder<small>İndirme bitince "İndirme tamamlandı" bildirimi çıkar.</small></div>
+        <input type="checkbox" id="bil-bitti">
+      </div>
+      <div class="ayar-satir">
+        <div>Bildirim sesi çal<small>Yalnız bildirim açıkken geçerli.</small></div>
+        <input type="checkbox" id="bil-bitti-ses">
+      </div>
+      <p class="muted small">Windows'un kendi bildirim ayarı (Sistem > Bildirimler) kapalıysa ya da "Rahatsız etme" açıksa bildirimler görünmeyebilir.</p>
+    </section>
+    <section class="ayar-bolum" id="bolum-motor">
+      <h2>Torrent motoru ve önbellek</h2>
+      <div class="ayar-satir">
+        <div>⚙️ Torrent motoru<small id="motor-ipucu">Videoyu bu bilgisayarda indiren program</small></div>
+        <span id="motor-rozet" class="ayar-rozet">…</span>
+      </div>
+      <div class="ayar-satir" id="motor-bekci-satir" hidden>
+        <div>🛡️ Motor bekçisi<small>Motor çökerse kendiliğinden yeniden açar</small></div>
+        <input type="checkbox" id="motor-bekci">
+      </div>
+      <div class="ayar-satir">
+        <div>💾 Önbellek (GB)<small id="video-onbellek-ipucu">İzlenen yerler diskte kalır, yeniden açınca hemen gelir. 0 = kapalı</small></div>
+        <input type="number" id="video-onbellek" min="0" max="1000" step="1" placeholder="sınırsız">
+      </div>
+      <div class="ayar-satir" id="ob-temizle-satir" hidden>
+        <div>🧹 Önbelleği temizle<small id="ob-doluluk">…</small></div>
+        <button type="button" id="ob-temizle">Temizle</button>
+      </div>
+      <div class="ayar-satir" id="ob-yer-satir" hidden>
+        <div>📁 Önbellek yeri<small id="ob-yer">…</small></div>
+        <div>
+          <button type="button" id="ob-yer-degistir">Değiştir</button>
+          <button type="button" id="ob-yer-varsayilan" hidden>Varsayılan</button>
+        </div>
+      </div>
+    </section>
+    <section class="ayar-bolum kisayol-bolum" id="bolum-kisayollar">
+      <h2>Kısayollar <small class="muted">(her yerde <kbd>?</kbd> tuşu da açar)</small></h2>
+      <div id="kisayol-icerik"></div>
+    </section>
+    <section class="ayar-bolum" id="bolum-uygulama">
+      <h2>Uygulama</h2>
+      <div class="ayar-satir" id="satir-guncelle">
+        <div>🔄 Güncellemeler<small id="surum"></small></div>
+        <button type="button" id="guncelle">Güncellemeleri denetle</button>
+      </div>
+      <div class="ayar-satir">
+        <div>🛠️ Sunucu paneli<small>İndirme klasörü, eklentiler, tünel, torrent motoru ve odalar</small></div>
+        <a class="button" href="/">Aç</a>
+      </div>
+    </section>
+      </div>
+    </div>
+    </section>
+    <section class="gorunum" id="gorunum-eklentiler" data-gorunum="eklentiler" hidden>
+      <div class="dl-baslik"><h1>Eklentiler</h1></div>
+      <div class="sunucu-izgara">
+    <section class="card">
+      <h2>Addon'lar</h2>
+      <p class="muted small">Oda açarken stream ve altyazılar bu addon'lardan alınır. Torrentio gibi eklentilerin manifest adresini ekle (eklentinin sayfasından "Bağlantıyı kopyala").</p>
+      <ul id="addons" class="addons"></ul>
+      <form id="addon-form" class="row">
+        <input id="addon-input" placeholder="https://…/manifest.json" autocomplete="off">
+        <button type="submit" class="primary">Ekle</button>
+      </form>
+      <p class="muted small">Torrentio gibi ayarı olan eklentiler için: satırdaki <b>⚙️ Ayarla</b> eklentinin sitesini açar. Orada ayarlarını seç, sayfanın altındaki kurulum linkini <b>kopyala</b> ("Install"a basma), buraya yapıştırıp <b>Ekle</b>'ye bas. Aynı eklenti zaten ekliyse ayarları güncellenir.</p>
+      <p id="addon-error" class="error" hidden></p>
+    </section>
+    <section class="card" hidden>
+      <h2>Eklentiyi kur</h2>
+      <p class="muted">Bir kere yapman yeterli. Sonra Stremio'da bir film açınca stream listesinde <b>👥 Birlikte İzle</b> çıkar.</p>
+      <div class="row">
+        <code id="addon-url" class="url"></code>
+        <button id="addon-copy" type="button">Kopyala</button>
+        <a id="addon-install" class="button primary" href="#">Stremio'da aç</a>
+      </div>
+      <details>
+        <summary>Elle kurulum</summary>
+        <ol class="muted">
+          <li>Stremio'yu aç, sağ üstteki yapboz simgesine (Eklentiler) tıkla.</li>
+          <li>Arama kutusuna yukarıdaki adresi yapıştır, Enter'a bas.</li>
+          <li><b>Yükle</b> düğmesine bas.</li>
+        </ol>
+      </details>
+    </section>
+      </div>
+    </section>
+    <section class="gorunum" id="gorunum-sunucu" data-gorunum="sunucu" hidden>
+      <div class="dl-baslik">
+        <h1>Sunucu</h1>
+        <button id="shutdown" type="button" class="danger">⏻ Sunucuyu kapat</button>
+      </div>
+      <div class="sunucu-izgara">
+    <section class="card">
+      <h2>Durum</h2>
+      <ul class="status">
+        <li><span class="dot ok"></span> Sunucu <span class="muted">çalışıyor</span></li>
+        <li><span id="st-stremio-dot" class="dot"></span> <span id="st-motor-ad">Video motoru</span> <span id="st-stremio" class="muted">…</span></li>
+        <li>
+          <span id="st-tunnel-dot" class="dot"></span> Tünel <span id="st-tunnel" class="muted">…</span>
+          <div class="row">
+            <code id="tunnel-url" class="url"></code>
+            <button id="tunnel-copy" type="button" hidden>Kopyala</button>
+            <button id="tunnel-restart" type="button">Yeniden başlat</button>
+            <button id="cf-install" type="button" class="primary" hidden>cloudflared'i kur</button>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+    <section class="card" id="motor-kart">
+      <h2>Motor</h2>
+      <p id="motor-ozet" class="muted small">…</p>
+      <div class="row">
+        <button id="motor-yeniden" type="button" hidden>🔄 Motoru yeniden başlat</button>
+      </div>
+      <div class="motor-blok">
+        <span>Açık torrent'ler</span>
+        <ul id="motor-torrentler" class="addons motor-liste"></ul>
+      </div>
+      <form id="motor-ayar" class="form motor-blok">
+        <label class="field inline"><span>Motor</span>
+          <select id="motor-sec">
+            <option value="torrserver">TorrServer</option>
+          </select>
+        </label>
+        <p id="motor-sec-not" class="muted small" hidden></p>
+        <label class="check"><input type="checkbox" id="srv-motor-bekci"> <span>TorrServer çökerse kendini yeniden açsın <small class="muted">(10 dakikada en çok 3 kez)</small></span></label>
+        <label class="check"><input type="checkbox" id="motor-siteden"> <span>Film bilgisini itorrents'ten de iste <small class="muted">(açılış birkaç saniye hızlanır; site hangi torrent'i istediğini görür)</small></span></label>
+      </form>
+    </section>
+
+    <section class="card wide">
+      <h2>Log</h2>
+      <pre id="logs" class="logs"></pre>
+    </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

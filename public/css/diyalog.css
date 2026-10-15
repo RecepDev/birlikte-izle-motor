@@ -1,0 +1,17 @@
+dialog.diyalog { border: 1px solid #2a2e50; border-radius: 16px; background: #171930; color: #e8e9ee; padding: 22px 24px 18px; width: min(440px, calc(100vw - 32px)); box-shadow: 0 24px 60px rgba(0, 0, 0, .6); font: 15px/1.5 system-ui, sans-serif; }
+dialog.diyalog::backdrop { background: rgba(8, 8, 20, .65); backdrop-filter: blur(3px); }
+.diyalog-mesaj { white-space: pre-line; word-break: break-word; }
+.diyalog-alan { width: 100%; box-sizing: border-box; margin-top: 14px; padding: 9px 12px; border-radius: 10px; border: 1px solid #2b2d5c; background: #0f1024; color: inherit; font: inherit; }
+.diyalog-alan:focus { outline: 2px solid #7b5cff; outline-offset: 0; }
+.diyalog-dugmeler { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.diyalog-dugmeler button { padding: 8px 20px; border-radius: 999px; border: 1px solid #2b2d5c; background: #232550; color: #e8e9ee; font: inherit; cursor: pointer; }
+.diyalog-dugmeler button:hover { border-color: #5b3df0; }
+.diyalog-dugmeler .diyalog-tamam { background: linear-gradient(135deg, #7b5cff, #5b3df0); border-color: transparent; color: #fff; }
+.diyalog-dugmeler .diyalog-tamam.tehlike { background: #c43b4b; }
+.diyalog-dugmeler button:focus-visible { outline: 2px solid #a98bff; outline-offset: 2px; }
+dialog.kisayol-pencere { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+.kisayol-pencere h2 { margin: 0 0 6px; font-size: 18px; }
+.kisayol-pencere h3, .kisayol-bolum h3 { margin: 14px 0 6px; font-size: 13px; color: #a98bff; font-weight: 600; }
+.kisayol-liste { display: grid; grid-template-columns: 200px 1fr; gap: 6px 16px; align-items: center; font-size: 14px; }
+.kisayol-tus { display: flex; gap: 6px; flex-wrap: wrap; }
+.kisayol-liste kbd { font: 600 12px/1 ui-monospace, Consolas, monospace; padding: 4px 8px; border-radius: 6px; border: 1px solid #2b2d5c; border-bottom-width: 2px; background: #1d1e42; color: #e8e9ee; white-space: nowrap; }

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Disk dolu</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; font-family: "Segoe UI", system-ui, sans-serif; color: #e8e9ee; user-select: none; }
+  .kart { height: 100%; padding: 22px 24px 18px; border-radius: 16px; border: 1px solid rgba(255, 110, 130, .45);
+    background: linear-gradient(160deg, #2a1f4a, #15142f); display: flex; flex-direction: column; -webkit-app-region: drag;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04); }
+  h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
+  .simge { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, #ff6a85, #c23a7a); color: #fff; font-weight: 700; font-size: 16px; }
+  p { margin: 0; font-size: 13.5px; line-height: 1.55; color: #b9bbd8; }
+  .alt { margin-top: auto; display: flex; gap: 10px; justify-content: flex-end; -webkit-app-region: no-drag; }
+  button { padding: 9px 20px; border-radius: 999px; border: 1px solid #3a3d6b; background: rgba(60, 62, 120, .3); color: #e8e9ee; font: inherit; font-size: 13.5px; cursor: pointer;
+    transition: background .15s, transform .08s, filter .08s; }
+  button:hover { background: rgba(60, 62, 120, .65); }
+  button:active { transform: scale(.95); filter: brightness(.85); }
+  button.birincil { background: linear-gradient(135deg, #7b5cff, #5535e6); border-color: transparent; color: #fff; font-weight: 600; }
+  button.birincil:hover { filter: brightness(1.12); }
+</style>
+</head>
+<body>
+<div class="kart">
+  <h1><span class="simge">!</span><span id="baslik">Disk dolu</span></h1>
+  <p id="aciklama"></p>
+  <div class="alt">
+    <button id="tamam" type="button">Tamam</button>
+    <button id="git" class="birincil" type="button">İndirilenler'e git</button>
+  </div>
+</div>
+</body>
+</html>

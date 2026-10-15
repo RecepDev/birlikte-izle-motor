@@ -14,11 +14,16 @@ import { createSubs } from './subs.js';
 import { setIcon } from './icons.js';
 import { STREMIO_BASE, torrentPath, hlsV2Path, HLS_4K_WIDTH, HLS_VIDEO_CODECS, COMPAT_WIDTHS } from './shared/stream-url.js';
 import { langLabel } from './shared/subtitle-text.js';
+import { createTakilmaOlcer } from './shared/takilma-olc.js';
+import { createZorKelime } from './zor-kelime.js';
 import { browserCodecs, isRealSafari } from './codecs.js';
 import { checkHardware, gpuName, HW_HELP } from './hwaccel.js';
 import { probeDevice, evaluate as evaluateCompat, autoScanTargets } from './compat.js';
 import { createCompatScreen } from './compat-view.js';
 import { createYayinIstemci, KALITELER, COZUNURLUKLER } from './yayin.js';
+import { onayla } from '/js/diyalog.js';
+import { kisayolTusuBagla } from '/js/kisayollar.js';
+kisayolTusuBagla();
 
 // ---- identity --------------------------------------------------------------
 
@@ -30,7 +35,8 @@ if (hostToken) {
   history.replaceState(null, '', location.pathname);
 }
 let userToken = hostToken || storage.get('userToken');
-if (!userToken) {
+// Geçersiz (ör. bozuk üretilmiş "[object Promise]…") token'ı at, yenisini üret.
+if (!userToken || !/^[\w-]{8,128}$/.test(userToken)) {
   userToken = randomToken();
   storage.set('userToken', userToken);
 }
@@ -618,7 +624,7 @@ function renderViewersOverlay() {
   $('#viewers-list').replaceChildren(...users.map((u) => {
     const st = u.id === state.me ? { ...u.status, ...mine } : u.status;
     const ts = hostPcStats(u, st);
-    return el('li', { title: ts ? '🧲 bağlı peer sayısı (host bilgisayarındaki Stremio)' : '' },
+    return el('li', { title: ts ? '🧲 bağlı peer sayısı (host bilgisayarındaki motor)' : '' },
       el('span', { text: STATE_ICON[st.state] || '•' }),
       el('span', { class: 'n', text: `${u.name}${u.isHost ? ' 👑' : ''}${u.id === state.me ? ' (sen)' : ''}` }),
       el('span', { class: 'sp', text: speedLabel(st, ts, state.relayStats?.[u.id]) }));
@@ -777,6 +783,35 @@ setInterval(() => {
 }, 5000);
 document.addEventListener('visibilitychange', () => tani.kaydet('gorunur', { hidden: document.hidden }));
 
+// Kısa takılma (1-2 sn donma) kaydı. 5 saniyelik 'n' örnekleri bunu kaçırıyordu: iki örnek
+// arasına sığıyor, sonra senkron ileri sararak izi kayboluyor. Burada donmanın kendisi ve
+// o anın sayıları yazılıyor, sebebi tahminle değil kayıtla bulunsun.
+const takilmaOlcer = createTakilmaOlcer();
+setInterval(() => {
+  if (!state.room || player.status().state === 'idle') return;
+  // Sarmadan hemen sonraki duraklama donma değil (mpv/tarayıcı tamponu dolduruyor).
+  if (Date.now() - lastSeekAt < 1500) return takilmaOlcer.sifirla();
+  // Masaüstünde mpv'nin ham konumu okunuyor: sayfanın currentTime'ı iki güncelleme
+  // arasında tahmin edildiği için donmayı gizliyor.
+  const ham = window.masaustuKonumHam?.();
+  const d = liveDownload();
+  const sonuc = ham
+    ? takilmaOlcer.ol(ham.konum, ham.bekliyor, ham.hiz, ham.t)
+    : takilmaOlcer.ol(video.currentTime, video.paused || video.seeking, video.playbackRate || 1, Date.now());
+  if (!sonuc) return;
+  tani.kaydet('takilma', {
+    ...sonuc,
+    nerede: ham ? 'mpv' : 'sayfa',
+    onbellekSn: ham ? ham.onbellekSn : d.ahead,
+    onbellekDurdu: ham ? ham.onbellekDurdu : null,
+    dusenKare: ham ? ham.dusenKare : (video.getVideoPlaybackQuality?.().droppedVideoFrames ?? null),
+    okumaMbps: ham ? ham.okumaMbps : null,
+    drift: sync.drift(),
+    mbps: d.downMbps,
+    rs: video.readyState,
+  });
+}, 400);
+
 // ---- rendering ----------------------------------------------------------------------
 
 const chat = createChat({
@@ -786,6 +821,10 @@ const chat = createChat({
   request,
   meId: () => state.me,
 });
+
+// Zor kelime kutusu (varsayılan kapalı): İngilizce altyazıda ekranda duran repliğin
+// zor kelimelerinin Türkçesi oynatıcının köşesinde.
+const zorKelime = createZorKelime({ playerEl, onDurum: () => subs.rerender() });
 
 const subs = createSubs({
   panel: $('#subs-panel'),
@@ -805,6 +844,7 @@ const subs = createSubs({
   reencodeBlocked: () => qualityBlocked && Boolean(myStream()?.multiAudio),
   onForceCompat: () => startCompat({ allowReencode: true }),
   streamKey: () => myStreamId(),
+  zorKelime,
 });
 
 // Video host üzerinden (relay) geliyorsa başlığın yanında rozet; kendi Stremio'su olabilecek
@@ -859,12 +899,27 @@ function renderUsersTab() {
       $('#tani-metin').scrollTop = $('#tani-metin').scrollHeight;
     },
     onKick: async (u) => {
-      if (!confirm(`${u.name} odadan çıkarılsın mı? Tekrar giremez.`)) return;
+      if (!await onayla(`${u.name} odadan çıkarılsın mı? Tekrar giremez.`)) return;
       const res = await request('kick', { userId: u.id });
       if (res?.error) toast(errorText(res.error));
     },
   });
   $('#user-count').textContent = String(count);
+  yalnizGorunumu(count <= 1);
+}
+
+// Odada tek kişi: sohbet, izleyiciler ve oynatıcıdaki sohbet düğmesi gizli (biri girince geri gelir).
+function yalnizGorunumu(yalniz) {
+  for (const t of ['chat', 'users']) {
+    const b = document.querySelector(`.tabs button[data-tab="${t}"]`);
+    if (b) b.hidden = yalniz;
+  }
+  $('#btn-chat').hidden = yalniz;
+  $('#viewers-ov').hidden = yalniz;
+  if (!yalniz) return;
+  const acik = document.querySelector('.tabs button.active')?.dataset.tab;
+  if (acik === 'chat' || acik === 'users') selectTab('subs');
+  if (openPop === 'chat') closePops();
 }
 
 // Dar ekranda üst çubuğun düğmeleri "⋯" menüsünde: aç/kapat, dışarı tıklayınca ya da bir
@@ -1204,7 +1259,7 @@ function renderQualityTab() {
     },
     onPickHost: async (streamId) => {
       const s = streamById(streamId);
-      if (s?.kind === 'http' && !confirm(DEBRID_WARNING)) return;
+      if (s?.kind === 'http' && !await onayla(DEBRID_WARNING)) return;
       const res = await request('setHostStream', { streamId });
       if (res?.error) toast(errorText(res.error));
       else playAfterSwitch();
@@ -1235,7 +1290,8 @@ let bannerTimer = null;
 function renderBanner() {
   const ids = state.room?.waitingUserIds || [];
   const banner = $('#banner');
-  if (!ids.length) {
+  // Odada tek kişi varken beklenecek kimse yok: bant hiç gösterilmez.
+  if (!ids.length || (state.room?.users?.length ?? 0) <= 1) {
     clearTimeout(bannerTimer);
     bannerTimer = null;
     banner.hidden = true;
@@ -1257,7 +1313,7 @@ function renderBanner() {
     if (Number.isFinite(st.downMbps) && st.downMbps > 0) parts.push(`${formatMbps(st.downMbps)} Mbps`);
     return parts.join(' · ');
   };
-  $('#banner-text').textContent = `⏳ Bekleniyor: ${ids.map(kisi).join(' | ')}`;
+  $('#banner-text').textContent = `Bekleniyor: ${ids.map(kisi).join(' | ')}`;
   $('#banner-skip').hidden = !isHost();
 }
 
@@ -1317,40 +1373,16 @@ function renderNotice() {
       }));
     }
   } else if (slowLocal()) {
-    // Kendi Stremio'su bu kaynağı indiremiyor (kaynak zayıf ya da internet yavaş): host'un
-    // bilgisayarından (onun hızıyla) izlemeyi öner.
-    text = "Kendi Stremio'n bu kaynağı yeterince hızlı indiremiyor, video bekliyor.\n"
-      + "Host üzerinden izlersen video host'un bilgisayarından, onun hızıyla gelir.";
-    actions.push(button('📶 Host üzerinden izle', () => {
-      state.relayError = null;
-      state.relayApproved = true;
-      state.forceRelay = true;
-      localWaitSince = null;
-      loadMyStream(true);
-    }, true));
+    // Kaynak zayıf ya da internet yavaş: daha hızlı kaynak öner.
+    text = 'Bu kaynak yeterince hızlı inmiyor, video bekliyor.\nKalite sekmesinden daha hızlı bir kaynak seçebilirsin.';
+    actions.push(button('Kalite', () => selectTab('quality'), true));
     actions.push(button('Beklemeye devam', () => { localWaitDismissed = myStreamId(); renderNotice(); }));
   } else if (st.state === 'noStremio') {
-    const relayNote = state.room?.settings.relayEnabled && !isHost()
-      ? (isTouch ? '\nYoksa "Host üzerinden izle".' : '\n\nStremio\'n yoksa "Host üzerinden izle" ile host\'un bilgisayarından izleyebilirsin (host\'un internetini kullanır).')
-      : '';
-    text = (isTouch
-      ? 'Stremio\'ya bağlanılamadı.'
-      : 'Stremio açık değil.\nBilgisayarında Stremio varsa "Stremio\'ya bağlan"a bas, açılınca kendiliğinden bağlanır.\nTarayıcı "yerel ağdaki cihazlara erişim" izni sorarsa İzin ver\'e bas.') + relayNote;
-    if (state.relayError && !isHost()) text += `\n\nHost üzerinden izleme: ${errorText(state.relayError)}`;
-    actions.push(button("🔌 Stremio'ya bağlan", connectStremio, true));
-    if (state.room?.settings.relayEnabled && !isHost()) {
-      actions.push(button('📶 Host üzerinden izle', () => {
-        state.relayError = null;
-        state.relayApproved = true;
-        player.reload();
-      }, true));
-      actions.push(button('📶 Bu cihazda hep host üzerinden izle', () => {
-        storage.set('hepRelay', '1');
-        state.relayError = null;
-        state.relayApproved = true;
-        player.reload();
-      }));
-    }
+    // Video motoru (uygulamanın içinde) henüz hazır değil: player 3 sn'de bir kendiliğinden dener.
+    text = isTouch
+      ? 'Video motoruna bağlanılamadı.'
+      : 'Video motoru hazırlanıyor…\nİlk açılışta birkaç saniye sürebilir, hazır olunca video kendiliğinden başlar.';
+    actions.push(button('Tekrar dene', () => player.reload(), true));
   } else if (st.state === 'error') {
     const reason = player.lastError();
     text = desktopApp() ? 'Video açılamadı.' : {
@@ -1413,6 +1445,7 @@ function applySnapshot(snap, publicUrl) {
   chat.render(snap.chat);
   subs.setList(snap.subtitles);
   subs.setHost(snap.hostSubtitle);
+  subs.setHost2(snap.hostSubtitle2);
   // Bağlantı koptuysa sunucu yayını/izlemeyi bitirmiş sayar: yerelde de temizle.
   if (!firstJoin) yayinYenidenBaglandi();
   renderAll();
@@ -1420,6 +1453,7 @@ function applySnapshot(snap, publicUrl) {
   sync.calibrate().then(() => sync.setPlayback(state.room.playback, state.room.autoPaused));
   loadMyStream(hadRelay);
   state.joinedOnce = true;
+  if (firstJoin && window.kabuk?.otoTamEkran?.()) setGenis(true);
   if (firstJoin && hashParams.get('oto') === '1') otoBaslat();
   if (firstJoin) {
     // Otomatik kalite taraması yok: ekranda görünmeyen torrent'ler arkada açılmasın. Kalite
@@ -1554,6 +1588,12 @@ socket.on('subtitles', ({ subtitles }) => {
 socket.on('hostSubtitle', (sel) => {
   state.room.hostSubtitle = sel;
   subs.setHost(sel);
+});
+
+// İkinci altyazı (alt satır): host'un varsayılanı.
+socket.on('hostSubtitle2', (sel) => {
+  state.room.hostSubtitle2 = sel;
+  subs.setHost2(sel);
 });
 
 socket.on('settings', (s) => {
@@ -2067,12 +2107,16 @@ $('#intro-settings-reset').addEventListener('click', async () => {
   if (await setIntro({ reset: true })) toast('Sıfırlandı: bir sonraki açılışta yeniden sorulacak.');
 });
 
-video.addEventListener('timeupdate', () => {
+function zamanGoster() {
   if (!seeking) seek.value = String(video.currentTime);
   $('#time').textContent = formatTime(video.currentTime);
   $('#dur').textContent = formatTime(video.duration);
   renderSeekBar();
-});
+}
+video.addEventListener('timeupdate', zamanGoster);
+// Duraklatılmış/yeni açılmış videoda (odaya ortadan girince) timeupdate gelmeyebiliyor: süre 0:00'da
+// kalıyordu. Konum değişince ya da video hazır olunca da yenile.
+for (const ad of ['seeked', 'loadedmetadata', 'loadeddata', 'canplay', 'pause', 'playing']) video.addEventListener(ad, zamanGoster);
 video.addEventListener('durationchange', () => {
   seek.max = String(Number.isFinite(video.duration) ? video.duration : 0);
   sendStatus();
@@ -2098,7 +2142,8 @@ function sesBariKur(dugme, cubuk, kapsayici) {
   const kapat = () => kapsayici.classList.remove('ses-acik');
   const sure = () => { clearTimeout(zaman); zaman = setTimeout(kapat, 3000); };
   dugme.addEventListener('click', (e) => {
-    if (!matchMedia('(max-width: 900px)').matches) return;
+    // Masaüstü uygulaması telefon değil: ses çubuğu hep görünür, düğme sessize alır (kontrol aynası da aynı davranır).
+    if (window.kabuk || !matchMedia('(max-width: 900px)').matches) return;
     e.stopImmediatePropagation();
     if (kapsayici.classList.toggle('ses-acik')) sure();
     else clearTimeout(zaman);
@@ -2128,6 +2173,20 @@ function toggleFullscreen() {
   if (video.webkitEnterFullscreen) video.webkitEnterFullscreen(); // iOS
 }
 $('#btn-fs').addEventListener('click', toggleFullscreen);
+// Pencere içi tam ekran: oynatıcı üst çubuğu ve yan paneli gizleyip pencerenin tamamını kaplar (masaüstü uygulaması
+// odaya girince bunu kendiliğinden yapar, Ayarlar'dan kapatılır). Kontrol çubuğundaki düğme ya da P tuşu eski görünüme döndürür.
+function buyukKontrol() {
+  $('.controls')?.classList.toggle('buyuk', Boolean(document.fullscreenElement) || document.body.classList.contains('player-genis'));
+}
+document.addEventListener('fullscreenchange', buyukKontrol);
+function setGenis(on) {
+  document.body.classList.toggle('player-genis', on);
+  buyukKontrol();
+  setIcon($('#btn-genis'), on ? 'genisKucult' : 'genis');
+  $('#btn-genis').title = on ? 'Paneli göster (P)' : 'Paneli gizle, oynatıcı pencereyi kaplasın (P)';
+}
+$('#btn-genis').addEventListener('click', () => setGenis(!document.body.classList.contains('player-genis')));
+setGenis(false);
 for (const [id, name] of [['btn-prev', 'prev'], ['btn-next', 'next'], ['btn-compat', 'compat'], ['btn-info', 'info'], ['btn-audio', 'audio'],
   ['btn-subs-panel', 'subs'], ['btn-chat', 'chat'], ['btn-react', 'react'], ['btn-episodes', 'episodes'], ['btn-fs', 'fs'], ['btn-more', 'more']]) setIcon($(`#${id}`), name);
 document.addEventListener('fullscreenchange', () => setIcon($('#btn-fs'), document.fullscreenElement ? 'fsExit' : 'fs'));
@@ -2157,7 +2216,7 @@ function closePops() {
   for (const p of document.querySelectorAll('.player > .ctl-pop[id^="pop-"]')) p.hidden = true;
   returnTab('subs');
   returnTab('chat');
-  for (const b of document.querySelectorAll('.ctl-row .ctl.active-pop')) b.classList.remove('active-pop');
+  for (const b of document.querySelectorAll('.ctl-row .ctl.active-pop, .ust-diger.active-pop')) b.classList.remove('active-pop');
   openPop = null;
 }
 function togglePop(name, button) {
@@ -2184,11 +2243,25 @@ function togglePop(name, button) {
 }
 $('#btn-subs-panel').addEventListener('click', (e) => togglePop('subs', e.currentTarget));
 $('#btn-chat').addEventListener('click', (e) => togglePop('chat', e.currentTarget));
-for (const b of document.querySelectorAll('.ctl-row [data-pop]')) b.addEventListener('click', () => togglePop(b.dataset.pop, b));
+for (const b of document.querySelectorAll('.ctl-row [data-pop], .ust-diger[data-pop]')) b.addEventListener('click', () => togglePop(b.dataset.pop, b));
 document.addEventListener('fullscreenchange', closePops);
+// "Diğer" menüsü (link kopyala, magnet, indir, VLC): oynatıcıya sağ tıklayınca açılır.
+playerEl.addEventListener('contextmenu', (e) => {
+  if (e.target.closest('.controls, .ctl-pop, input, textarea, dialog')) return;
+  e.preventDefault();
+  closePops();
+  togglePop('pop-more', null);
+  // Menü tıklanan yerde açılır (oynatıcının içinde kalacak şekilde).
+  const pop = $('#pop-more');
+  const r = playerEl.getBoundingClientRect();
+  pop.style.right = 'auto';
+  pop.style.bottom = 'auto';
+  pop.style.left = `${Math.max(4, Math.min(e.clientX - r.left, r.width - pop.offsetWidth - 4))}px`;
+  pop.style.top = `${Math.max(4, Math.min(e.clientY - r.top, r.height - pop.offsetHeight - 4))}px`;
+});
 // Kutunun ve düğmelerin dışına tıklayınca kapanır.
 document.addEventListener('pointerdown', (e) => {
-  if (openPop && !e.target.closest('.player > .ctl-pop, .ctl-row, dialog')) closePops();
+  if (openPop && !e.target.closest('.player > .ctl-pop, .ctl-row, .ust-diger, dialog')) closePops();
 });
 
 // Ses dili: dosyada birden fazla ses parçası varsa düğme görünür.
@@ -2598,6 +2671,7 @@ $('#pop-react').replaceChildren(...REACTIONS.map((emoji) => el('button', {
   onclick: () => request('react', { emoji }).then((res) => { if (res?.error) toast(errorText(res.error)); }),
 })));
 socket.on('reaction', ({ emoji, name }) => {
+  return; // tepki özelliği kapatıldı (kod duruyor)
   if (window.masaustuSohbet) {
     window.masaustuSohbet(name, emoji);
     return;
@@ -3162,6 +3236,7 @@ document.addEventListener('keydown', (e) => {
     if (canControl()) sync.toggle();
   } else if (e.key === 'f') toggleFullscreen();
   else if (e.key === 'm') video.muted = !video.muted;
+  else if (e.key === 'p') setGenis(!document.body.classList.contains('player-genis'));
   else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
     // Ses %5 adımlarla; kaydırıcı ve simge de güncellensin.
     e.preventDefault();
@@ -3221,15 +3296,15 @@ const mbps = (n) => (Number.isFinite(n) ? `${n.toFixed(1)} Mbps` : '—');
 async function renderNet() {
   const mine = liveDownload();
   const src = player.status().source;
-  const srcText = { local: "kendi Stremio'n", relay: 'host üzerinden (relay)', http: 'doğrudan link' }[src] || '—';
+  const srcText = { local: "kendi motorun", relay: 'host üzerinden (relay)', http: 'doğrudan link' }[src] || '—';
   const res = await request('bandwidth').catch(() => null);
   const rows = [
     el('h3', { text: 'Bu cihaz' }),
     el('div', { class: 'net-row' }, el('span', { text: `▶ Video (${srcText})` }), el('b', { text: `↓ ${mbps(mine.downMbps)}` })),
   ];
   if (res?.host) {
-    rows.push(el('h3', { text: 'Bu bilgisayardaki Stremio' }));
-    if (res.torrents === null) rows.push(el('p', { class: 'muted small', text: "Stremio'ya ulaşılamadı." }));
+    rows.push(el('h3', { text: 'Bu bilgisayardaki video motoru' }));
+    if (res.torrents === null) rows.push(el('p', { class: 'muted small', text: "Video motoruna ulaşılamadı." }));
     else if (!res.torrents.length) rows.push(el('p', { class: 'muted small', text: 'Açık torrent yok.' }));
     let down = 0;
     let up = 0;
@@ -3246,7 +3321,7 @@ async function renderNet() {
         }) : null));
     }
     if ((res.torrents || []).length > 1) rows.push(el('div', { class: 'net-row net-total' }, el('span', { text: 'Toplam torrent' }), el('b', { text: `↓ ${mbps(down)} · ↑ ${mbps(up)}` })));
-    rows.push(el('p', { class: 'muted small', text: '↑ torrent: Stremio indirdiği parçaları başkalarına da yüklüyor (torrent böyle çalışıyor).' }));
+    rows.push(el('p', { class: 'muted small', text: '↑ torrent: motor indirdiği parçaları başkalarına da yüklüyor (torrent böyle çalışıyor).' }));
   }
   if (res?.relay?.length || res?.host) {
     rows.push(el('h3', { text: res?.host ? 'Host üzerinden izleyenler (senin yüklemen)' : 'Host üzerinden izleme' }));
@@ -3346,6 +3421,8 @@ function goBack() {
   history.back();
 }
 // Host'a sor: odadan mı çıkılsın (oda açık kalır) yoksa oda herkes için mi kapansın.
+setIcon($('#genis-geri'), 'geri');
+$('#genis-geri').addEventListener('click', () => $('#room-back').click());
 $('#room-back').addEventListener('click', () => {
   if (!isHost()) return goBack();
   $('#back-dialog').showModal();
@@ -3431,7 +3508,7 @@ $('#set-video-onbellek').addEventListener('change', async (e) => {
     return;
   }
   const res = await request('onbellekAyarla', { gb });
-  if (res?.error) toast(res.error === 'stremioDown' ? 'Stremio\'ya ulaşılamadı, önbellek değişmedi.' : errorText(res.error));
+  if (res?.error) toast(res.error === 'stremioDown' ? 'Video motoruna ulaşılamadı, önbellek değişmedi.' : errorText(res.error));
   else toast(res.gb ? `Önbellek: ${res.gb} GB` : 'Önbellek kapatıldı');
 });
 // TorrServer motorunda sınır kendi ayarı (Windows onayı yok); Stremio'da Windows QoS kuralı.
@@ -3449,7 +3526,7 @@ $('#set-upload').addEventListener('change', async (e) => {
   } else if (res.bekliyor) {
     toast("Sınır izleme bitince uygulanacak (şimdi uygulamak torrent'leri kapatıp oynatmayı keserdi).", 7000);
   } else {
-    const ad = yuklemeMotoru === 'torrserver' ? 'Yükleme sınırı' : 'Stremio yükleme sınırı';
+    const ad = yuklemeMotoru === 'torrserver' ? 'Yükleme sınırı' : 'Yükleme sınırı';
     toast(res.mbps ? `${ad}: ${res.mbps} Mbps` : 'Yükleme sınırı kaldırıldı');
   }
 });

@@ -185,7 +185,7 @@ export function createTorrServer({
         log.warn('TorrServer kapandı', { kod });
         if (bekci()) bekciAc();
       });
-      for (let i = 0; i < 60 && !(await hazirMi()); i++) await new Promise((r) => setTimeout(r, 250));
+      for (let i = 0; i < 240 && !(await hazirMi()); i++) await new Promise((r) => setTimeout(r, 250));
       if (!(await hazirMi())) throw new Error('TorrServer açılmadı');
     }
     await ayarla();

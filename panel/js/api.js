@@ -1,3 +1,4 @@
+import { sor } from '/js/diyalog.js';
 // Panel API client: every call carries the per-run panel key.
 
 const KEY = document.querySelector('meta[name="panel-key"]').content;
@@ -44,6 +45,8 @@ export function el(tag, props = {}, ...children) {
     if (v === null || v === undefined || v === false) continue;
     if (k === 'class') node.className = v;
     else if (k === 'text') node.textContent = v;
+    // Panelin CSP'si (default-src 'self') satır içi style niteliğini engelliyor; CSSOM üzerinden yazılan geçerli.
+    else if (k === 'style') node.style.cssText = v;
     else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
     else if (v === true) node.setAttribute(k, '');
     else node.setAttribute(k, v);
@@ -66,7 +69,7 @@ export async function copy(text, button) {
       setTimeout(() => { button.textContent = old; }, 1500);
     }
   } catch {
-    window.prompt('Kopyala:', text);
+    await sor('Kopyala:', text);
   }
 }
 

@@ -135,7 +135,7 @@ export function attachSocket(io, {
       if (!res.error) res.after = () => hooks.onHostStream?.(room);
       return res;
     });
-    onRoom('settings', (room, uid, p) => room.updateSettings(uid, p));
+    onRoom('settings', (room, uid, p) => room.updateSettings(uid, { ...p, relayEnabled: false, relay4k: false })); // relay kapalı: kod duruyor, ayar açılamıyor
     onRoom('skipWaiting', (room, uid) => room.skipWaiting(uid));
     onRoom('kick', (room, uid, p) => room.kick(uid, p.userId));
 

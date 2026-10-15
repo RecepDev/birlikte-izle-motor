@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="z" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a98bff"/>
+      <stop offset="1" stop-color="#5535e6"/>
+    </linearGradient>
+    <linearGradient id="p" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="60" fill="url(#z)"/>
+  <rect x="8" y="8" width="240" height="120" rx="60" fill="url(#p)"/>
+  <!-- iki oynat üçgeni üst üste: birlikte izle -->
+  <path d="M82 66 L162 114 L82 162 Z" fill="#fff" fill-opacity=".45" stroke="#fff" stroke-opacity=".45" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M108 92 L190 142 L108 192 Z" fill="#fff" stroke="#fff" stroke-width="14" stroke-linejoin="round"/>
+</svg>

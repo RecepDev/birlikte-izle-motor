@@ -9,6 +9,9 @@ import { isit, OLCUM_BAYT_TS, DOGRULAMA_BAYT, olcumleriDurdur } from './stremio-
 import { STREMIO_BASE } from '../public/js/shared/stream-url.js';
 import { kaydet as torrentKaydet, dokun as torrentDokun } from './bizim-torrentler.js';
 import { masaustuAc } from './masaustu-baslat.js';
+import { createOtomatikIndirme } from './indirme-otomatik.js';
+import { magnetCoz, baslikTahmin, videoMu } from './magnet-coz.js';
+import { seceneklerDogrula } from './indirme-secenek.js';
 
 const STREAM_CACHE_MS = 10 * 60 * 1000;
 
@@ -32,9 +35,13 @@ export function createPanelApp({
   onRoomCreated = () => {},
   relayStats = () => null,
   gecmis = { liste: () => [], izlenenler: () => [] },
+  kutuphane = { liste: () => [], ekle: () => false, cikar: () => false },
+  indirmeSecenek = { oku: () => ({}), yaz: () => ({}) },
+  izlendi = { tumu: () => ({}), filmIzlendiMi: () => false, bolumIzlendiMi: () => false, butunAyarla() {}, bolumlerAyarla() {} },
   tercih = { kalite: () => null },
   motorBilgisi = null,
   motorPanel = null,
+  indirme = null,
 }) {
   const app = express();
   app.disable('x-powered-by');
@@ -56,12 +63,16 @@ export function createPanelApp({
   const page = (file) => (req, res) => {
     const html = fs.readFileSync(path.join(panelDir, file), 'utf8').replaceAll('%%PANEL_KEY%%', panelKey);
     res.set('Cache-Control', 'no-store');
-    res.set('Content-Security-Policy', "default-src 'self'; img-src * data:; frame-ancestors 'none'");
+    res.set('Content-Security-Policy', "default-src 'self'; img-src * data:; frame-ancestors 'self'");
     res.type('html').send(html);
   };
-  app.get('/', page('index.html'));
+  // Eski sunucu paneli adresi: artık uygulama kabuğundaki Sunucu görünümü (kısayollar ve kabuk '/' açar).
+  app.get('/', (req, res) => res.redirect('/sunucu'));
   app.get('/new', page('new.html'));
-  app.get('/ara', page('ara.html'));
+  app.get('/ara', (req, res) => res.redirect('/ana')); // eski "Film ara" sayfası kaldırıldı
+  // Ana sayfa / Keşfet / İndirilenler / Ayarlar tek uygulama sayfasında (panel/js/uygulama.js).
+  for (const yol of ['/ana', '/kesfet', '/kutuphane', '/indirilenler', '/ayarlar', '/sunucu', '/eklentiler']) app.get(yol, page('uygulama.html'));
+  app.get('/detay', page('detay.html'));
 
   // Stremio'dan gelen "masaüstünde aç" bağlantısı: uygulamayı burada başlatıyoruz,
   // tarayıcı sekmesi yalnızca sonucu gösteriyor.
@@ -83,8 +94,12 @@ export function createPanelApp({
          <script>setTimeout(() => window.close(), 400);</script></body>`);
   });
   // Shared with the room page: which codecs this browser decodes.
+  app.get('/js/diyalog.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'diyalog.js')));
+  app.get('/js/kisayollar.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'kisayollar.js')));
+  app.get('/css/diyalog.css', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'css', 'diyalog.css')));
   app.get('/js/codecs.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'codecs.js')));
   app.get('/js/kaynak-sec.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'shared', 'kaynak-sec.js')));
+  app.get('/js/diller.js', (req, res) => res.sendFile(path.join(panelDir, '..', 'public', 'js', 'shared', 'diller.js')));
   app.use(express.static(panelDir, { index: false }));
 
   // Every API call needs the key (custom header also forces a CORS preflight
@@ -144,6 +159,92 @@ export function createPanelApp({
     if (req.body?.bekci !== undefined) yeni.bekci = req.body.bekci;
     if (req.body?.siteden !== undefined) yeni.siteden = req.body.siteden;
     const r = motorPanel.ayarla(yeni);
+    res.status(r.error ? 400 : 200).json(r);
+  });
+
+  // ---- önden indirme (çevrimdışı izleme) ----------------------------------------------
+  // Kişi bir kaynağı diske indirtiyor; sonra o bölüm torrent'e hiç gidilmeden
+  // oynatılıyor (motor taklidi dosyayı diskten servis ediyor).
+  // Şu an inen dosyanın torrent'i: oda aç ekranı/sayfa kapanışı kapatmasın (indirme kopardı: "aborted").
+  const indiriliyor = (h) => Boolean(indirme?.inenHashler().includes(h));
+  const otomatikIndirme = indirme
+    ? createOtomatikIndirme({ addons, config, tercih, kaynakHafiza, secenek: indirmeSecenek, indirme, log })
+    : null;
+
+  app.get('/api/indirme', (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    res.json({ ...indirme.ayar(), kayitlar: indirme.liste(), arama: otomatikIndirme.liste() });
+  });
+
+  // Arka planda indir: kaynağı otomatik mod seçer (tercih edilen kalite, seed, kaynak hafızası).
+  // Gövde: { items: [{ type, id }] } — film, bölüm ya da bir sezonun bütün bölümleri.
+  app.post('/api/indirme/otomatik', wrap(async (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    const items = (Array.isArray(req.body?.items) ? req.body.items : [])
+      .filter((x) => x && validContent(x.type, x.id)).slice(0, 80)
+      .map((x) => ({ type: x.type, id: x.id }));
+    if (!items.length) return res.status(400).json({ error: 'Geçersiz içerik' });
+    // Gövdede `secenek` varsa (soru penceresinden) yalnız bu indirmeler için o uygulanır; yoksa kayıtlı seçenekler.
+    const istenen = req.body?.secenek && typeof req.body.secenek === 'object' ? seceneklerDogrula(req.body.secenek) : null;
+    const toplu = req.body?.toplu === 'sezon' || req.body?.toplu === 'dizi' ? req.body.toplu : null;
+    res.json(await otomatikIndirme.ekle(items, istenen, toplu));
+  }));
+  // İndirme seçenekleri (kalite, boyut, HDR, dil, Türkçe altyazı, Blu-ray) ve "indirirken sor" anahtarı.
+  app.get('/api/indirme/secenek', (req, res) => res.json(indirmeSecenek.oku()));
+  app.post('/api/indirme/secenek', (req, res) => res.json(indirmeSecenek.yaz(req.body)));
+
+  app.post('/api/indirme/otomatik/iptal', (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    const r = otomatikIndirme.iptal(String(req.body?.anahtar || ''));
+    res.status(r.error ? 400 : 200).json(r);
+  });
+
+  app.post('/api/indirme', (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    const { infoHash, fileIdx, filename, ad, type, contentId, kalite, boyut, sources, poster } = req.body || {};
+    const r = indirme.ekle({
+      infoHash,
+      fileIdx: Number.isInteger(fileIdx) ? fileIdx : null,
+      filename: typeof filename === 'string' ? filename : null,
+      ad: typeof ad === 'string' ? ad : '',
+      type: typeof type === 'string' ? type : null,
+      contentId: typeof contentId === 'string' ? contentId : null,
+      poster: typeof poster === 'string' ? poster : null,
+      kalite: typeof kalite === 'string' ? kalite : null,
+      boyut: Number(boyut) || null,
+      sources: Array.isArray(sources) ? sources.filter((x) => typeof x === 'string').slice(0, 40) : [],
+    });
+    res.status(r.error ? 400 : 200).json(r);
+  });
+
+  for (const [yol, islem] of [['duraklat', 'duraklat'], ['surdur', 'surdur'], ['sil', 'sil']]) {
+    app.post(`/api/indirme/${yol}`, (req, res) => {
+      if (!indirme) return res.status(404).json({ error: 'yok' });
+      const r = indirme[islem](String(req.body?.id || ''));
+      res.status(r.error ? 400 : 200).json(r);
+    });
+  }
+
+  app.post('/api/indirme/izlerken-duraklat', (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    res.json(indirme.izlerkenDuraklatAyarla(req.body?.acik === true));
+  });
+
+  app.post('/api/indirme/hiz-limiti', (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    const r = indirme.hizLimitiAyarla(req.body?.mbps);
+    res.status(r.error ? 400 : 200).json(r);
+  });
+
+  app.post('/api/indirme/eszamanli', (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    const r = indirme.esZamanliAyarla(req.body?.sayi);
+    res.status(r.error ? 400 : 200).json(r);
+  });
+
+  app.post('/api/indirme/klasor', (req, res) => {
+    if (!indirme) return res.status(404).json({ error: 'yok' });
+    const r = indirme.klasorAyarla(req.body?.klasor);
     res.status(r.error ? 400 : 200).json(r);
   });
 
@@ -207,12 +308,119 @@ export function createPanelApp({
     res.json([...filmler.slice(0, 12), ...diziler.slice(0, 12)]);
   }));
 
+  // Ana sayfa / Keşfet: Cinemeta katalogları. Kısa süre önbellekte (her açılışta Cinemeta'ya gidilmesin).
+  const katalogOnbellek = new Map(); // anahtar -> { at, v }
+  const onbellekli = async (anahtar, ms, getir) => {
+    const e = katalogOnbellek.get(anahtar);
+    if (e && Date.now() - e.at < ms) return e.v;
+    const v = await getir();
+    katalogOnbellek.set(anahtar, { at: Date.now(), v });
+    return v;
+  };
+  app.get('/api/katalog-secenekleri', wrap(async (req, res) => {
+    try {
+      res.json(await onbellekli('secenekler', 60 * 60_000, () => addons.katalogSecenekleri()));
+    } catch {
+      res.json([]);
+    }
+  }));
+  app.get('/api/katalog', wrap(async (req, res) => {
+    const { type, id } = req.query;
+    const genre = String(req.query.genre || '').slice(0, 40);
+    const skip = Math.max(0, Math.min(5000, Math.floor(Number(req.query.skip) || 0)));
+    if (!isContentType(type) || !/^[A-Za-z0-9_-]{1,30}$/.test(String(id || ''))) return res.status(400).json({ error: 'Geçersiz katalog' });
+    try {
+      res.json(await onbellekli(`k|${type}|${id}|${genre}|${skip}`, 10 * 60_000, () => addons.katalog(type, id, { genre, skip })));
+    } catch {
+      res.json([]);
+    }
+  }));
+
+  app.get('/api/detay', wrap(async (req, res) => {
+    const { type, id } = req.query;
+    if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
+    try {
+      const d = await onbellekli(`d|${type}|${String(id).split(':')[0]}`, 30 * 60_000, () => addons.metaDetay(type, id));
+      res.json(d || { error: 'yok' });
+    } catch {
+      res.status(502).json({ error: 'Cinemeta cevap vermedi' });
+    }
+  }));
+
+  // ---- magnet: arama kutusuna yapıştırılan magnet'le oda/indirme --------------------------------
+  // 1) coz: magnet'ten kimlik/ad/tracker + ada göre film/dizi tahmini.
+  // 2) dosyalar: torrent motorda açılır, metadata gelince dosya listesi döner (kişi dosya seçer).
+  // 3) kaynak: seçilen dosya, eşleşen IMDb içeriğinin kaynak listesine "Magnet" kaynağı olarak eklenir
+  //    (oda, altyazı, geçmiş hep IMDb kimliğine bağlı); sonra normal POST /api/rooms ile oda açılır.
+  const sureAsimi = (ms) => new Promise((r) => setTimeout(r, ms));
+  app.post('/api/magnet/coz', (req, res) => {
+    const m = magnetCoz(req.body?.magnet);
+    if (!m) return res.status(400).json({ error: 'Geçerli bir magnet bağlantısı değil' });
+    res.json({ ...m, tahmin: baslikTahmin(m.ad) });
+  });
+
+  app.post('/api/magnet/dosyalar', wrap(async (req, res) => {
+    const ih = String(req.body?.infoHash || '').toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(ih)) return res.status(400).json({ error: 'Geçersiz kimlik' });
+    const trackerlar = (Array.isArray(req.body?.trackerlar) ? req.body.trackerlar : []).filter((t) => typeof t === 'string').slice(0, 40);
+    torrentKaydet([{ kind: 'torrent', infoHash: ih }]);
+    torrentDokun(ih);
+    const govde = JSON.stringify({ peerSearch: { sources: [`dht:${ih}`, ...trackerlar.map((t) => `tracker:${t}`)], min: 40, max: 200 } });
+    await fetch(`${STREMIO_BASE}/${ih}/create`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: govde, signal: AbortSignal.timeout(8000) })
+      .catch(() => null);
+    const son = Date.now() + 45_000;
+    while (Date.now() < son) {
+      torrentDokun(ih);
+      const s = await fetch(`${STREMIO_BASE}/${ih}/stats.json`, { signal: AbortSignal.timeout(3000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (s?.files?.length) {
+        const dosyalar = s.files.map((f) => ({ ad: String(f.name || f.path || '').split('/').pop(), yol: String(f.path || f.name || ''), boyut: Number(f.length) || 0 }))
+          .map((f) => ({ ...f, video: videoMu(f.ad) }))
+          .sort((a, b) => Number(b.video) - Number(a.video) || b.boyut - a.boyut);
+        return res.json({ ad: s.name || null, dosyalar });
+      }
+      await sureAsimi(500);
+    }
+    res.status(504).json({ error: 'Torrent bilgisi 45 sn içinde gelmedi (kaynak/peer bulunamadı). Tracker içermeyen magnet yavaş olabilir, tekrar dene.' });
+  }));
+
+  app.post('/api/magnet/kaynak', wrap(async (req, res) => {
+    const { type, id, filename, ad } = req.body || {};
+    const ih = String(req.body?.infoHash || '').toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(ih) || !validContent(type, id)) return res.status(400).json({ error: 'Geçersiz istek' });
+    const trackerlar = (Array.isArray(req.body?.trackerlar) ? req.body.trackerlar : []).filter((t) => typeof t === 'string').slice(0, 40);
+    const dosya = typeof filename === 'string' ? filename.slice(0, 300) : null;
+    const boyut = Number(req.body?.boyut) || null;
+    const ham = {
+      name: 'Magnet',
+      title: `${dosya || ad || ih}${boyut ? `
+💾 ${(boyut / 1e9).toFixed(2)} GB` : ''}`,
+      infoHash: ih,
+      behaviorHints: { filename: dosya, ...(boyut ? { videoSize: boyut } : {}) },
+      sources: [`dht:${ih}`, ...trackerlar.map((t) => `tracker:${t}`)],
+    };
+    const key = `${type}|${id}`;
+    let entry = streamCache.get(key);
+    if (!entry) {
+      entry = { at: Date.now(), meta: null, streams: [], errors: [], seq: 0 };
+      streamCache.set(key, entry);
+    }
+    entry.meta ||= await addons.meta(type, id);
+    entry.seq ??= entry.streams.length;
+    const [akis] = normalizeAddonStreams('Magnet', [ham], entry.seq);
+    if (!akis) return res.status(400).json({ error: 'Kaynak oluşturulamadı' });
+    entry.seq += 1;
+    entry.streams = [...entry.streams.filter((x) => !(x.addonName === 'Magnet' && x.infoHash === ih && x.filename === dosya)), akis];
+    entry.at = Date.now(); // loadStreams bu listeyi kullansın (önbellek süresi dolmasın)
+    torrentKaydet([akis]);
+    res.json({ streamId: akis.streamId, meta: { name: entry.meta?.name || id, poster: entry.meta?.poster || null } });
+  }));
+
   app.get('/api/series/:id/episodes', wrap(async (req, res) => {
     if (!isContentId(req.params.id)) return res.status(400).json({ error: 'Geçersiz id' });
-    const izlenen = new Set(gecmis.izlenenler(req.params.id));
+    const gecmisBolumleri = gecmis.izlenenler(req.params.id);
     try {
       const bolumler = await addons.seriesEpisodes(req.params.id);
-      res.json(bolumler.map((b) => ({ ...b, watched: izlenen.has(`${b.season}:${b.episode}`) })));
+      res.json(bolumler.map((b) => ({ ...b, watched: izlendi.bolumIzlendiMi(req.params.id, `${b.season}:${b.episode}`, gecmisBolumleri) })));
     } catch {
       res.json([]);
     }
@@ -220,6 +428,47 @@ export function createPanelApp({
 
   // Daha önce oda açılan film ve diziler (en yenisi başta).
   app.get('/api/gecmis', (req, res) => res.json(gecmis.liste()));
+  // Kütüphane: kişinin kendi eklediği film/diziler.
+  // Her kayıtta `bitti`: film elle izlendi işaretliyse; dizide yayımlanmış (özel bölümler hariç) bütün bölümler izlenmişse.
+  app.get('/api/kutuphane', wrap(async (req, res) => {
+    const sonuc = await Promise.all(kutuphane.liste().map(async (k) => {
+      if (k.type === 'movie') return { ...k, bitti: izlendi.filmIzlendiMi(k.id) };
+      try {
+        const gb = gecmis.izlenenler(k.id);
+        const bolumler = (await onbellekli(`bol|${k.id}`, 30 * 60_000, () => addons.seriesEpisodes(k.id)))
+          .filter((b) => b.season > 0 && (!b.released || Date.parse(b.released) <= Date.now()));
+        const izlenen = bolumler.filter((b) => izlendi.bolumIzlendiMi(k.id, `${b.season}:${b.episode}`, gb)).length;
+        return { ...k, bitti: bolumler.length > 0 && izlenen === bolumler.length, izlenen, toplam: bolumler.length };
+      } catch {
+        return { ...k, bitti: false };
+      }
+    }));
+    res.json(sonuc);
+  }));
+  // Elle izledim işaretleri. Gövde: { type, id, deger: true|false, bolumler?: ["s:e", ...] } (bolumler yoksa bütün film/dizi).
+  app.get('/api/izlendi', (req, res) => res.json(izlendi.tumu()));
+  app.post('/api/izlendi', (req, res) => {
+    const { type, id, deger, bolumler } = req.body || {};
+    if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
+    const temel = String(id).split(':')[0];
+    if (Array.isArray(bolumler) && type === 'series') {
+      const liste = bolumler.filter((x) => /^\d+:\d+$/.test(String(x))).slice(0, 2000).map(String);
+      izlendi.bolumlerAyarla(temel, liste, deger === true);
+    } else {
+      izlendi.butunAyarla(type, temel, deger === true, gecmis.izlenenler(temel));
+    }
+    res.json({ ok: true });
+  });
+  app.post('/api/kutuphane/ekle', (req, res) => {
+    const { type, id, name, poster, year } = req.body || {};
+    if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
+    res.json({ ok: kutuphane.ekle({ type, id: String(id).split(':')[0], name, poster, year }) });
+  });
+  app.post('/api/kutuphane/cikar', (req, res) => {
+    const { type, id } = req.body || {};
+    if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
+    res.json({ ok: kutuphane.cikar(type, String(id).split(':')[0]) });
+  });
   app.get('/api/tercih', (req, res) => res.json({ kalite: tercih.kalite(), internetMbps: tercih.internetMbps?.() ?? null }));
   // Gövdede hangisi varsa o yazılıyor: { kalite } ve/ya { internetMbps } (null = sil).
   app.post('/api/tercih', (req, res) => {
@@ -309,7 +558,7 @@ export function createPanelApp({
     const acik = new Set(await stremioLocal.openTorrents().catch(() => []));
     const odada = new Set(rooms.list().flatMap((r) => r.streams.map((s) => s.infoHash)));
     for (const h of icerikHashleri(req.body)) {
-      if (acik.has(h) && !odada.has(h)) stremioLocal.removeTorrent({ infoHash: h }).catch(() => {});
+      if (acik.has(h) && !odada.has(h) && !indiriliyor(h)) stremioLocal.removeTorrent({ infoHash: h }).catch(() => {});
     }
     res.json({ ok: true });
   }));
@@ -339,7 +588,7 @@ export function createPanelApp({
     if (!/^[0-9a-f]{40}$/.test(infoHash)) return res.status(400).json({ error: 'Geçersiz' });
     // Bir odada izleniyorsa dokunma.
     const izleniyor = rooms.list().some((r) => r.streams.some((s) => s.streamId === r.hostStreamId && s.infoHash === infoHash));
-    if (!izleniyor) await stremioLocal.removeTorrent({ infoHash }).catch(() => {});
+    if (!izleniyor && !indiriliyor(infoHash)) await stremioLocal.removeTorrent({ infoHash }).catch(() => {});
     res.json({ ok: true });
   }));
 
@@ -394,7 +643,7 @@ export function createPanelApp({
     const { meta, streams } = await loadStreams(type, id);
     if (!streams.some((s) => s.streamId === streamId)) return res.status(400).json({ error: 'Stream bulunamadı' });
     const { room, creatorToken } = rooms.create({
-      type, contentId: id, meta, streams, hostStreamId: streamId, settings: config.get().defaults,
+      type, contentId: id, meta, streams, hostStreamId: streamId, settings: { ...config.get().defaults, relayEnabled: false, relay4k: false }, // relay kapalı (kod duruyor)
     });
     log.info('Oda açıldı', { roomId: room.id, content: id });
     // "Oda aç" ekranında ölçülen kaynaklar odaya (kaynak zayıflarsa yeniden ölçmeden geçiş için).
@@ -436,6 +685,35 @@ export function createPanelApp({
     });
   }));
 
+  // "İzlemeye devam" oynat düğmesi: en son açılan kaynakla odayı doğrudan açar (kaynak aramaz, ölçmez).
+  // Dizide son izlenen bölüm. Kayıtlı kaynak yoksa 404 { error: 'akisYok' }: arayüz detay sayfasına gider.
+  app.post('/api/rooms/devam', wrap(async (req, res) => {
+    const { type, id } = req.body || {};
+    if (!validContent(type, id)) return res.status(400).json({ error: 'Geçersiz içerik' });
+    const kayit = gecmis.akisAl(type, String(id).split(':')[0]);
+    if (!kayit?.stream || !validContent(type, kayit.contentId)) return res.status(404).json({ error: 'akisYok' });
+    const meta = await addons.meta(type, kayit.contentId).catch(() => null) || { name: kayit.contentId };
+    const akis = kayit.stream;
+    const { room, creatorToken } = rooms.create({
+      type, contentId: kayit.contentId, meta, streams: [akis], hostStreamId: akis.streamId,
+      settings: { ...config.get().defaults, relayEnabled: false, relay4k: false },
+    });
+    log.info('Oda açıldı (izlemeye devam)', { roomId: room.id, content: kayit.contentId });
+    onRoomCreated(room);
+    olcumleriDurdur();
+    const MB = 1024 * 1024;
+    const sure = Number(meta?.sureSn) || 0;
+    const boy = Number(akis.sizeBytes) || 0;
+    const konum = Number(room.playback?.position) || 0;
+    const bas = sure && boy && konum > 0 ? Math.max(0, Math.floor(((konum / sure) * boy) / MB) * MB - 8 * MB) : 0;
+    isit(akis, 128 * MB, { bas, sureMs: 60_000, olcum: false });
+    res.json({
+      roomId: room.id,
+      creatorToken,
+      roomUrl: `${publicBase}/room/${room.id}#${new URLSearchParams({ host: creatorToken, name: config.get().nickname })}`,
+    });
+  }));
+
   // Odayı bu bilgisayardaki masaüstü uygulamasında aç. Host bağlantısı (#host=…) ile:
   // uygulama odaya host olarak giriyor.
   app.post('/api/masaustu-ac', (req, res) => res.json(masaustuAc(null)));
@@ -449,6 +727,20 @@ export function createPanelApp({
 
   app.get('/api/rooms', (req, res) => {
     res.json(rooms.list().map((r) => ({ ...r.summary(), relay: relayStats(r.id) })));
+  });
+
+  // Ana sayfadaki "Açık odalar" satırı: kişi olan odalar, giriş adresiyle (konuk bağlantısı).
+  app.get('/api/acik-odalar', (req, res) => {
+    // Boş (içinde kimse olmayan) odalar da listelenir: "Odadan çık (oda açık kalsın)" diyen host'un odası, geri gelene ya da
+    // oda zaman aşımına (rooms.js emptyTtlMs) kadar buradan bulunabilsin.
+    res.json(rooms.list().map((r) => ({
+      id: r.id,
+      name: r.meta?.name || r.contentId,
+      poster: r.meta?.poster || null,
+      users: r.connectedUsers().length,
+      playing: !r.playback.paused,
+      url: `${publicBase}/room/${r.id}`,
+    })));
   });
 
   app.post('/api/rooms/:id/close', (req, res) => {

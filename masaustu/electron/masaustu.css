@@ -114,3 +114,43 @@ html, body { overflow: hidden !important; }
 
 /* Uyumlu mod masaüstünde yok (mpv her biçimi açıyor): ayarı ve uyarıları gizle. */
 label.check:has(#keep-quality), #quality-warning:empty { display: none !important; }
+
+/* Masaüstü uygulaması telefon değil: kontrol çubuğu pencere dar olsa da hep geniş düzende. Saydam kontrol aynası (kontrol.html)
+   çubuğun genişliğine göre ölçüyor ve sayfadan daha dar çıkıyordu: "dar ekran" (max-width: 900px) kuralları orada çalışıp ses çubuğunu
+   gizliyor, düğme ölçülerini ve boşlukları sayfadakinden farklı yapıyordu. Burada sabitleniyor (daha özgül/sonra gelen kural kazanır;
+   tam ekran büyük düzeni .controls.buyuk bunları yine ezer). */
+.controls { gap: 4px; padding: 16px 28px 24px; }
+.seek-row { gap: 12px; }
+.ctl-row { gap: 10px; }
+.controls .ctl { padding: 9px 11px; min-width: 46px; min-height: 0; }
+.controls .volume { display: block; width: 80px; flex: none; }
+
+/* ⋮ düğmesi mpv penceresindeki delikte görünüyor: dikdörtgen ve opak (bkz. onyukleme-kabuk.cjs). */
+.ust-diger { border-radius: 0 !important; background: rgb(20, 22, 29) !important; opacity: 1 !important; }
+.player.idle .ust-diger { display: none; }
+/* Sağ tık menüsü: deliğin köşeleri de yuvarlak açılıyor (ana.cjs delikAc, r = 12). */
+.player > #pop-more { background: rgb(24, 25, 48) !important; border: 1px solid #3a3d6b !important; border-radius: 12px !important; }
+
+/* Başlık çubuğu sayfanın parçası (ana.cjs titleBarOverlay): pencere içi tam ekranda video üstteki 40 px'i bırakır,
+   orada pencere düğmeleri ve sürükleme alanı kalır (mpv penceresi örtmesin). */
+body.player-genis .player { margin-top: 52px !important; height: calc(100vh - 52px) !important; }
+body.player-genis::after { content: ''; position: fixed; top: 0; left: 84px; right: 150px; height: 40px; -webkit-app-region: drag; }
+
+/* Pencere içi tam ekranda üstteki 40 px'lik pencere düğmesi şeridi videonun siyahıyla aynı renkte: video ile arasında renk farkı/bant görünmesin. */
+html:has(body.player-genis), body.player-genis { background: #000 !important; background-color: #000 !important; }
+
+/* Pencere içi tam ekranda geri düğmesi: videonun içinde değil, üstteki 40 px'lik pencere şeridinde (solda, düğmelerle aynı hizada). */
+body.player-genis .genis-geri { position: fixed !important; top: 4px !important; left: 10px !important; width: 32px !important; height: 32px !important; border-radius: 9px !important; z-index: 2147483001; }
+body.player-genis .genis-geri .ic { width: 18px !important; height: 18px !important; }
+
+/* Geri düğmesi pencere şeridinde, pencere düğmeleri (küçült/büyüt/kapat) gibi: kutusuz, tam şerit yüksekliğinde, üzerine gelince açık dolgu. */
+body.player-genis .genis-geri { top: 0 !important; left: 0 !important; width: 46px !important; height: 40px !important; border-radius: 0 !important;
+  background: transparent !important; border: 0 !important; color: #e8e9ee !important; box-shadow: none !important; }
+body.player-genis .genis-geri:hover { background: rgba(255, 255, 255, .1) !important; color: #fff !important; }
+body.player-genis .genis-geri .ic { width: 18px !important; height: 18px !important; stroke-width: 2 !important; }
+/* Pencerenin yuvarlak sol üst köşesini (8 px) taşırmasın: düğme köşeden 8 px içeride başlar. */
+body.player-genis .genis-geri { left: 8px !important; }
+/* Şeritte tam boy kutu yerine küçük yuvarlak düğme: şerit videoyla aynı siyah, düğme yalnız üzerine gelince belirir (şerit pencere düğmeleriyle aynı hizada). */
+body.player-genis .genis-geri { top: 8px !important; left: 8px !important; width: 52px !important; height: 38px !important; border-radius: 10px !important; }
+body.player-genis .genis-geri .ic { width: 28px !important; height: 28px !important; stroke-width: 2.2 !important; }
+body.player-genis .genis-geri:hover { background: rgba(255, 255, 255, .14) !important; }

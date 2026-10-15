@@ -26,8 +26,10 @@ Portlar: 7300 herkese açık (oda sayfası, addon, relay; cloudflared tüneli) �
 - `src/relay.js` — misafirlere video aktarımı.
 - `src/panel-api.js` + `panel/` — yerel panel.
 - `src/indir.js` — masaüstü güncelleme listesi `MASAUSTU_DOSYALARI`.
+- `src/indirme.js` — önden indirme (çevrimdışı izleme): kuyruk, ilerleme, duraklat/sürdür/sil, klasör ayarı (`data/indirme.json`). Tam inmiş dosyayı `hazirDosya()` söylüyor, `src/motor/stremio-taklidi.js` onu diskten servis ediyor; böylece oda, relay, masaüstü mpv ve telefon değişmeden indirilenden oynatıyor.
 - `src/masaustu-baslat.js` — paneldeki "uygulamayı aç"; `scripts/panel-ac.mjs` bununla paneli uygulamanın "Panel" penceresinde açar (`--panel`), `baslat.vbs` uygulama yoksa Edge'e düşer.
-- `public/room.html`, `public/js/room.js` (3400 satır — Grep kullan), `public/js/shared/` (sync-core, stream-url: DOM'suz, istemcilerle ortak).
+- `public/room.html`, `public/js/room.js` (3400 satır — Grep kullan), `public/js/shared/` (sync-core, stream-url, altyazi-hizala, takilma-olc, kelime-kok, zor-kelime-sec: DOM'suz, istemcilerle ortak).
+- `public/js/subs.js` — altyazı sekmesi: liste, ikinci altyazı (alt satır), gecikme, stil. `public/js/zor-kelime.js` — zor kelimelerin Türkçesi kutusu; sözlüğü `scripts/sozluk-uret.mjs` üretiyor (`public/veri/en-tr.json.gz`, Wiktionary CC BY-SA).
 - `masaustu/` — Electron + gömülü mpv. `electron/ana.cjs` ana süreç, `motor-baslat.cjs` 11470 boşsa TorrServer açar, `stremio-vekil.cjs`, `baslangic.html` açılış ekranı, `onyukleme-kabuk.cjs`. `ana.cjs` `tamponAyarla()`: hızlı başlat (mpv `cache-pause-wait` hız/ihtiyaca göre 5/10/30 sn), `sunucuBaslat()`/`panelAc()`: Kurulumsuz'da sunucuyu (depo kökü) başlatır, paneli aynı pencerede açar; geri düğmesi `onyukleme-kabuk.cjs` `sunucuSayfasi()`. Uygulamanın motoru sunucu açılınca 11470'i bırakır (`/birak`, server.js `masaustuMotoruBiraktir`).
 - `android/app/src/main/java/xyz/birlikteizle/mobil/` — Kotlin, Media3. `Motor.kt` (TorrServer + Kotlin taklit + önbellek), `Onbellek.kt`, `OdaActivity.kt`, `MainActivity.kt`.
 - `deneme/motor/` — motor karşılaştırma betikleri (ürüne girmez).
@@ -46,6 +48,7 @@ Portlar: 7300 herkese açık (oda sayfası, addon, relay; cloudflared tüneli) �
 - Yeni masaüstü dosyası eklenince `src/indir.js` `MASAUSTU_DOSYALARI`'na ekle (yoksa otomatik güncelleme siler). Yeni motor dosyası `masaustu/motor-kopyala.cjs`'e de girer.
 - Sürüm: `masaustu/package.json` version; `android/app/build.gradle.kts` versionCode + versionName.
 - Stremio'nun kurulu dosyalarına dokunma.
-- Kullanıcının görmediği arka plan torrenti yok (önden yükleme, otomatik tarama yok). Testin açtığı torrentleri kaldır.
+- Kullanıcının görmediği arka plan torrenti yok (önden yükleme, otomatik tarama yok). Tek kural dışı: kişinin kendi başlattığı **önden indirme** (`src/indirme.js`), panelde listede duruyor ve ilerlemesi görünüyor; sunucu yeniden açılınca yarıda kalanlar sürüyor. Testin açtığı torrentleri kaldır (`GET 127.0.0.1:11470/<infohash>/remove`).
+- **Deneme sunucusunu 11470'e bağlama:** o port kullanıcının canlı motoru. Test sunucusu `MOTOR_URL=http://127.0.0.1:11471` ile ayrı motora bakmalı; yoksa deneme torrent'i kullanıcının motorunda açılıyor (2026-10-14'te oldu).
 - Görüntü kalitesi öncelikli: görüntü yeniden kodlanmaz.
 - Hata ayıklarken önce `data/logs/server.log` (son "Birlikte İzle çalışıyor" satırı son commit'ten yeni mi?), oynatma sorunlarında `data/tani/<ODA>.log`.

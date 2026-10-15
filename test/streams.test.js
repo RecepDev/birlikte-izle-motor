@@ -85,6 +85,9 @@ test('normalizeStreams keeps torrent and http, drops others', () => {
     seeders: null,
     embeddedSubs: null,
     multiAudio: false,
+    source: null,
+    diller: [],
+    turkceSes: false,
     pack: false,
     sizeBytes: 2 * 1024 ** 3,
     infoHash: IH.toLowerCase(),
@@ -167,4 +170,15 @@ test('guestStreamList hides http streams except the host one', () => {
   ]);
   assert.deepEqual(guestStreamList(streams, 's1').map((s) => s.streamId), ['s1']);
   assert.deepEqual(guestStreamList(streams, 's3').map((s) => s.streamId), ['s1', 's3']);
+});
+
+test('parseSource ve parseTurkishAudio', async () => {
+  const { parseSource, parseTurkishAudio } = await import('../src/streams.js');
+  assert.equal(parseSource('Movie.2020.1080p.BluRay.x264'), 'BluRay');
+  assert.equal(parseSource('Movie.2160p.BDRemux'), 'BluRay');
+  assert.equal(parseSource('Show.S01E01.WEB-DL.1080p'), 'WEB');
+  assert.equal(parseSource('Movie 1080p'), null);
+  assert.equal(parseTurkishAudio('Film TR Dublaj 1080p'), true);
+  assert.equal(parseTurkishAudio('Film TR+EN 1080p'), true);
+  assert.equal(parseTurkishAudio('Film TR Altyazı 1080p'), false);
 });

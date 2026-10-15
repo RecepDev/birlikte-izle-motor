@@ -13,6 +13,7 @@
 // Uyumlu mod (/hlsv2, ffmpeg ile dönüştürme) henüz yok: 404 dönüyor (plan: Faz 4).
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
 import { IYI_TRACKERLAR } from './torrserver.js';
 
@@ -52,6 +53,9 @@ export function istatistik(t) {
     downloaded: Number(t.bytes_read_data) || 0,
     uploaded: Number(t.bytes_written_data) || 0,
     streamProgress: null,
+    // Metadata gelince dosya listesi (Stremio'nun stats.json "files" alanı): magnet'ten dosya seçtirmek için.
+    files: [...(t.file_stats || [])].sort((a, b) => a.id - b.id)
+      .map((f) => ({ name: String(f.path || '').split('/').pop(), path: String(f.path || ''), length: Number(f.length) || 0 })),
     // Stremio'ya özgü "tamamını indir" listesi; TorrServer'da yok (birikme denetimi boş görsün).
     selections: [],
   };
@@ -71,7 +75,7 @@ const YEREL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 // onbellek: src/motor/onbellek.js (verilmezse her şey doğrudan TorrServer'dan).
 // birak: verilirse (masaüstü uygulaması) POST /birak gelince çağrılır; sunucu 11470'i almak istiyor.
 // ekTrackerlar: sunucunun güncel tracker listesi (ngosang); her torrent'e IYI_TRACKERLAR ile birlikte ekleniyor.
-export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null, onbellek = null, birak = null, ekTrackerlar = () => [] }) {
+export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => null, onbellek = null, birak = null, ekTrackerlar = () => [], indirme = null }) {
   const kimlik = crypto.randomBytes(8).toString('hex'); // 127.0.0.1'e cevap verenin biz olduğunu doğrulamak için
   const ekleniyor = new Map(); // hash -> ekleme sözü (aynı torrent iki kez eklenmesin)
   const secilen = new Map(); // `${hash}/${sıra}` -> { id, length }
@@ -150,9 +154,45 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     }).catch(() => {});
   }
 
+  // Önden indirilmiş dosya: torrent'e hiç gitmeden diskten veriliyor. Oda, relay,
+  // masaüstü mpv ve telefon aynı adresi istediği için hiçbiri değişmiyor.
+  function yerelAkit(req, res, dosyaBilgi) {
+    const { yol, boy } = dosyaBilgi;
+    const m = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || '').trim());
+    let bas = 0;
+    let son = boy - 1;
+    if (m && m[1] === '' && m[2] !== '') bas = Math.max(0, boy - Number(m[2])); // "son N bayt"
+    else if (m) {
+      bas = Number(m[1] || 0);
+      if (m[2] !== '') son = Math.min(boy - 1, Number(m[2]));
+    }
+    if (bas >= boy || bas > son) {
+      res.writeHead(416, { 'content-range': `bytes */${boy}` });
+      return res.end();
+    }
+    const uzanti = String(yol).split('.').pop().toLowerCase();
+    const basliklar = {
+      'content-type': MIME[uzanti] || 'application/octet-stream',
+      'accept-ranges': 'bytes',
+      'content-length': String(son - bas + 1),
+    };
+    if (m) basliklar['content-range'] = `bytes ${bas}-${son}/${boy}`;
+    res.writeHead(m ? 206 : 200, basliklar);
+    if (req.method === 'HEAD') return res.end();
+    const akis = fs.createReadStream(yol, { start: bas, end: son });
+    akis.on('error', (err) => {
+      log.warn('İndirilen dosya okunamadı', { yol, error: err.message });
+      res.destroy();
+    });
+    res.on('close', () => akis.destroy());
+    return akis.pipe(res);
+  }
+
   async function akit(req, res, ih, idx, adres) {
     const tr = trackerlar(adres.searchParams.getAll('tr'));
     const ad = adres.searchParams.get('f');
+    const inmis = indirme?.hazirDosya(ih, idx, ad);
+    if (inmis) return yerelAkit(req, res, inmis);
     sonuOnden(req, ih, idx, tr, ad, adres);
     if (onbellek?.acik()) return onbellekliAkit(req, res, ih, idx, tr, ad);
     const f = await dosya(ih, idx, tr, ad);
@@ -208,6 +248,9 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
     res.writeHead(m ? 206 : 200, baslik);
     if (req.method === 'HEAD') return res.end();
 
+    // Önden indirme (x-indirme): veri zaten kişinin klasörüne tam yazılıyor, blok önbelleğine ikinci kez yazılmasın
+    // (sezon indirmeleri önbelleği saatler içinde onlarca GB şişirip diski dolduruyordu).
+    const indirmeIstegi = Boolean(req.headers['x-indirme']);
     let kapandi = false;
     res.on('close', () => { kapandi = true; });
     const gonder = (veri) => new Promise((r) => {
@@ -264,7 +307,7 @@ export function createStremioTaklidi({ ts, port = 11470, log, dosyaAdi = () => n
             toplanan += al;
             off += al;
             if (blokBas + toplanan === blokSon) {
-              onbellek.yaz(ih, f.id, blokNo, Buffer.concat(parcalar));
+              if (!indirmeIstegi) onbellek.yaz(ih, f.id, blokNo, Buffer.concat(parcalar));
               parcalar = [];
               toplanan = 0;
               blokNo++;

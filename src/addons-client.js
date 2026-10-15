@@ -115,6 +115,50 @@ export function createAddonsClient({ fetchImpl = fetch, timeoutMs = 10_000, meta
       }
     },
 
+    // Keşfet seçenekleri: Cinemeta manifest'inden katalog listesi ([{ type, id, name, genres }]).
+    async katalogSecenekleri() {
+      const man = await getJson(`${CINEMETA}/manifest.json`, metaTimeoutMs);
+      return (man?.catalogs || [])
+        .filter((c) => (c.type === 'movie' || c.type === 'series') && c.id)
+        .map((c) => {
+          const genre = (c.extra || []).find((e) => e.name === 'genre');
+          return {
+            type: c.type, id: String(c.id), name: String(c.name || c.id),
+            genres: Array.isArray(genre?.options) ? genre.options.filter(Boolean).map(String) : [],
+          };
+        });
+    },
+
+    // Katalog sayfası (Ana sayfa satırları, Keşfet): Cinemeta /catalog/<tür>/<id>[/genre=..&skip=..].json
+    async katalog(type, id, { genre = '', skip = 0 } = {}) {
+      const extra = [genre ? `genre=${encodeURIComponent(genre)}` : '', skip > 0 ? `skip=${skip}` : ''].filter(Boolean).join('&');
+      const { metas } = await getJson(`${CINEMETA}/catalog/${type}/${id}${extra ? `/${extra}` : ''}.json`, metaTimeoutMs);
+      return (Array.isArray(metas) ? metas : []).map((m) => ({
+        id: String(m.id), type, name: String(m.name || m.id),
+        poster: m.poster || null, year: m.releaseInfo || (m.year ? String(m.year) : null),
+        puan: m.imdbRating || null,
+      }));
+    },
+
+    // Detay ekranı: Cinemeta'nın tam meta kaydı (arka plan, logo, özet, süre, türler, oyuncular, fragman).
+    async metaDetay(type, id) {
+      const imdbId = String(id).split(':')[0];
+      const { meta } = await getJson(`${CINEMETA}/meta/${type}/${imdbId}.json`, metaTimeoutMs);
+      if (!meta) return null;
+      const liste = (x) => (Array.isArray(x) ? x.filter(Boolean).map(String).slice(0, 12) : []);
+      const fragman = (meta.trailers || []).find((t) => typeof t?.source === 'string' && /^[\w-]{6,20}$/.test(t.source));
+      return {
+        id: imdbId, type, name: String(meta.name || imdbId),
+        background: meta.background || null, logo: meta.logo || null, poster: meta.poster || null,
+        description: meta.description ? String(meta.description) : '',
+        runtime: meta.runtime ? String(meta.runtime) : null,
+        year: meta.releaseInfo || (meta.year ? String(meta.year) : null),
+        imdbRating: meta.imdbRating || null,
+        genres: liste(meta.genres), cast: liste(meta.cast), director: liste(meta.director),
+        fragman: fragman ? `https://www.youtube.com/watch?v=${fragman.source}` : null,
+      };
+    },
+
     // Season/episode list for a series (Cinemeta's `videos` array), for the episode picker.
     async seriesEpisodes(id) {
       const { meta } = await getJson(`${CINEMETA}/meta/series/${id}.json`, metaTimeoutMs);

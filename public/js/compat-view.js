@@ -32,8 +32,8 @@ function deviceChips(device) {
     chip('E-AC3 ses', flag(has(device.audioCodecs, 'eac3')), 'Değilse Uyumlu mod sesi dönüştürür'),
     chip(device.gpu && device.gpuRenderer ? `Ekran kartı: ${gpuName(device.gpuRenderer)}` : 'Donanım hızlandırma', flag(device.gpu)),
   ];
-  if (device.touch) chips.push(chip('Stremio yok (host üzerinden)', 'unknown'));
-  else chips.push(chip('Stremio', flag(device.stremio)));
+  if (device.touch) chips.push(chip('Video motoru yok', 'unknown'));
+  else chips.push(chip('Video motoru', flag(device.stremio)));
   return el('div', { class: 'compat-chips' }, ...chips);
 }
 

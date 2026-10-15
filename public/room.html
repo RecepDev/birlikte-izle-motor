@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <meta name="referrer" content="no-referrer">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%91%A5%3C/text%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>Birlikte İzle</title>
   <link rel="stylesheet" href="/css/room.css">
   <script type="module" src="/js/room.js"></script>
@@ -28,7 +28,7 @@
       </label>
       <button type="submit" class="primary big">Katıl</button>
       <p id="join-error" class="error" hidden></p>
-      <p class="muted small">Videoyu izlemek için bilgisayarında <b>Stremio</b> açık olmalı.</p>
+      <p class="muted small">Videoyu izlemek için Birlikte İzle masaüstü uygulamasını kullan.</p>
     </form>
   </div>
 
@@ -61,8 +61,8 @@
         <div>
           <div class="title-line">
             <div id="title" class="title-text"></div>
-            <span id="relay-badge" class="relay-badge" hidden title="Video host'un bilgisayarı üzerinden geliyor (relay). Tıkla: kendi Stremio'na bağlanmayı dene.">📶 Relay</span>
-            <button id="connect-stremio" type="button" class="connect-stremio" hidden title="Bilgisayarında Stremio varsa videoyu doğrudan oradan al: host'un internetini kullanmaz, genelde daha hızlı.">🔌 Stremio'ya bağlan</button>
+            <span id="relay-badge" class="relay-badge" hidden title="Video host'un bilgisayarı üzerinden geliyor (relay). relay">📶 Relay</span>
+            <button id="connect-stremio" type="button" class="connect-stremio" hidden>🔌 Bağlan</button>
           </div>
           <div id="subtitle" class="muted small"></div>
         </div>
@@ -70,7 +70,7 @@
       <!-- Yayın düğmeleri menünün dışında: dar ekranda da "⋯"nin hemen solunda görünür. -->
       <div class="yayin-dugmeler">
           <button id="yayin-ac" type="button" class="yayin-ac" hidden title="Discord'daki gibi: oynattığın görüntüyü ve sesi odadakilere canlı yayınla. Görüntü senden izleyicilere doğrudan gider.">📡 <span id="yayin-ac-yazi">Yayın Aç</span></button>
-          <button id="yayin-izle" type="button" class="yayin-izle" hidden title="Host'un canlı yayınını izle: kendi kaynağın durur, Stremio gerekmez.">📡 <span id="yayin-izle-yazi">Yayını izle</span></button>
+          <button id="yayin-izle" type="button" class="yayin-izle" hidden title="Host'un canlı yayınını izle: kendi kaynağın durur.">📡 <span id="yayin-izle-yazi">Yayını izle</span></button>
       </div>
       <button id="ust-menu-btn" type="button" class="ust-menu-btn" aria-label="Diğer işlemler" title="Diğer işlemler">⋯</button>
       <div class="top-actions" id="top-actions">
@@ -106,6 +106,8 @@
             <span id="banner-text"></span>
             <button id="banner-skip" type="button" hidden>Beklemeden devam et</button>
           </div>
+          <button id="btn-more" type="button" class="ctl ust-diger" hidden data-pop="pop-more" title="Diğer" aria-label="Diğer"></button>
+          <button id="genis-geri" type="button" class="genis-geri" title="Geri (odadan çık)" aria-label="Geri"></button>
           <div id="viewers-ov" class="viewers-ov">
             <button id="viewers-toggle" type="button" title="İzleyicileri göster/gizle">👥 <span id="viewers-count">0</span></button>
             <ul id="viewers-list"></ul>
@@ -142,7 +144,7 @@
           <div id="pop-audio" class="ctl-pop ctl-pop-dar" hidden></div>
           <div id="pop-episodes" class="ctl-pop" hidden></div>
           <div id="pop-more" class="ctl-pop ctl-pop-dar" hidden></div>
-          <div id="pop-react" class="ctl-pop ctl-pop-react" hidden></div>
+          <div id="pop-react" class="ctl-pop ctl-pop-react" hidden data-kapali></div>
           <div id="weak-src" class="weak-src" hidden>
             <span id="weak-src-text"></span>
             <div class="intro-row">
@@ -172,10 +174,10 @@
             <button id="btn-audio" type="button" class="ctl" data-pop="pop-audio" hidden title="Ses dili" aria-label="Ses dili"></button>
             <button id="btn-subs-panel" type="button" class="ctl" title="Altyazı / Dil ayarları" aria-label="Altyazı / Dil ayarları"></button>
             <button id="btn-chat" type="button" class="ctl" title="Sohbet" aria-label="Sohbet"></button>
-            <button id="btn-react" type="button" class="ctl" data-pop="pop-react" title="Tepki" aria-label="Tepki"></button>
+            <button id="btn-react" type="button" class="ctl" hidden data-pop="pop-react" title="Tepki" aria-label="Tepki"></button>
             <button id="btn-episodes" type="button" class="ctl" data-pop="pop-episodes" hidden title="Bölümler" aria-label="Bölümler"></button>
+            <button id="btn-genis" type="button" class="ctl" title="Paneli göster / gizle (P)" aria-label="Paneli göster / gizle"></button>
             <button id="btn-fs" type="button" class="ctl" aria-label="Tam ekran"></button>
-            <button id="btn-more" type="button" class="ctl" data-pop="pop-more" title="Diğer" aria-label="Diğer"></button>
             </div>
           </div>
         </div>
@@ -261,8 +263,8 @@
           </div>
           <div class="row-line quality-check-row">
             <button id="quality-refresh-addons" type="button" hidden>🔄 Addon'ları tekrar ara</button>
-            <button id="boost-peers" type="button" hidden title="Stremio'nun peer arama sınırını yükseltir, ek tracker'larla torrent'i yeniden açar (Stremio yeniden başlar, video kaldığı yerden devam eder)">🔍 Daha çok kaynak bul</button>
-            <button id="restart-stremio" type="button" hidden title="Stremio takılıp hız vermiyorsa: yalnızca yayın sunucusunu yeniden başlatır, Stremio penceresi açık kalır">♻️ Stremio'yu yeniden başlat</button>
+            <button id="boost-peers" type="button" hidden title="Ek tracker'larla torrent'i yeniden açar, daha çok kaynak arar (video kaldığı yerden devam eder)">🔍 Daha çok kaynak bul</button>
+            <button id="restart-stremio" type="button" hidden title="Motor takılıp hız vermiyorsa: video motorunu yeniden başlatır">♻️ Motoru yeniden başlat</button>
             <button id="quality-check-all" type="button" hidden></button>
           </div>
           <ul id="quality-list" class="quality"></ul>
@@ -314,7 +316,7 @@
   <dialog id="yayin-dialog">
     <form method="dialog" class="settings">
       <h2>📡 Canlı yayın</h2>
-      <p class="muted small">Oynattığın görüntü ve bilgisayarının sesi bir kez sıkıştırılıp izleyicilere doğrudan gönderilir. İzleyicinin Stremio'ya ihtiyacı yoktur. Her izleyici ayrı bir akış olduğu için senin upload'unu kullanır.</p>
+      <p class="muted small">Oynattığın görüntü ve bilgisayarının sesi bir kez sıkıştırılıp izleyicilere doğrudan gönderilir. Her izleyici ayrı bir akış olduğu için senin upload'unu kullanır.</p>
       <div class="row">
         <label class="field"><span>Çözünürlük</span> <select id="yayin-kalite"></select></label>
         <label class="field"><span>Kare hızı</span> <select id="yayin-fps"><option value="30">30 fps</option><option value="60">60 fps (akıcı, daha çok upload)</option></select></label>
@@ -361,7 +363,7 @@
             <option value="600">10 dakika</option>
             <option value="1200">20 dakika</option>
           </select></label>
-        <p class="muted small">Fazlası diskte geçici yer kaplar (4K'da 10 dk ≈ 2 GB). Stremio'nun o kadar ilerisini indirmesi için internetin videodan hızlı olmalı.</p>
+        <p class="muted small">Fazlası diskte geçici yer kaplar (4K'da 10 dk ≈ 2 GB). Motorun o kadar ilerisini indirmesi için internetin videodan hızlı olmalı.</p>
       </fieldset>
       <fieldset>
         <legend>Görüntü kalitesi</legend>
@@ -384,7 +386,7 @@
       </fieldset>
       <fieldset class="local-setting">
         <legend>Bu bilgisayarın interneti</legend>
-        <label class="field inline"><span>Stremio'nun yükleme (upload) sınırı</span>
+        <label class="field inline"><span>Yükleme (upload) sınırı</span>
           <select id="set-upload">
             <option value="">Sınır yok</option>
             <option value="2">2 Mbps</option>
@@ -393,7 +395,7 @@
             <option value="20">20 Mbps</option>
             <option value="50">50 Mbps</option>
           </select></label>
-        <p class="muted small">Stremio indirirken başkalarına da yükler. Ev internetinin yükleme hattı dolunca evdeki her şeyin bağlantısı kesilir. Yükleme hızının yarısı kadar bir sınır iyi olur. Windows yönetici onayı ister. Misafirlere aktarılan video bu sınırdan etkilenmez.</p>
+        <p class="muted small">Torrent indirirken başkalarına da yüklenir. Ev internetinin yükleme hattı dolunca evdeki her şeyin bağlantısı kesilir. Yükleme hızının yarısı kadar bir sınır iyi olur. Windows yönetici onayı ister.</p>
         <label class="field inline"><span>Önbellek (GB)</span> <input type="number" id="set-video-onbellek" min="0" max="1000" step="1" placeholder="sınırsız"></label>
         <p class="muted small">İzlenen yerler diskte kalır: aynı film ya da yarım kalan yer yeniden açılınca internete gitmeden hemen gelir. Dolunca en eski kullanılan silinir. 0 = kapalı.</p>
       </fieldset>
@@ -416,9 +418,9 @@
         <label class="check"><input type="radio" name="waitMode" value="wait"> <span>Herkes beklesin</span></label>
         <label class="check"><input type="radio" name="waitMode" value="continue"> <span>Beklemeden devam, sonra yetişsin</span></label>
       </fieldset>
-      <fieldset id="relay-fields">
+      <fieldset id="relay-fields" hidden>
         <legend>Host üzerinden izle (relay)</legend>
-        <label class="check"><input type="checkbox" id="set-relay"> <span>Stremio'su olmayanlar benim bilgisayarımdan izleyebilsin</span></label>
+        <label class="check"><input type="checkbox" id="set-relay"> <span>relay</span></label>
         <label class="field inline"><span>Kişi sınırı</span> <input type="number" id="set-relay-limit" min="0" max="10"></label>
         <label class="check"><input type="checkbox" id="set-relay4k"> <span>Relay'den izleyenler 4K dönüştürebilsin (uyumlu modda bilgisayarını ve upload'unu çok yorar)</span></label>
         <p class="muted small">Relay senin upload hızını kullanır. 1080p kişi başı yaklaşık 5–10 Mbps ister.</p>
@@ -426,7 +428,7 @@
       <fieldset>
         <legend>İndirmeler</legend>
         <label class="check"><input type="checkbox" id="set-stop-others"> <span>Video açıkken diğer tüm torrent indirmelerini durdur (internet sadece izlenen videoya kalsın)</span></label>
-        <p class="muted small">Bilgisayarındaki Stremio'da, odada izlenmeyen torrent'ler kapatılır. Stremio uygulamasında elle açtığın başka bir video da kapanabilir; oynatmaya devam edersen kendiliğinden yeniden açılır.</p>
+        <p class="muted small">Odada izlenmeyen torrent'ler kapatılır (önden indirdiklerin hariç).</p>
       </fieldset>
       </div>
       <div class="dialog-actions">

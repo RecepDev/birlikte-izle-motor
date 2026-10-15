@@ -1,5 +1,6 @@
 // Turns raw addon stream objects into the room's stream list.
 
+import { sesDilleri } from '../public/js/shared/diller.js';
 import { dosyaAdiKaydet } from './motor/dosya-adlari.js';
 
 const INFO_HASH = /^[0-9a-f]{40}$/i;
@@ -44,6 +45,26 @@ export function parseHdr(text) {
   if (/hdr10\+|hdr10plus/i.test(t)) return 'HDR10+';
   if (/\bhdr(10)?\b|\bhlg\b/i.test(t)) return 'HDR';
   return null;
+}
+
+// Kaynak türü: Blu-ray (BluRay, BDRip, BRRip, BDRemux, Remux) ayrı; web ve TV kayıtları ayrı etiketlenir.
+export function parseSource(text) {
+  const t = String(text || '');
+  if (/blu-?ray|\bbd-?rip\b|\bbr-?rip\b|\bbd-?remux\b|\bremux\b|\bbdmv\b/i.test(t)) return 'BluRay';
+  if (/web-?dl|web-?rip|\bamzn\b|\bnf\b|\bdsnp\b|\bhmax\b/i.test(t)) return 'WEB';
+  if (/hdtv|pdtv|dvb/i.test(t)) return 'HDTV';
+  if (/dvd-?rip|\bdvd\b/i.test(t)) return 'DVD';
+  if (/\b(cam|hdcam|telesync|hdts)\b/i.test(t)) return 'CAM';
+  return null;
+}
+
+// Türkçe ses (dublaj ya da TR+EN çoklu ses) belirtiliyor mu? Yalnız "Türkçe altyazı" Türkçe ses sayılmaz.
+export function parseTurkishAudio(text) {
+  const t = String(text || '');
+  if (/dublaj/i.test(t)) return true;
+  if (/t[uü]rk[cç]e\s*(dublaj|ses|audio|dual)/i.test(t)) return true;
+  if (/\b(tr|tur)\s*[+/&]\s*(en|eng)\b|\b(en|eng)\s*[+/&]\s*(tr|tur)\b/i.test(t)) return true;
+  return false;
 }
 
 // Subtitles inside the file itself, as release names announce them:
@@ -137,6 +158,9 @@ function normalizeOne(raw, addonName) {
   base.seeders = seeders ? Number(seeders[1]) : null;
   base.embeddedSubs = parseEmbeddedSubs(`${base.name} ${base.title}`);
   base.multiAudio = parseMultiAudio(`${base.name} ${base.title}`);
+  base.source = parseSource(`${base.name} ${base.title}`);
+  base.diller = sesDilleri(`${base.name} ${base.title}`);
+  base.turkceSes = base.diller.includes('tr') || parseTurkishAudio(`${base.name} ${base.title}`);
   base.pack = parsePack(`${base.name} ${base.title}`);
   base.sizeBytes = parseSizeBytes(raw);
   const notWebReady = raw.behaviorHints?.notWebReady === true;

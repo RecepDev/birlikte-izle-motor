@@ -1,8 +1,9 @@
 import { api, el, $, copy, formatSize } from './api.js';
+import { onayla, sor } from '/js/diyalog.js';
 
 const STATE_TEXT = {
   ready: '▶ hazır', loading: '⏳ yükleniyor', buffering: '⏳ donuyor', error: '⚠️ hata',
-  noStremio: '🚫 Stremio yok', idle: '💤 bekliyor',
+  noStremio: '🚫 motor yok', idle: '💤 bekliyor',
 };
 const TUNNEL_TEXT = {
   up: ['ok', 'hazır'], starting: ['warn', 'başlatılıyor…'], down: ['bad', 'koptu, yeniden deneniyor'],
@@ -25,15 +26,15 @@ async function refreshStatus() {
   const motor = status.motor;
   if (motor?.kullanilan === 'torrserver') {
     $('#st-motor-ad').textContent = 'Torrent motoru';
-    $('#st-stremio').textContent = status.stremio ? 'TorrServer · açık (Stremio gerekmiyor)' : 'TorrServer kapalı';
+    $('#st-stremio').textContent = status.stremio ? 'açık' : 'kapalı';
   } else if (motor?.istenen === 'torrserver') {
     // Kopya TorrServer'la açılmak istedi ama 11470 doluydu (Stremio açık): Stremio'yla çalışıyor.
-    $('#st-motor-ad').textContent = 'Stremio';
+    $('#st-motor-ad').textContent = 'Video motoru';
     $('#st-stremio-dot').className = 'dot warn';
-    $('#st-stremio').textContent = "açık. TorrServer yerine Stremio kullanılıyor: Stremio'yu kapatıp sunucuyu yeniden başlat";
+    $('#st-stremio').textContent = 'başka bir program 11470 portunu tutuyor: onu kapatıp sunucuyu yeniden başlat';
   } else {
-    $('#st-motor-ad').textContent = 'Stremio';
-    $('#st-stremio').textContent = status.stremio ? 'açık' : 'kapalı (senin videon için Stremio açık olmalı)';
+    $('#st-motor-ad').textContent = 'Video motoru';
+    $('#st-stremio').textContent = status.stremio ? 'açık' : 'kapalı';
   }
 
   const [cls, text] = TUNNEL_TEXT[status.tunnel.state] || ['', status.tunnel.state];
@@ -62,128 +63,15 @@ $('#cf-install').addEventListener('click', async (e) => {
 $('#shutdown').addEventListener('click', async () => {
   const rooms = await api('/api/rooms').catch(() => []);
   const warn = rooms.length ? `\n${rooms.length} aktif oda kapanacak.` : '';
-  if (!confirm(`Birlikte İzle sunucusu kapatılsın mı?${warn}`)) return;
+  if (!await onayla(`Birlikte İzle sunucusu kapatılsın mı?${window.kabuk?.cik ? ' Uygulama da kapanır.' : ''}${warn}`, { tamam: 'Kapat', tehlike: true })) return;
   await api('/api/shutdown', { method: 'POST' }).catch(() => {});
   // Panel penceresini sunucu kapatıyor; normal tarayıcı sekmesindeyse de kapanmayı dene.
+  if (window.kabuk?.cik) return window.kabuk.cik();
   window.close();
   document.body.replaceChildren(el('main', { class: 'narrow' }, el('section', { class: 'card' },
     el('h2', { text: 'Sunucu kapatıldı' }),
     el('p', { class: 'muted', text: 'Bu pencereyi kapatabilirsin. Tekrar açmak için masaüstündeki "Birlikte İzle" kısayolunu kullan.' }))));
 });
-
-// ---- rooms -----------------------------------------------------------------------
-
-function roomLink(room) {
-  return status?.tunnel.url ? `${status.tunnel.url}/room/${room.id}` : null;
-}
-
-// Real torrent stats exist for torrents on this PC (host, relay viewers); others report an estimate.
-function downloadText(room, u) {
-  if (!u.connected) return '';
-  const onThisPc = u.status.source === 'relay' || (u.isHost && u.status.source === 'local');
-  const ts = onThisPc ? room.torrentStats?.[u.ownStreamId || room.hostStreamId] : null;
-  const down = ts ? ts.downMbps : u.status.downMbps;
-  return [
-    Number.isFinite(down) ? `↓ ${down} Mbps` : '',
-    ts ? `🧲 ${ts.peers} peer` : '',
-    Number.isFinite(u.status.ahead) ? `${u.status.ahead} sn` : '',
-  ].filter(Boolean).join(' · ');
-}
-
-// Bu bilgisayardaki masaüstü uygulamasını açılış ekranıyla başlatır (sunucu açıyor).
-async function uygulamayiAc(e) {
-  const b = e.target;
-  b.disabled = true;
-  const res = await api('/api/masaustu-ac', { method: 'POST' }).catch((err) => ({ error: err.message }));
-  b.disabled = false;
-  if (res.error) alert(res.error === 'yok' ? 'Birlikte İzle uygulaması bulunamadı. Bir kez masaüstündeki kısayoldan aç, sonra tekrar dene.' : res.error);
-}
-
-function renderRoom(room) {
-  const relayByUser = new Map((room.relay?.users || []).map((u) => [u.userId, u]));
-  const link = roomLink(room);
-  const rows = room.users
-    .filter((u) => u.connected || u.isHost)
-    .map((u) => el(
-      'tr',
-      {},
-      el('td', {}, u.name, u.isHost ? ' 👑' : ''),
-      el('td', { text: u.connected ? STATE_TEXT[u.status.state] || u.status.state : '🔌 koptu' }),
-      el('td', { text: { local: 'kendi Stremio', relay: '📶 relay', http: 'link', none: '—' }[u.status.source] || '' }),
-      el('td', { text: u.status.quality || '' }),
-      el('td', { text: downloadText(room, u) }),
-      el('td', { text: Number.isFinite(u.status.drift) ? `${Math.round(u.status.drift * 1000)} ms` : '' }),
-      el('td', { text: relayByUser.has(u.id) ? `${relayByUser.get(u.id).mbps} Mbps` : '' }),
-      el('td', {}, u.isHost ? null : el('button', {
-        type: 'button',
-        text: 'At',
-        onclick: async () => {
-          if (!confirm(`${u.name} odadan çıkarılsın mı?`)) return;
-          await api(`/api/rooms/${room.id}/kick`, { method: 'POST', body: { userId: u.id } }).catch((err) => alert(err.message));
-          refreshRooms();
-        },
-      })),
-    ));
-
-  return el(
-    'div',
-    { class: 'room' },
-    el(
-      'div',
-      { class: 'room-head' },
-      room.meta?.poster ? el('img', { src: room.meta.poster, alt: '' }) : null,
-      el('div', { class: 't' },
-        el('b', { text: room.meta?.name || room.contentId }),
-        el('div', { class: 'muted small', text: `Oda ${room.id} · ${room.playback.paused ? 'duraklatıldı' : 'oynuyor'} · ${room.settings.waitMode === 'wait' ? 'herkes bekler' : 'beklemeden devam'}${room.relay?.totalMbps ? ` · relay ${room.relay.totalMbps} Mbps` : ''}` })),
-      // Odaya bu bilgisayardaki Birlikte İzle uygulamasıyla (host olarak) gir.
-      el('button', {
-        type: 'button',
-        text: '🖥️ Uygulamada gir',
-        onclick: async (e) => {
-          const b = e.target;
-          b.disabled = true;
-          const res = await api(`/api/rooms/${room.id}/masaustu`, { method: 'POST' }).catch((err) => ({ error: err.message }));
-          b.disabled = false;
-          if (res.error) alert(res.error === 'yok' ? 'Birlikte İzle uygulaması bulunamadı. Bir kez masaüstündeki kısayoldan aç, sonra tekrar dene.' : res.error);
-        },
-      }),
-      link ? el('button', { type: 'button', text: '🔗 Linki kopyala', onclick: (e) => copy(link, e.target) }) : el('span', { class: 'muted small', text: 'tünel hazır değil' }),
-      el('button', {
-        type: 'button',
-        class: 'danger',
-        text: 'Odayı kapat',
-        onclick: async () => {
-          if (!confirm('Oda herkes için kapatılsın mı?')) return;
-          await api(`/api/rooms/${room.id}/close`, { method: 'POST' }).catch(() => {});
-          refreshRooms();
-        },
-      }),
-    ),
-    el('div', { class: 'table-wrap' }, el('table', {},
-      el('tr', {}, ...['Kişi', 'Durum', 'Kaynak', 'Kalite', 'İndirme', 'Sapma', 'Relay', ''].map((h) => el('th', { text: h }))),
-      ...rows)),
-  );
-}
-
-async function refreshRooms() {
-  const rooms = await api('/api/rooms').catch(() => null);
-  if (!rooms) return;
-  const box = $('#rooms');
-  if (!rooms.length) {
-    // Liste 2 sn'de bir yenileniyor: düğme her seferinde yeniden kurulmasın.
-    if (box.dataset.bos === '1') return;
-    box.dataset.bos = '1';
-    box.replaceChildren(
-      status?.motor?.kullanilan === 'torrserver'
-        ? el('p', { class: 'muted' }, 'Henüz oda yok. Uygulamadan film ara ve oda aç.')
-        : el('p', { class: 'muted' }, 'Henüz oda yok. Stremio\'da bir film aç ve ', el('b', { text: '👥 Birlikte İzle' }), '\'yi seç ya da uygulamadan film ara.'),
-      el('button', { type: 'button', text: '🖥️ Birlikte İzle uygulamasını aç', onclick: uygulamayiAc }),
-    );
-    return;
-  }
-  box.dataset.bos = '0';
-  box.replaceChildren(...rooms.map(renderRoom));
-}
 
 // ---- config: addons + defaults ------------------------------------------------------
 
@@ -218,13 +106,19 @@ function renderAddons() {
       el('span', { text: a.name }),
       ...a.resources.map((r) => el('span', { class: 'tag', text: r === 'stream' ? 'stream' : 'altyazı' })),
       el('small', { text: a.url })),
+    el('button', {
+      type: 'button',
+      text: '⚙️ Ayarla',
+      title: 'Eklentinin kendi ayar sayfasını tarayıcıda aç. Ayarlayınca çıkan kurulum linkini kopyalayıp aşağıya yapıştır.',
+      onclick: () => window.open(`${a.url.replace(/\/manifest\.json$/, '')}/configure`, '_blank', 'noopener'),
+    }),
     el('button', { type: 'button', text: '↑', title: 'Yukarı', onclick: () => moveAddon(i, -1) }),
     el('button', { type: 'button', text: '↓', title: 'Aşağı', onclick: () => moveAddon(i, 1) }),
     el('button', {
       type: 'button',
       text: 'Sil',
-      onclick: () => {
-        if (!confirm(`${a.name} silinsin mi?`)) return;
+      onclick: async () => {
+        if (!await onayla(`${a.name} silinsin mi?`)) return;
         saveConfig({ ...config, addons: config.addons.filter((_, k) => k !== i) }).catch((err) => alert(err.message));
       },
     }),
@@ -242,6 +136,19 @@ $('#addon-form').addEventListener('submit', async (e) => {
   try {
     const info = await api('/api/addons/test', { method: 'POST', body: { url } });
     if (!info.resources.length) throw new Error('Bu addon stream veya altyazı sağlamıyor.');
+    // Aynı eklentinin (aynı site, ör. torrentio.strem.fun) ayarlı adresi yapıştırıldıysa yenisini eklemek yerine
+    // mevcut satırı güncelle: sıra ve açık/kapalı durumu korunur.
+    const host = new URL(url).host;
+    const mevcut = config.addons.findIndex((x) => { try { return new URL(x.url).host === host; } catch { return false; } });
+    if (mevcut >= 0 && config.addons[mevcut].url !== url) {
+      if (await onayla(`"${config.addons[mevcut].name}" zaten ekli. Ayarları yeni adresle güncellensin mi?
+(İptal: ayrı bir eklenti olarak ekler.)`, { tamam: 'Güncelle', iptal: 'Ayrı ekle' })) {
+        const addons = config.addons.map((x, k) => (k === mevcut ? { ...x, url, name: info.name, resources: info.resources } : x));
+        await saveConfig({ ...config, addons });
+        input.value = '';
+        return;
+      }
+    }
     await saveConfig({ ...config, addons: [...config.addons, { url, name: info.name, enabled: true, resources: info.resources }] });
     input.value = '';
   } catch (err) {
@@ -307,7 +214,7 @@ async function refreshMotor() {
     return;
   }
   const ts = motor.kullanilan === 'torrserver';
-  const parcalar = [ts ? `TorrServer ${motor.ts?.surum || ''}`.trim() : 'Stremio (asıl Birlikte İzle ile ortak)'];
+  const parcalar = [ts ? `TorrServer ${motor.ts?.surum || ''}`.trim() : 'Harici motor'];
   if (ts) {
     parcalar.push(motor.ts?.calisiyor ? 'çalışıyor' : 'kapalı');
     if (motor.ts?.peerPort) parcalar.push(`peer portu ${motor.ts.peerPort}`);
@@ -315,19 +222,6 @@ async function refreshMotor() {
   }
   $('#motor-ozet').textContent = parcalar.join(' · ');
   $('#motor-yeniden').hidden = !ts;
-
-  const ob = motor.onbellek;
-  $('#motor-onbellek').hidden = !ob;
-  if (ob) {
-    const sinir = ob.sinir > 0 ? formatSize(ob.sinir) : 'kapalı';
-    $('#motor-ob-yazi').textContent = `${formatSize(ob.bayt) || '0 MB'} / ${sinir} · ${ob.film} film`;
-    $('#motor-ob-dolu').style.width = ob.sinir > 0 ? `${Math.min(100, (ob.bayt / ob.sinir) * 100)}%` : '0';
-    $('#motor-ob-bosalt').disabled = !ob.bayt;
-    const gbKutu = $('#motor-ob-gb');
-    if (document.activeElement !== gbKutu) gbKutu.value = String(ob.gb ?? '');
-    $('#motor-ob-yer').textContent = ob.klasor || '';
-    $('#motor-ob-varsayilan').hidden = !ob.secilen;
-  }
 
   const liste = $('#motor-torrentler');
   liste.replaceChildren(...(motor.torrentler.length ? motor.torrentler.map((t) => el('li', {},
@@ -344,10 +238,10 @@ async function refreshMotor() {
   const not = [];
   if (motor.ortam) not.push(`MOTOR=${motor.ortam} ortam değişkeni var: o geçerli.`);
   else if ((motor.secim || motor.istenen) !== motor.istenen) not.push(`Sunucu yeniden başlayınca ${MOTOR_ADI[motor.secim]} kullanılacak.`);
-  if (motor.istenen === 'torrserver' && !ts) not.push("TorrServer istendi ama 11470 dolu (Stremio açık): Stremio'yu kapatıp sunucuyu yeniden başlat.");
+  if (motor.istenen === 'torrserver' && !ts) not.push('Video motoru açılamadı: 11470 portu başka bir programda. Onu kapatıp sunucuyu yeniden başlat.');
   $('#motor-sec-not').textContent = not.join(' ');
   $('#motor-sec-not').hidden = !not.length;
-  $('#motor-bekci').checked = motor.bekci;
+  $('#srv-motor-bekci').checked = motor.bekci;
   $('#motor-siteden').checked = motor.siteden;
 }
 
@@ -359,7 +253,7 @@ async function torrentKapat(t, btn) {
 
 $('#motor-yeniden').addEventListener('click', async (e) => {
   const rooms = await api('/api/rooms').catch(() => []);
-  if (rooms.length && !confirm(`${rooms.length} odada oynatma birkaç saniye duracak. Motor yeniden başlatılsın mı?`)) return;
+  if (rooms.length && !await onayla(`${rooms.length} odada oynatma birkaç saniye duracak. Motor yeniden başlatılsın mı?`)) return;
   e.target.disabled = true;
   e.target.textContent = 'Yeniden başlatılıyor…';
   const r = await api('/api/motor/yeniden-baslat', { method: 'POST' }).catch((err) => ({ error: err.message }));
@@ -368,44 +262,11 @@ $('#motor-yeniden').addEventListener('click', async (e) => {
   if (r?.error) alert(`Yeniden başlatılamadı: ${r.error}`);
   refreshMotor();
 });
-$('#motor-ob-bosalt').addEventListener('click', async (e) => {
-  if (!confirm('Önbellekteki bütün filmler silinsin mi? Sonraki açılışlar yeniden internetten gelir.')) return;
-  e.target.disabled = true;
-  await api('/api/motor/onbellek-bosalt', { method: 'POST' }).catch((err) => alert(err.message));
-  refreshMotor();
-});
-// Önbellek boyutu ve yeri (TorrServer motorunda bizim önbelleğimiz; bkz. server.js motorPanel).
-async function onbellekAyarla(govde, not) {
-  const r = await api('/api/motor/onbellek', { method: 'POST', body: govde }).catch((err) => ({ error: err.message }));
-  const n = $('#motor-ob-not');
-  n.hidden = false;
-  if (r.error) n.textContent = r.error === 'yazilamiyor' || r.error === 'yol' ? 'Bu klasöre yazılamıyor, başka bir yer seç.' : `Ayarlanamadı: ${r.error}`;
-  else n.textContent = not(r);
-  refreshMotor();
-}
-$('#motor-ob-gb').addEventListener('change', (e) => {
-  const gb = Number(e.target.value);
-  if (!(e.target.value !== '' && gb >= 0 && gb <= 1000)) return;
-  onbellekAyarla({ gb }, (r) => (r.gb ? `Önbellek sınırı ${r.gb} GB.` : 'Önbellek kapalı.'));
-});
-const tasimaNotu = (r) => `Önbellek yeri: ${r.klasor}${r.tasinan ? ` · ${r.tasinan} film taşındı` : ''}${r.silinen ? ` · ${r.silinen} film taşınamadığı için silindi` : ''}`;
-$('#motor-ob-sec').addEventListener('click', async () => {
-  // Masaüstü uygulamasında klasör seçme penceresi; tarayıcıda yol elle yazılıyor.
-  const klasor = window.kabuk?.klasorSec ? await window.kabuk.klasorSec('Önbellek için klasör seç') : prompt('Önbellek klasörü (ör. D:\\Onbellek). İçinde "BirlikteIzle-onbellek" klasörü açılır.');
-  if (!klasor) return;
-  if (!confirm(`Önbellek "${klasor}" klasörüne alınsın mı?
-Aynı diskteyse filmler taşınır; başka diskteyse eski önbellek silinir.`)) return;
-  onbellekAyarla({ klasor }, tasimaNotu);
-});
-$('#motor-ob-varsayilan').addEventListener('click', () => {
-  if (!confirm('Önbellek varsayılan yerine (sunucunun data klasörü) alınsın mı?')) return;
-  onbellekAyarla({ klasor: null }, tasimaNotu);
-});
 $('#motor-sec').addEventListener('change', async (e) => {
   await api('/api/motor/ayar', { method: 'PUT', body: { motor: e.target.value } }).catch((err) => alert(err.message));
   refreshMotor();
 });
-$('#motor-bekci').addEventListener('change', async (e) => {
+$('#srv-motor-bekci').addEventListener('change', async (e) => {
   await api('/api/motor/ayar', { method: 'PUT', body: { bekci: e.target.checked } }).catch((err) => alert(err.message));
   refreshMotor();
 });
@@ -414,14 +275,15 @@ $('#motor-siteden').addEventListener('change', async (e) => {
   refreshMotor();
 });
 
+// Sunucu görünümü uygulama kabuğunda (uygulama.html); gizliyken yoklama yapılmaz.
+const sunucuGizli = () => document.hidden || $('#gorunum-sunucu')?.hidden;
+
 config = await api('/api/config');
 renderAddons();
 fillDefaults();
 await refreshStatus();
-refreshRooms();
 refreshLogs();
 refreshMotor();
-setInterval(refreshStatus, 3000);
-setInterval(refreshMotor, 3000);
-setInterval(refreshRooms, 2000);
-setInterval(refreshLogs, 5000);
+setInterval(() => { if (!sunucuGizli()) refreshStatus(); }, 3000);
+setInterval(() => { if (!sunucuGizli()) refreshMotor(); }, 3000);
+setInterval(() => { if (!sunucuGizli()) refreshLogs(); }, 5000);

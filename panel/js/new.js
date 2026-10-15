@@ -1,6 +1,7 @@
 import { api, apiStream, el, $, formatSize } from './api.js';
 import { browserCodecs } from './codecs.js';
 import { otomatikSec, hafizaOnce, grupAdi } from './kaynak-sec.js';
+import { onayla, sor } from '/js/diyalog.js';
 
 // Can this browser show the picture without re-encoding (original quality)?
 const caps = browserCodecs(document.createElement('video'));
@@ -20,6 +21,14 @@ const DEBRID_WARNING = 'Bu bir doğrudan link (ör. Real-Debrid).\n\n'
 const params = new URLSearchParams(location.search);
 const type = params.get('type');
 const id = params.get('id');
+const gomulu = params.get('gomulu') === '1'; // detay ekranındaki gizli çerçeve: arayüz yok, durum üst sayfaya yansıtılır
+// "Oda aç" ekranı kaldırıldı: bu sayfa yalnız detay ekranındaki gizli çerçevede (gomulu=1, otomatik mod) çalışır.
+// Doğrudan açılırsa içeriğin sayfasına yönlendirilir; otomatik kaynak seçimi kodu ve gömülü kullanım olduğu gibi duruyor.
+if (!gomulu) {
+  const t = params.get('type') === 'series' ? 'series' : 'movie';
+  location.replace(`/detay?${new URLSearchParams({ type: t, id: String(params.get('id') || '').split(':')[0] })}`);
+  throw new Error('Oda aç ekranı kaldırıldı: içerik sayfasına yönlendiriliyor');
+}
 let streams = [];
 let loadDone = false;
 let addonsReplied = 0;
@@ -131,7 +140,7 @@ function renderRefresh() {
 async function createRoom(stream, button, { oto = false } = {}) {
   otoDurdur();
   if (!oto) otoIptal = true; // elle seçildi: otomatik devre dışı
-  if (stream.kind === 'http' && !confirm(DEBRID_WARNING)) return;
+  if (stream.kind === 'http' && !await onayla(DEBRID_WARNING)) return;
   button.disabled = true;
   olusturuluyor = true;
   button.textContent = 'Oda açılıyor…';
@@ -141,6 +150,11 @@ async function createRoom(stream, button, { oto = false } = {}) {
     const res = await api('/api/rooms', { method: 'POST', body: { type, id, streamId: stream.streamId, olcumler } });
     // Otomatik modda oda açılınca video da kendiliğinden başlasın (oda sayfası "oto=1"e bakıyor).
     if (oto) res.roomUrl += '&oto=1';
+    // Detay ekranına gömülü çalışıyorsa (gizli çerçeve): odayı üst sayfa açsın.
+    if (gomulu) {
+      window.parent.postMessage({ tip: 'oda', url: res.roomUrl }, location.origin);
+      return;
+    }
     if ($('#masaustu').checked) {
       // Şemayı masaüstü uygulaması kendine kaydediyor. Kurulu değilse tarayıcı bir şey
       // yapmaz, o yüzden oda linkini de gösteriyoruz.
@@ -155,7 +169,8 @@ async function createRoom(stream, button, { oto = false } = {}) {
     olusturuluyor = false;
     otoHata = true;
     otoModGoster();
-    alert(`Oda açılamadı: ${err.message}`);
+    if (gomulu) window.parent.postMessage({ tip: 'hata', mesaj: `Oda açılamadı: ${err.message}` }, location.origin);
+    else alert(`Oda açılamadı: ${err.message}`);
     button.disabled = false;
     button.textContent = 'Bununla oda aç';
   }
@@ -190,6 +205,55 @@ async function durumYenile() {
   if (!olusturuluyor) render();
 }
 setInterval(durumYenile, 3000);
+// ---- önden indirilenler --------------------------------------------------------------
+// İndirilmiş kaynak torrent'e hiç gidilmeden diskten oynuyor: listede işaretleniyor,
+// otomatik seçimde ölçüme bile girmeden seçiliyor (zaten diskte, hız sorusu yok).
+let indirilenler = []; // /api/indirme kayıtları
+let icerikAdi = null; // Cinemeta adı (indirme kaydına yazılıyor)
+let icerikPoster = null;
+const indirmeAnahtar = (s) => `${s.infoHash}|${Number.isInteger(s.fileIdx) ? s.fileIdx : -1}`;
+const indirmeKaydi = (s) => (s.kind !== 'torrent' ? null
+  : indirilenler.find((k) => k.infoHash === s.infoHash
+    && ((k.fileIdx ?? -1) === (Number.isInteger(s.fileIdx) ? s.fileIdx : -1)
+      || (s.filename && k.filename === s.filename))) || null);
+const inmisMi = (s) => indirmeKaydi(s)?.durum === 'bitti';
+
+async function indirmeDurumuYenile() {
+  try {
+    const veri = await api('/api/indirme');
+    const eski = JSON.stringify(indirilenler.map((k) => [k.infoHash, k.fileIdx, k.durum, k.inen]));
+    indirilenler = veri.kayitlar || [];
+    if (JSON.stringify(indirilenler.map((k) => [k.infoHash, k.fileIdx, k.durum, k.inen])) !== eski) render();
+  } catch { /* uç yoksa liste boş kalır */ }
+}
+
+async function indir(s, dugme) {
+  dugme.disabled = true;
+  dugme.textContent = 'ekleniyor…';
+  const r = await api('/api/indirme', {
+    method: 'POST',
+    body: {
+      infoHash: s.infoHash,
+      fileIdx: Number.isInteger(s.fileIdx) ? s.fileIdx : null,
+      filename: s.filename || null,
+      ad: `${icerikAdi || id}${type === 'series' ? ` · ${id.split(':').slice(1).join('x')}` : ''} · ${s.quality || ''}`.trim(),
+      type,
+      contentId: id,
+      poster: icerikPoster,
+      kalite: s.quality || null,
+      boyut: s.sizeBytes || null,
+      sources: s.sources || [],
+    },
+  }).catch((err) => ({ error: err.message }));
+  if (r?.error) {
+    alert(`İndirme eklenemedi: ${r.error}`);
+    dugme.disabled = false;
+    dugme.textContent = '↓ İndir';
+    return;
+  }
+  indirmeDurumuYenile();
+}
+
 function canliEtiket(s) {
   if (s.kind !== 'torrent') return null;
   const son = sonuclar.get(s.infoHash);
@@ -269,12 +333,41 @@ function render() {
           // Açıklamalar simgenin üstünde (fareyle bekleyince), satırda yalnızca simge.
           s.hdr ? el('span', { class: 'kind ikon', title: `${s.hdr}: HDR olmayan ekranda karanlık görünebilir` }, ' · 🌗') : null,
           s.embeddedSubs ? el('span', { class: 'kind ikon', title: `Gömülü altyazı${s.embeddedSubs.langs.length ? `: ${s.embeddedSubs.langs.join(', ')}` : ''}` }, ' · 💬') : null,
-          canliEtiket(s)),
+          canliEtiket(s),
+          indirmeEtiketi(s)),
+        indirDugmesi(s),
         button,
       );
     }),
   ]));
   box.replaceChildren(...[searching, ul].filter(Boolean));
+}
+
+// Satırdaki indirme bilgisi: inmişse "diskte", iniyorsa yüzde.
+function indirmeEtiketi(s) {
+  const k = indirmeKaydi(s);
+  if (!k) return null;
+  if (k.durum === 'bitti') {
+    return el('span', { class: 'kind fine', title: 'Bu kaynak diskte: torrent beklemeden açılır', text: ' · 💾 indirildi' });
+  }
+  const yuzde = k.boyut ? Math.round((k.inen / k.boyut) * 100) : 0;
+  const yazi = k.durum === 'iniyor' ? `iniyor %${yuzde}`
+    : k.durum === 'duraklatildi' ? `indirme duraklatıldı %${yuzde}`
+      : k.durum === 'hata' ? 'indirme hatası' : 'indirme sırada';
+  return el('span', { class: 'kind', text: ` · 💾 ${yazi}` });
+}
+
+function indirDugmesi(s) {
+  if (s.kind !== 'torrent') return null;
+  const k = indirmeKaydi(s);
+  if (k?.durum === 'bitti') return null;
+  const dugme = el('button', {
+    type: 'button',
+    text: k ? '💾 İndirilenler' : '↓ İndir',
+    title: k ? 'Bu kaynak indirme listesinde (panelde yönetiliyor)' : 'Diske indir: sonra torrent beklemeden, internetsiz de açılır',
+  });
+  dugme.addEventListener('click', () => (k ? window.open('/', '_blank') : indir(s, dugme)));
+  return dugme;
 }
 
 function renderQualityChips() {
@@ -296,13 +389,12 @@ function renderQualityChips() {
   );
 }
 
-// Geri: arama/bölüm listesine (geçmiş varsa oraya, yoksa arama sayfasına).
-// Dizide: o dizinin sezon/bölüm listesine (arama sayfasında açık gelir). Filmde: aramaya.
-const diziAdresi = () => `/ara?${new URLSearchParams({ dizi: String(id).split(':')[0], ad: $('#title').textContent.replace(/\s+S\d+E\d+.*$/, '').trim() })}`;
+// Geri: içeriğin sayfasına (dizide bölüm listesi, filmde film sayfası). Eski "Film ara" sayfası kaldırıldı.
+const icerikAdresi = () => `/detay?${new URLSearchParams({ type: type === 'series' ? 'series' : 'movie', id: String(id).split(':')[0] })}`;
+const diziAdresi = icerikAdresi;
 $('#geri').addEventListener('click', () => {
-  if (type === 'series') location.href = diziAdresi();
-  else if (history.length > 1 && document.referrer) history.back();
-  else location.href = '/ara';
+  if (type !== 'series' && history.length > 1 && document.referrer) history.back();
+  else location.href = icerikAdresi();
 });
 // Bölüm seçmeden dizinin kendisiyle gelindiyse (tüm sezonların kaynakları karışık listelenirdi):
 // önce bölüm seçilsin.
@@ -311,10 +403,7 @@ if (type === 'series' && id && !String(id).includes(':')) location.replace(diziA
 // bölüm seçme/arama ekranı açılsın.
 const geriGelindi = () => performance.getEntriesByType('navigation')[0]?.type === 'back_forward';
 function aramayaDon() {
-  const ad = sessionStorage.getItem(`ad:${String(id).split(':')[0]}`) || '';
-  location.replace(type === 'series'
-    ? `/ara?${new URLSearchParams({ dizi: String(id).split(':')[0], ad })}`
-    : '/ara');
+  location.replace(icerikAdresi());
 }
 if (geriGelindi()) aramayaDon();
 window.addEventListener('pageshow', (e) => { if (e.persisted) aramayaDon(); });
@@ -336,6 +425,8 @@ masaustuKutu.addEventListener('change', () => localStorage.setItem('masaustuAc',
 // Açıkken liste gizli, yalnızca botun ne yaptığı yazıyor; "İptal" listeyi gösterir.
 const otoKutu = $('#oto-kaynak');
 otoKutu.checked = window.kabuk?.otoKaynak ? window.kabuk.otoKaynak() : localStorage.getItem('otoKaynak') !== '0';
+// Detay ekranındaki "⚡ Otomatik seç": ayardan bağımsız bu açılışta otomatik mod çalışsın (ayar değişmez).
+if (params.get('oto') === '1') otoKutu.checked = true;
 let otoHata = false;
 function otoModGoster() {
   const acik = otoKutu.checked && !otoIptal && !otoHata;
@@ -375,6 +466,7 @@ const OTO_YUVA = 3;
 const OTO_ERKEN = 3;
 const ADAY_SURE_MS = 30_000; // adayın veri vermesi için tanınan süre (doğrulama sırasında işlemez)
 const DOGRULAMA_MS = 8_000;
+const TIRMANMA_MS = 35_000; // hızı hâlâ yükselen kaynağa tanınan en uzun süre
 const OTO_IYI_MBPS = 15;
 let sureSn = null; // içeriğin süresi (Cinemeta), meta satırıyla geliyor
 let otoBaslangic = 0;
@@ -530,15 +622,27 @@ function dogrulamaIlerlet() {
   // geçerdi; hız ısınırken 12 -> 1 -> 38 Mbps oluyor). 8 sn'de son örneklerin ortalaması çıtanın %60'ını
   // geçtiyse (5-10 Mbps'de takılı değilse) 20 sn'ye kadar; o zaman son 5 örneğin ortalaması karar.
   const yakin = son4.length >= 2 && ort(son4) >= hedef * 0.6;
-  const sinir = yakin ? 20_000 : DOGRULAMA_MS;
+  // Hız hâlâ tırmanıyor mu: son üç örnek artıyor ve sonu başından belirgin yukarıda.
+  // Tırmanan kaynağa daha uzun süre tanınıyor (kullanıcı: 44 Mbps gerekirken 4. saniyede
+  // 35'e çıkmış ve çıkmaya devam eden kaynak elenmemeli).
+  const son3 = son.slice(-3);
+  const tirmaniyor = son3.length === 3
+    && son3[1].mbps > son3[0].mbps && son3[2].mbps > son3[1].mbps
+    && son3[2].mbps >= son3[0].mbps * 1.1
+    && son3[2].mbps >= hedef * 0.5;
+  const sinir = tirmaniyor ? TIRMANMA_MS : (yakin ? 20_000 : DOGRULAMA_MS);
   if (!erken && gecen < sinir) {
     const grup = grupAdi(d.s);
     otoYaz(`🔎 Umut veren ${kaliteAdi(d.s.quality)} kaynak tek başına ölçülüyor: ${formatSize(d.s.sizeBytes)}${grup ? ` · ${grup}` : ''}`
       + ` — ↓ ${d.ornekler.at(-1)?.mbps ?? 0} / ${Math.round(hedef)} Mbps (${Math.max(1, Math.ceil((sinir - gecen) / 1000))} sn`
-      + `${yakin && gecen >= DOGRULAMA_MS ? ', çıtaya yakın: biraz daha bekleniyor' : ''})`);
+      + `${tirmaniyor ? ', hız tırmanıyor: bekleniyor' : yakin && gecen >= DOGRULAMA_MS ? ', çıtaya yakın: biraz daha bekleniyor' : ''})`);
     return;
   }
-  const karar = erken ? (son4.length === 4 && ort(son4) >= hedef ? son4 : son.slice(-2)) : son.slice(-5);
+  // Tırmanarak gelen kaynakta beş örneğin ortalaması gerçeği küçük gösteriyor
+  // (20-28-35-40-44 örneklerinin ortalaması 33): ulaştığı hız son iki örnek.
+  const karar = erken
+    ? (son4.length === 4 && ort(son4) >= hedef ? son4 : son.slice(-2))
+    : (tirmaniyor ? son.slice(-2) : son.slice(-5));
   const mbps = Math.round((karar.length ? ort(karar) : Math.max(0, ...d.ornekler.map((o) => o.mbps))) * 10) / 10;
   dogrulanan.set(ih, { mbps, peers: Math.max(0, ...d.ornekler.map((o) => o.peers)) });
   if (mbps > hatMbps) {
@@ -590,6 +694,15 @@ function otoDene() {
   otoModGoster();
   if (!otoKutu.checked || otoIptal || otoHata || otoSayac) return;
   if (olusturuluyor) return otoYaz('🤖 Oda açılıyor…');
+  // Bu bölüm/film daha önce indirildiyse ölçmeye hiç gerek yok: dosya diskte, hız
+  // sorusu yok. Beğenmezse listeden başka kaynak seçebiliyor.
+  const inmis = streams.find((x) => inmisMi(x));
+  if (inmis) {
+    otoYaz(`💾 Bu kaynak diskte (${kaliteAdi(inmis.quality)}): indirilenden açılıyor.`);
+    const dugme = document.querySelector(`button[data-sid="${inmis.streamId}"]`);
+    createRoom(inmis, dugme || el('button', {}));
+    return;
+  }
   if (!tercihKalite && $('#kalite-sor').open) return otoYaz('🤖 Önce tercih ettiğin kaliteyi seç.');
   // Bütün eklentileri beklemeden başla: seçilen kalitede en az 3 aday geldiyse (çoğunlukla Torrentio,
   // 1-2 sn) deneme başlıyor; yavaş eklenti (ThePirateBay+ vb.) 12 sn'ye kadar bekletiyordu. Geç gelen
@@ -728,11 +841,15 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => { if (!olusturuluyor) sayfaBildir('/api/sayfa-kapandi'); });
 
 try {
-  if (!type || !id) throw new Error('İçerik bilgisi yok. Bu sayfayı Stremio\'dan aç.');
+  if (!type || !id) throw new Error('İçerik bilgisi yok. Bir film ya da diziye ana sayfadan gir.');
   render();
+  indirmeDurumuYenile();
+  setInterval(indirmeDurumuYenile, 2000);
   await apiStream(`/api/streams?${new URLSearchParams({ type, id })}`, (line) => {
     if (line.type === 'meta') {
       sureSn = Number(line.meta.sureSn) || null;
+      icerikAdi = line.meta.name;
+      icerikPoster = line.meta.poster || null;
       document.title = `${line.meta.name} · Oda aç`;
       $('#title').textContent = line.meta.name;
       sessionStorage.setItem(`ad:${String(id).split(':')[0]}`, line.meta.name.replace(/\s+S\d+E\d+.*$/, '').trim());

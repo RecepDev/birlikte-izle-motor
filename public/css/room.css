@@ -105,19 +105,20 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .player { align-items: center; justify-content: center; }
 .player video { flex: none; display: block; width: 100%; height: 100%; background: transparent; }
 .controls {
-  display: flex; flex-direction: column; gap: 2px; padding: 10px 14px 6px;
+  display: flex; flex-direction: column; gap: 4px; padding: 16px 28px 24px;
   background: linear-gradient(transparent, rgba(0, 0, 0, .85)); position: absolute; left: 0; right: 0; bottom: 0;
   transition: opacity .2s;
 }
 /* Stremio düzeni: üstte süre - çubuk - toplam süre, altta düğmeler (solda oynat/ses, sağda diğerleri). */
 .seek-row, .ctl-row { display: flex; align-items: center; gap: 12px; width: 100%; }
-.ctl-row { gap: 6px; }
+.ctl-row { gap: 10px; }
 .ctl-bosluk { flex: 1; }
 /* Ayarlar > Kontrol çubuğu'ndan gizlenen düğmeler (kodun hidden'ıyla çakışmasın diye ayrı sınıf). */
 .kullanici-gizli { display: none !important; }
 .ctl-secim { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; }
-.seek-row .time { min-width: 56px; font-size: 12px; opacity: .85; }
-.seek-row .time:last-child { text-align: right; }
+/* Süreler çubuğa yakın dursun: soldaki sağa, sağdaki sola yaslı (eskiden dış kenara yaslıydı, çubukla arasında boşluk kalıyordu). */
+.seek-row .time { min-width: 48px; font-size: 12px; opacity: .85; text-align: right; }
+.seek-row .time:last-child { text-align: left; }
 .player.idle .controls, .player.idle .viewers-ov, .player.idle .compat-popover { opacity: 0; pointer-events: none; }
 .compat-popover {
   position: absolute; left: 12px; right: 12px; bottom: 100px; z-index: 3;
@@ -141,7 +142,7 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .viewers-ov .n { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .viewers-ov .sp { margin-left: auto; padding-left: 10px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
 .player.idle { cursor: none; }
-.ctl { background: transparent; border: none; font-size: 18px; padding: 6px 8px; min-width: 40px; }
+.ctl { background: transparent; border: none; font-size: 19px; padding: 9px 11px; min-width: 46px; }
 .ctl.active { color: var(--accent-2); }
 .ctl.warn { color: var(--warn); }
 .time { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
@@ -202,6 +203,29 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); ou
 .sub-line {
   background: var(--sub-bg, rgba(0, 0, 0, .6)); color: #fff; padding: .04em .35em; border-radius: .15em;
   white-space: pre-line; text-shadow: var(--sub-shadow, none);
+}
+/* İkinci altyazı (alt satır, çeviri): asıl satırdan ayırt edilsin ve iki satır
+   dar ekranda görüntünün yarısını yemesin. */
+.sub-line-2 { font-size: .78em; opacity: .94; }
+/* Zor kelime kutusu: oynatıcının sağ üst köşesi. Altyazıdan uzak dursun (altyazı
+   altta), görüntüyü de kapatmasın: dar, saydam, küçük punto. */
+.zor-kutu {
+  position: absolute; top: 12px; right: 12px; z-index: 1;
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-end;
+  max-width: min(42%, 320px); pointer-events: auto;
+}
+.zor-satir {
+  display: grid; gap: 1px; text-align: right; justify-items: end;
+  background: rgba(0, 0, 0, .62); color: #fff; border: 0; border-radius: 6px;
+  padding: 4px 8px; font: inherit; font-size: 13px; line-height: 1.3; cursor: pointer;
+}
+.zor-satir.acik { background: rgba(0, 0, 0, .8); }
+.zor-kelime { font-weight: 600; }
+.zor-anlam { color: #e8e8e8; font-size: 12px; }
+.zor-tur { color: #9ab; margin-right: 4px; font-size: 11px; }
+@media (max-width: 700px) {
+  .zor-kutu { max-width: 54%; }
+  .zor-satir { font-size: 12px; padding: 3px 6px; }
 }
 .notice {
   position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
@@ -371,6 +395,23 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   .layout { grid-template-rows: 1fr; }
   .player { aspect-ratio: auto; max-height: none; height: 100vh; height: 100dvh; }
 }
+
+/* Pencere içi tam ekran: üst çubuk ve yan panel gizli, oynatıcı pencerenin tamamında (düğme/P ile geri gelir). */
+body.player-genis .topbar, body.player-genis .side, body.player-genis .lock-hint { display: none; }
+body.player-genis .layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+body.player-genis .player-col { padding: 0; gap: 0; }
+/* Pencere içi tam ekranda üst çubuk yok: sol üstte geri düğmesi (üst çubuktaki ◀ ile aynı işi yapar). */
+.genis-geri { display: none; }
+body.player-genis .genis-geri {
+  display: grid; place-items: center; position: absolute; top: 16px; left: 16px; z-index: 6;
+  width: 44px; height: 44px; padding: 0; border-radius: 10px; cursor: pointer;
+  /* mpv penceresindeki delik dikdörtgen: düğme düz ve opak (saydamlık/bulanıklık videoyu göstermez, yuvarlak olsa köşede boşluk kalırdı). */
+  background: #14161d; border: 1px solid #2f3350; color: #e8e9ee;
+}
+body.player-genis .genis-geri .ic { width: 24px; height: 24px; stroke-width: 2.2; }
+body.player-genis .genis-geri:hover { background: #25264d; border-color: #7b5cff; color: #fff; }
+body.player-genis .player.idle .genis-geri { display: none; }
+body.player-genis .player { aspect-ratio: auto; max-height: none; height: 100vh; height: 100dvh; border-radius: 0; }
 
 /* ---- device compatibility screen ---- */
 .overlay.compat { z-index: 60; }
@@ -589,3 +630,143 @@ button.danger { background: #3a1d24; border-color: #a33b4d; color: #ffb3bf; }
 .yayin-cik { margin-left: auto; background: rgba(0, 0, 0, .55); }
 .yayin-mesaj { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 80%; text-align: center; background: rgba(15, 16, 20, .92); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; color: var(--text); }
 .yayin-mesaj[hidden] { display: none; }
+
+/* ======================================================================================
+   Yeni arayüz teması: masaüstü ana ekranıyla (panel/css/ana.css) aynı renkler ve yuvarlaklıklar.
+   Yalnız görünüm: ölçüler ve yerleşim değişmiyor (video alanı ölçümü bozulmasın).
+   ====================================================================================== */
+:root {
+  --bg: #0c0c1c; --panel: #15162e; --panel-2: #1f2147; --line: #2a2c55;
+  --accent: #7b5cff; --accent-2: #a98bff; --radius: 14px;
+}
+html, body { background: radial-gradient(1200px 700px at 30% -10%, #1d1b3f, #12122a 55%, #0e0f1f) fixed; }
+.overlay { background: radial-gradient(circle at 30% 20%, #2a1f5c 0, #0c0c1c 62%); }
+
+.topbar { background: rgba(21, 22, 46, .72); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.room-title img { border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, .45); }
+.title-text { letter-spacing: .01em; }
+
+.top-actions button, .yayin-dugmeler button, .notice-actions button, .card button, .compat-popover button, .chat-form button {
+  border-radius: 999px; background: rgba(60, 62, 120, .45); border-color: transparent;
+}
+.top-actions button:hover, .yayin-dugmeler button:hover, .notice-actions button:hover, .card button:hover, .chat-form button:hover {
+  background: rgba(90, 80, 190, .65); border-color: transparent;
+}
+button.primary, .top-actions button.primary, .card button.primary, .chat-form button.primary {
+  background: linear-gradient(135deg, #8b6cff, #5b3df0); border-color: transparent; color: #fff;
+}
+button.primary:hover { filter: brightness(1.12); background: linear-gradient(135deg, #8b6cff, #5b3df0); }
+input[type="text"], input:not([type]), input[type="number"], select {
+  background: rgba(12, 12, 28, .7); border-color: var(--line); border-radius: 999px;
+}
+.card { background: rgba(21, 22, 46, .9); border-color: var(--line); border-radius: 20px; box-shadow: 0 24px 70px rgba(0, 0, 0, .5); }
+
+.player { border-radius: 18px; box-shadow: 0 10px 40px rgba(0, 0, 0, .45); }
+.seek-row input[type="range"], .ctl-row input[type="range"] { accent-color: var(--accent); }
+
+.side { background: rgba(21, 22, 46, .78); border-left: 1px solid var(--line); backdrop-filter: blur(8px); }
+.tabs { border-bottom: 0; padding: 10px 10px 6px; gap: 4px; }
+.tabs button { border-radius: 12px; padding: 8px 4px; border-bottom: 0; font-size: 13px; background: transparent; }
+.tabs button:hover { background: rgba(60, 62, 120, .35); }
+.tabs button.active { background: rgba(123, 92, 255, .32); color: #fff; box-shadow: inset 0 0 0 1px rgba(123, 92, 255, .55); }
+.chat li:not(.system) { background: rgba(31, 33, 71, .55); border-radius: 12px; padding: 7px 10px; }
+.chat li.mine { background: rgba(123, 92, 255, .22); }
+.chat-form { border-top: 1px solid var(--line); background: rgba(12, 12, 28, .35); }
+.pill { background: rgba(60, 62, 120, .5); }
+
+/* Kaydırma çubukları: ince, yuvarlak, mor (scrollbar-color kullanma: webkit stilini devre dışı bırakır). */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3a3590; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #7b5cff; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* Dar ekranda (telefon) kontrol çubuğu eski sıkı ölçülerinde kalsın. */
+@media (max-width: 900px) {
+  .controls { gap: 2px; padding: 10px 14px 6px; }
+  .seek-row, .ctl-row { gap: 10px; }
+  .ctl-row { gap: 4px; }
+  .ctl { padding: 6px 8px; min-width: 40px; }
+}
+
+/* Tam ekranda (F ya da pencere içi tam ekran) kontrol çubuğu ve düğmeler büyük. Sınıf çubuğun kendisinde:
+   masaüstündeki saydam kontrol aynası (kontrol.html) çubuğun HTML'ini ayrı sayfada çiziyor, üst öğe seçicileri orada çalışmaz. */
+.controls.buyuk { gap: 6px; padding: 18px 36px 28px; }
+.controls.buyuk .seek-row { gap: 14px; }
+.controls.buyuk .ctl-row { gap: 12px; }
+.controls.buyuk .ctl { font-size: 20px; padding: 10px 12px; min-width: 50px; }
+.controls.buyuk .ctl .ic { width: 26px; height: 26px; }
+.controls.buyuk .time { font-size: 15px; min-width: 56px; }
+.controls.buyuk .aspect-btn { font-size: 13px; min-width: 58px; padding: 4px 8px; }
+.controls.buyuk .seek-wrap { height: 26px; }
+.controls.buyuk .seek { height: 26px; }
+.controls.buyuk .seek-bar { height: 6px; border-radius: 3px; }
+.controls.buyuk .seek::-webkit-slider-runnable-track { height: 6px; }
+.controls.buyuk .seek::-webkit-slider-thumb { width: 17px; height: 17px; margin-top: -5.5px; }
+.controls.buyuk .volume { height: 22px; width: 100px; }
+.player:fullscreen { border-radius: 0; }
+
+/* Tepki (uçan emoji) kaldırıldı: düğme hep gizli. */
+#btn-react, #pop-react, .react-fly { display: none !important; }
+
+/* ⋮ (Diğer) menüsü oynatıcının sağ üstünde. */
+.ust-diger {
+  position: absolute; top: 12px; right: 12px; z-index: 31; min-width: 40px; min-height: 40px; padding: 6px;
+  border-radius: 50%; background: rgba(20, 22, 29, .92); border: 1px solid var(--line); color: var(--text);
+}
+.ust-diger .ic { transform: rotate(90deg); }
+.ust-diger:hover, .ust-diger.active-pop { background: #25264d; border-color: #7b5cff; }
+.player.idle .ust-diger { opacity: 0; pointer-events: none; }
+.ust-diger { display: none !important; }
+/* Sağ tık menüsü: ana ekrandaki afiş menüsüyle aynı tema. */
+.player > #pop-more { width: 250px; padding: 6px; border-radius: 12px; background: rgba(24, 25, 48, .98); border: 1px solid #3a3d6b; box-shadow: 0 14px 40px rgba(0, 0, 0, .6); }
+#pop-more .pop-list { margin: 0; padding: 0; list-style: none; }
+#pop-more .pop-list button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: #e8e9ee; font-size: 14px; cursor: pointer; }
+#pop-more .pop-list button:hover:not(:disabled) { background: #2d2f5e; }
+#pop-more .pop-list button:disabled { opacity: .45; cursor: default; }
+
+/* Basma efekti: düğmeye basılı tutulduğunda hafifçe küçülür ve kararır. */
+button:not(:disabled) { transition: transform .08s ease, filter .08s ease, background .15s, border-color .15s, color .15s; }
+button:not(:disabled):active:not(.seek):not(#genis-geri) { transform: scale(.93); filter: brightness(.82); }
+
+/* ---- Oynatıcı içi bildirimler ve kutular: ana ekran temasıyla aynı (mor-lacivert zemin, mor çizgi, hap düğme). ----
+   mpv penceresindeki delik opak olduğu için zeminler saydam değil, düz renk. */
+.banner, .compat-popover, .intro-ask, .weak-src, .player > .ctl-pop, .seek-tip, .yayin-mesaj {
+  background: rgb(21, 22, 46); border-color: var(--line); color: var(--text);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
+}
+.banner { border-radius: 999px; padding: 9px 16px; }
+.banner button, .intro-row button, .weak-src button {
+  border-radius: 999px; background: rgba(60, 62, 120, .6); border-color: transparent; color: #fff;
+}
+.banner button:hover, .intro-row button:hover, .weak-src button:hover { background: rgba(90, 80, 190, .85); border-color: transparent; }
+.weak-src { border-color: rgba(224, 160, 48, .55); }
+.intro-ask, .weak-src { border-radius: 16px; }
+.player > .ctl-pop { border-radius: 16px; }
+.seek-tip { border-radius: 8px; }
+.skip-intro, .next-ep button {
+  background: rgb(21, 22, 46); border: 1px solid var(--line); color: #fff; box-shadow: 0 8px 26px rgba(0, 0, 0, .5);
+}
+.skip-intro { border-radius: 999px; }
+.next-ep .skip-intro-like { border-radius: 999px 0 0 999px; padding-left: 20px; }
+.next-ep .next-ep-close { border-radius: 0 999px 999px 0; padding-right: 16px; }
+.skip-intro:hover, .next-ep button:hover { background: linear-gradient(135deg, #8b6cff, #5b3df0); border-color: transparent; }
+.notice { background: rgba(8, 8, 22, .78); }
+.notice-card { background: rgb(21, 22, 46); border-radius: 20px; box-shadow: 0 24px 70px rgba(0, 0, 0, .55); }
+.toast { background: rgb(31, 33, 71); border-color: var(--line); border-radius: 999px; }
+.info-tip { background: rgb(31, 33, 71); border-color: var(--line); border-radius: 10px; }
+
+/* Bekleme bandı: simge (dönen halka), vurgulu çerçeve ve ana ekran temasına uygun degrade zemin. */
+.banner {
+  gap: 12px; padding: 9px 10px 9px 14px; border-radius: 16px; font-size: 14px; font-weight: 500; letter-spacing: .01em;
+  background: linear-gradient(135deg, rgb(33, 34, 78), rgb(21, 22, 46)); border-color: rgba(123, 92, 255, .55);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .5), 0 0 0 1px rgba(123, 92, 255, .12) inset;
+}
+.banner::before {
+  content: ''; flex: none; width: 18px; height: 18px; box-sizing: border-box; border-radius: 50%;
+  border: 2.5px solid rgba(169, 139, 255, .28); border-top-color: #a98bff; animation: banner-don 0.9s linear infinite;
+}
+@keyframes banner-don { to { transform: rotate(360deg); } }
+.banner > span { color: #e8e9ee; }
+.banner button { padding: 6px 14px; font-size: 13px; font-weight: 600; background: linear-gradient(135deg, #8b6cff, #5b3df0); }
+.banner button:hover { filter: brightness(1.12); background: linear-gradient(135deg, #8b6cff, #5b3df0); }

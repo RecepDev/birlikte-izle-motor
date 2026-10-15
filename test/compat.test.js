@@ -81,15 +81,8 @@ test('Stremio being down: error for the host, error for a guest without relay, i
   const streams = [stream({})];
   assert.equal(evaluate({ device, streams, isHost: true }).problems[0].level, 'error');
   assert.equal(evaluate({ device, streams, relayEnabled: false }).problems[0].level, 'error');
-  const guest = evaluate({ device, streams, relayEnabled: true });
-  assert.equal(guest.problems[0].level, 'info');
-  assert.equal(guest.needsAttention, false);
-});
-
-test('a phone cannot open anything when the host turned the relay off', () => {
-  const device = { ...goodDevice, stremio: null, touch: true };
-  assert.equal(evaluate({ device, streams: [stream({})], relayEnabled: true }).needsAttention, false);
-  assert.equal(evaluate({ device, streams: [stream({})], relayEnabled: false }).problems[0].level, 'error');
+  // Relay kapatıldı: motor kapalıysa misafir için de hata.
+  assert.equal(evaluate({ device, streams, relayEnabled: true }).problems[0].level, 'error');
 });
 
 test('recommendation prefers SDR over HDR on an SDR screen and never a re-encode stream', () => {

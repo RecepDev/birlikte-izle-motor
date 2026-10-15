@@ -5,10 +5,10 @@ const STATE = {
   loading: ['⏳', 'yükleniyor'],
   buffering: ['⏳', 'donuyor'],
   error: ['⚠️', 'video açılamadı'],
-  noStremio: ['🚫', 'Stremio açık değil'],
+  noStremio: ['🚫', 'Video motoru kapalı'],
   idle: ['💤', 'bekliyor'],
 };
-const SOURCE = { local: 'kendi Stremio\'su', relay: '📶 host üzerinden', http: 'doğrudan link', none: '' };
+const SOURCE = { local: 'kendi motoru', relay: '📶 host üzerinden', http: 'doğrudan link', none: '' };
 
 // Video neden açılmadı (kişinin cihazından gelen sebep).
 const ERROR_REASON = {

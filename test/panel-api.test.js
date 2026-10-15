@@ -20,7 +20,7 @@ const socketCalls = [];
 
 before(async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bi-panel-'));
-  fs.writeFileSync(path.join(dir, 'index.html'), '<meta name="panel-key" content="%%PANEL_KEY%%">panel');
+  fs.writeFileSync(path.join(dir, 'uygulama.html'), '<meta name="panel-key" content="%%PANEL_KEY%%">panel');
   fs.writeFileSync(path.join(dir, 'new.html'), '<meta name="panel-key" content="%%PANEL_KEY%%">new');
   rooms = createRoomManager();
   config = createConfigStore(path.join(dir, 'config.json'));

@@ -191,6 +191,7 @@ let muted = false;
 // altyazıyı mpv'ye veriyoruz. Metni burada okuyup gönderiyoruz: adres blob:
 // (konuğun kendi dosyası) ya da göreli olabilir, mpv ikisini de açamaz.
 let sonAltyazi = null;
+let sonAltyazi2 = null;
 window.masaustuAltyazi = {
   async uygula(url, offset) {
     ipcRenderer.send('mpv:altyazi-gecikme', Number(offset) || 0);
@@ -203,6 +204,21 @@ window.masaustuAltyazi = {
       if (sonAltyazi === hedef) ipcRenderer.send('mpv:altyazi', metin);
     } catch {
       ipcRenderer.send('mpv:altyazi-kapat');
+    }
+  },
+  // İkinci altyazı (alt satır, çeviri): mpv'nin ikincil altyazı kanalı. Sayfa dosyayı
+  // sunucudan hizalanmış hâlde veriyor, gecikmesi asıl altyazıdan ayrı.
+  async ikinci(url, offset) {
+    ipcRenderer.send('mpv:altyazi2-gecikme', Number(offset) || 0);
+    const hedef = url ? mutlak(url) : null;
+    if (hedef === sonAltyazi2) return;
+    sonAltyazi2 = hedef;
+    if (!hedef) return ipcRenderer.send('mpv:altyazi2-kapat');
+    try {
+      const metin = await (await fetch(hedef)).text();
+      if (sonAltyazi2 === hedef) ipcRenderer.send('mpv:altyazi2', metin);
+    } catch {
+      ipcRenderer.send('mpv:altyazi2-kapat');
     }
   },
   stil(s) {
@@ -223,6 +239,19 @@ ipcRenderer.on('mpv:sesler', (_e, liste) => {
 // yazıyı mpv kendi ekranında (alt ortada) gösteriyor.
 // Önündeki hazır veri (sn): bilgi kutusunda gösteriliyor.
 window.masaustuOnbellek = () => durum.cacheSec || 0;
+// Kısa takılma ölçümü için mpv'nin HAM konumu ve o okumanın zamanı. Sayfanın gördüğü
+// currentTime iki güncelleme arasında saat farkıyla tahmin ediliyor (bkz. aşağıdaki
+// konum()); o tahmin 1-2 saniyelik donmayı gizliyor.
+window.masaustuKonumHam = () => ({
+  konum: Number(durum.position) || 0,
+  t: durumZamani || 0,
+  bekliyor: Boolean(durum.paused || durum.seeking || durum.idle),
+  hiz: Number(durum.rate) || 1,
+  onbellekSn: Math.round(durum.cacheSec || 0),
+  onbellekDurdu: Boolean(durum.cacheStalled),
+  dusenKare: Number(durum.droppedFrames) || 0,
+  okumaMbps: Number.isFinite(durum.okumaMbps) ? durum.okumaMbps : null,
+});
 window.masaustuHiz = () => (Number.isFinite(durum.netMbps) ? durum.netMbps : null);
 // Bilgi kutusu için: bağlı kişi, oynatıcının okuduğu hız, bekliyor mu (sarma / tampon dolduruluyor).
 window.masaustuTorrent = () => ({

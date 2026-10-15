@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <link rel="icon" type="image/svg+xml" href="simge.svg">
+  <meta name="color-scheme" content="dark">
+  <title>Birlikte İzle</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { display: grid; place-items: center; background: radial-gradient(900px 600px at 30% 0%, #1d1b3f, #12122a 60%, #0e0f1f); color: #e8e9ee; font: 15px system-ui, sans-serif; }
+    .kutu { display: grid; gap: 16px; justify-items: center; text-align: center; }
+    .logo { width: 88px; height: 88px; filter: drop-shadow(0 8px 24px rgba(91, 61, 240, .5)); }
+    .yuk { width: 160px; height: 4px; border-radius: 4px; background: #23244a; overflow: hidden; }
+    .yuk::after { content: ''; display: block; width: 40%; height: 100%; background: #7b5cff; animation: kay 1.1s ease-in-out infinite; }
+    @keyframes kay { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+    p { margin: 0; color: #9096a6; max-width: 380px; line-height: 1.5; }
+    button { padding: 8px 20px; border-radius: 999px; border: 0; background: #5b3df0; color: #fff; font: inherit; cursor: pointer; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="kutu">
+    <img class="logo" src="simge.svg" alt="">
+    <div>Birlikte İzle</div>
+    <div class="yuk"></div>
+    <p id="mesaj">Sunucu açılıyor…</p>
+    <button id="tekrar" type="button" hidden>Yeniden dene</button>
+  </div>
+  <script>
+    const MESAJ = {
+      acilmadi: 'Sunucu açılamadı. Başka bir program 7300/7301 portlarını kullanıyor olabilir.',
+      kodYok: 'Sunucu dosyaları bulunamadı. Uygulamayı yeniden kur.',
+      eski: 'Çalışan sunucu eski sürümde. Kapatıp yeniden dene (açık bir Birlikte İzle sunucusu varsa önce panelden kapat).',
+    };
+    const hata = new URLSearchParams(location.search).get('hata');
+    if (hata) {
+      document.querySelector('.yuk').hidden = true;
+      document.getElementById('mesaj').textContent = MESAJ[hata] || 'Bir hata oluştu.';
+      const b = document.getElementById('tekrar');
+      b.hidden = false;
+      b.onclick = () => window.kabuk?.yenidenDene?.();
+    }
+  </script>
+</body>
+</html>

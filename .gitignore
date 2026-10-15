@@ -21,3 +21,4 @@ deneme/motor/*.out
 # masaustu kurulum paketi icin kopyalanan motor kodu (asli src/motor)
 masaustu/motor/
 deneme/motor/__pycache__/
+sunucu-paket/

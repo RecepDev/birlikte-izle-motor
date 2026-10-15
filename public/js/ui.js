@@ -1,3 +1,4 @@
+import { sor } from '/js/diyalog.js';
 export const $ = (sel, root = document) => root.querySelector(sel);
 
 // Tiny DOM builder. Text is always set through textContent (never innerHTML).
@@ -67,7 +68,7 @@ export async function copyText(text) {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    window.prompt('Linki kopyala:', text);
+    await sor('Linki kopyala:', text);
     return false;
   }
 }
@@ -83,7 +84,7 @@ export const ERROR_TEXT = {
   badMagnet: 'Geçerli bir magnet linki değil.',
   relayFull: 'Relay dolu, host kişi sınırını artırmalı.',
   relayOff: 'Host relay\'i kapatmış.',
-  hostStremioDown: 'Host\'un Stremio\'su şu an kapalı.',
+  hostStremioDown: 'Host\'un video motoru şu an kapalı.',
   badContent: 'Geçersiz içerik.',
   noStreams: 'Bu içerik için hiç stream bulunamadı.',
   noEpisodes: 'Bölüm listesi alınamadı.',

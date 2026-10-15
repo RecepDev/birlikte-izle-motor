@@ -201,3 +201,157 @@ test('uploads over 2 MB are rejected', async () => {
     assert.equal(res.status, 413);
   });
 });
+
+// ---- ikinci altyazının hizalanması ---------------------------------------------------
+
+// Aynı repliklerin iki dili: hedefin zamanları kaydırılmış olarak üretiliyor.
+function altyaziCifti(kaydirma, { kirilmaSn = null, kirilmaEk = 0 } = {}) {
+  const yaz = (t) => {
+    const s = Math.max(0, t);
+    const sa = String(Math.floor(s / 3600)).padStart(2, '0');
+    const dk = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const sn = String(Math.floor(s % 60)).padStart(2, '0');
+    const ms = String(Math.round((s - Math.floor(s)) * 1000)).padStart(3, '0');
+    return `${sa}:${dk}:${sn}.${ms}`;
+  };
+  const ref = ['WEBVTT', ''];
+  const hedef = ['WEBVTT', ''];
+  let t = 20;
+  for (let i = 0; i < 200; i += 1) {
+    t += 2 + (i % 7) * 0.7; // düzensiz aralıklar: parmak izi oluşsun
+    const sure = 1.2 + (i % 3) * 0.4;
+    ref.push(`${yaz(t)} --> ${yaz(t + sure)}`, `line ${i}`, '');
+    const ek = kirilmaSn !== null && t > kirilmaSn ? kirilmaEk : 0;
+    hedef.push(`${yaz(t + kaydirma + ek)} --> ${yaz(t + sure + kaydirma + ek)}`, `satır ${i}`, '');
+    t += sure;
+  }
+  return { ref: ref.join('\n'), hedef: hedef.join('\n') };
+}
+
+function hizaServisi(dosyalar) {
+  const { room } = makeRoom();
+  const service = createSubtitleService({
+    addons: {
+      subtitles: async () => ({
+        subtitles: [
+          { id: 'e', url: 'https://os/eng.srt', lang: 'eng', addonName: 'OS' },
+          { id: 't', url: 'https://os/tur.srt', lang: 'tur', addonName: 'OS' },
+        ],
+        errors: [],
+      }),
+    },
+    getAddons: () => [],
+    stremioLocal: { opensubHash: async () => null },
+    log: silentLog,
+    fetchImpl: async (url) => ({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new TextEncoder().encode(dosyalar[url] ?? 'WEBVTT\n').buffer,
+    }),
+  });
+  return { room, service };
+}
+
+test('ikinci altyazı birincisine göre hizalanır ve plan saklanır', async () => {
+  const { ref, hedef } = altyaziCifti(6.5);
+  const { room, service } = hizaServisi({ 'https://os/eng.srt': ref, 'https://os/tur.srt': hedef });
+  await service.refresh(room, () => {});
+  const eng = room.subtitles.find((s) => s.lang === 'eng' && s.source === 'addon');
+  const tur = room.subtitles.find((s) => s.lang === 'tur' && s.source === 'addon');
+
+  const { vtt, plan } = await service.getHizaliVtt(room, tur.subId, eng.subId);
+  assert.equal(plan.ok, true);
+  assert.equal(plan.mod, 'sabit');
+  assert.ok(Math.abs(plan.kaydirma + 6.5) < 0.1, `kaydırma ${plan.kaydirma}`);
+  assert.ok(plan.guven > 0.95);
+  // Hizalanmış dosyanın ilk cue'su referansın ilk cue'suyla aynı ana geliyor.
+  const ilk = (metin) => metin.match(/(\d{2}:\d{2}:\d{2}\.\d{3}) -->/)[1];
+  assert.equal(ilk(vtt), ilk(ref));
+  // Metin korunuyor (yalnız zamanlar yeniden yazıldı).
+  assert.match(vtt, /satır 0/);
+
+  // İkinci çağrı hesabı tekrarlamıyor: aynı plan nesnesi dönüyor.
+  const tekrar = await service.getHizaliVtt(room, tur.subId, eng.subId);
+  assert.equal(tekrar.plan, plan);
+});
+
+test('film ortasında değişen kayma parçalı hizalanır', async () => {
+  const { ref, hedef } = altyaziCifti(2, { kirilmaSn: 400, kirilmaEk: 9 });
+  const { room, service } = hizaServisi({ 'https://os/eng.srt': ref, 'https://os/tur.srt': hedef });
+  await service.refresh(room, () => {});
+  const eng = room.subtitles.find((s) => s.lang === 'eng' && s.source === 'addon');
+  const tur = room.subtitles.find((s) => s.lang === 'tur' && s.source === 'addon');
+  const { plan } = await service.getHizaliVtt(room, tur.subId, eng.subId);
+  assert.equal(plan.ok, true);
+  assert.equal(plan.mod, 'parcali');
+  assert.ok(plan.noktalar.length > 1);
+  assert.ok(plan.guven > 0.9, `güven ${plan.guven}`);
+});
+
+test('alakasız altyazı hizalanmaz, dosya olduğu gibi döner', async () => {
+  const { ref } = altyaziCifti(0);
+  const { hedef } = altyaziCifti(0, { kirilmaSn: 0, kirilmaEk: 0 });
+  // Bambaşka bir ritim: her replik tam 3 saniyede bir.
+  const baska = ['WEBVTT', ''];
+  for (let i = 0; i < 200; i += 1) baska.push(`${new Date(i * 3000).toISOString().slice(11, 23)} --> ${new Date(i * 3000 + 1000).toISOString().slice(11, 23)}`, 'x', '');
+  const { room, service } = hizaServisi({ 'https://os/eng.srt': ref, 'https://os/tur.srt': baska.join('\n') });
+  await service.refresh(room, () => {});
+  const eng = room.subtitles.find((s) => s.lang === 'eng' && s.source === 'addon');
+  const tur = room.subtitles.find((s) => s.lang === 'tur' && s.source === 'addon');
+  const { vtt, plan } = await service.getHizaliVtt(room, tur.subId, eng.subId);
+  assert.equal(plan.ok, false);
+  assert.equal(plan.sebep, 'oturmadi');
+  assert.equal(vtt, baska.join('\n'), 'oturmayan plan uygulanmıyor');
+  assert.ok(hedef.length > 0);
+});
+
+test('ref verilmezse ya da aynı altyazıysa hizalama yapılmaz', async () => {
+  const { ref, hedef } = altyaziCifti(4);
+  const { room, service } = hizaServisi({ 'https://os/eng.srt': ref, 'https://os/tur.srt': hedef });
+  await service.refresh(room, () => {});
+  const tur = room.subtitles.find((s) => s.lang === 'tur' && s.source === 'addon');
+  assert.equal((await service.getHizaliVtt(room, tur.subId, null)).plan, null);
+  assert.equal((await service.getHizaliVtt(room, tur.subId, tur.subId)).plan, null);
+  assert.equal((await service.getHizaliVtt(room, 'yok', tur.subId)).vtt, null);
+});
+
+test('uçlar: ?ref ile hizalanmış vtt ve hiza.json', async () => {
+  const { ref, hedef } = altyaziCifti(5.25);
+  const { room, service } = hizaServisi({ 'https://os/eng.srt': ref, 'https://os/tur.srt': hedef });
+  await service.refresh(room, () => {});
+  const eng = room.subtitles.find((s) => s.lang === 'eng' && s.source === 'addon');
+  const tur = room.subtitles.find((s) => s.lang === 'tur' && s.source === 'addon');
+
+  const app = express();
+  app.use(createSubtitleRouter({
+    rooms: { get: (id) => (id === room.id ? room : undefined) },
+    service,
+    dispatch: () => {},
+    log: silentLog,
+  }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((r) => server.once('listening', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const ilk = (metin) => metin.match(/(\d{2}:\d{2}:\d{2}\.\d{3}) -->/)[1];
+    // ref'siz: dosya olduğu gibi (kaydırılmış hâli)
+    const ham = await (await fetch(`${base}/sub/${room.id}/${tur.subId}.vtt`)).text();
+    assert.notEqual(ilk(ham), ilk(ref));
+    // ref ile: birinciyle aynı ana gelmiş
+    const res = await fetch(`${base}/sub/${room.id}/${tur.subId}.vtt?ref=${eng.subId}`);
+    assert.equal(res.headers.get('content-type'), 'text/vtt; charset=utf-8');
+    assert.equal(ilk(await res.text()), ilk(ref));
+
+    const hiza = await (await fetch(`${base}/sub/${room.id}/${tur.subId}/hiza.json?ref=${eng.subId}`)).json();
+    assert.equal(hiza.ok, true);
+    assert.equal(hiza.mod, 'sabit');
+    assert.equal(hiza.kesin, true);
+    assert.ok(Math.abs(hiza.kaydirma + 5.25) < 0.1, `kaydırma ${hiza.kaydirma}`);
+
+    // ref zorunlu, bilinmeyen oda 404
+    assert.equal((await fetch(`${base}/sub/${room.id}/${tur.subId}/hiza.json`)).status, 400);
+    assert.equal((await fetch(`${base}/sub/NOROOM/${tur.subId}/hiza.json?ref=x`)).status, 404);
+  } finally {
+    server.close();
+  }
+});

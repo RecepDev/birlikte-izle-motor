@@ -119,21 +119,9 @@ export function evaluate({ device, streams, current = null, isHost = false, rela
       ['Dosya adında HDR10 ya da HDR10+ da geçen kaynağı tercih et.']);
   }
   if (device.stremio === false) {
-    if (isHost) {
-      add('stremio', 'error', 'Stremio açık değil',
-        'Videolar senin bilgisayarındaki Stremio üzerinden oynar; kapalıyken hiçbir video açılmaz.',
-        ['Stremio uygulamasını aç (oynatıcıdaki "🔌 Stremio\'ya bağlan" butonu da açar).']);
-    } else if (!relayEnabled) {
-      add('stremio', 'error', 'Stremio açık değil ve host relay\'i kapalı',
-        'Bu cihazdan hiçbir video açılamaz.',
-        ['Kendi Stremio\'nu aç ya da host\'tan "Host üzerinden izle"yi açmasını iste.']);
-    } else {
-      add('stremio', 'info', 'Stremio kapalı: videolar host üzerinden akacak',
-        'Sorun yok; kendi Stremio\'nu açarsan host\'un internetini yormazsın.');
-    }
-  } else if (device.touch && !isHost && !relayEnabled) {
-    add('stremio', 'error', 'Bu cihazda Stremio yok ve host relay\'i kapalı',
-      'Telefondan video açılamaz.', ['Host\'tan "Host üzerinden izle"yi açmasını iste.']);
+    add('stremio', 'error', 'Video motoru kapalı',
+      'Videolar bu bilgisayardaki video motorundan oynar; kapalıyken video açılmaz.',
+      ['Uygulamayı yeniden aç; motor birkaç saniyede kendiliğinden başlar.']);
   }
   if (currentVerdict?.level === 'reencode' && !problems.some((p) => p.id === 'hevc' || p.id === 'hdr-decode')) {
     add('current', 'warn', 'Şu an izlediğin kaynağın görüntüsü açılamıyor',

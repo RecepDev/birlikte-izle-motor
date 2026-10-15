@@ -79,10 +79,19 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
 
   async function temizle() {
     try {
+      // Tarama ve silme sürelerini yazıyoruz: tarama bütün blokları tek tek sorguluyor
+      // (10 GB'da ~2500 dosya) ve video akıtan süreçte çalışıyor. İzlerken görülen kısa
+      // takılmaların bununla aynı ana düşüp düşmediği tanı kaydından anlaşılsın.
+      const basla = Date.now();
       const dosyalar = await tara();
+      const taramaMs = Date.now() - basla;
       let toplam = dosyalar.reduce((a, f) => a + f.boy, 0);
-      if (toplam <= sinir) return { toplam, silinen: 0 };
+      if (toplam <= sinir) {
+        if (taramaMs > 300) log?.info?.('Önbellek tarandı', { dosya: dosyalar.length, taramaMs });
+        return { toplam, silinen: 0 };
+      }
       dosyalar.sort((a, b) => a.zaman - b.zaman);
+      const silmeBasla = Date.now();
       let silinen = 0;
       for (const f of dosyalar) {
         if (toplam <= sinir * 0.9) break;
@@ -90,7 +99,10 @@ export function createOnbellek({ klasor, sinirBayt = 10 * 1024 ** 3, blok = BLOK
         toplam -= f.boy;
         silinen++;
       }
-      log?.info?.('Önbellek temizlendi', { silinen, kalanMB: Math.round(toplam / 1e6) });
+      log?.info?.('Önbellek temizlendi', {
+        silinen, kalanMB: Math.round(toplam / 1e6), dosya: dosyalar.length,
+        taramaMs, silmeMs: Date.now() - silmeBasla,
+      });
       return { toplam, silinen };
     } catch (err) {
       log?.warn?.('Önbellek temizlenemedi', { error: err.message });

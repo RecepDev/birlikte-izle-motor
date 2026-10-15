@@ -26,11 +26,15 @@ import { createStremioRestarter, stremioAcikDegilseAc } from './src/stremio-rest
 import { createTorrServer } from './src/motor/torrserver.js';
 import { createStremioTaklidi } from './src/motor/stremio-taklidi.js';
 import { createOnbellek, onbellekYeri } from './src/motor/onbellek.js';
+import { createIndirme } from './src/indirme.js';
 import { GB, createOnbellekAyar, gecerliGb, gecerliKlasor, stremioOnbellekOku, stremioOnbellekKoy } from './src/onbellek-ayar.js';
 import { dosyaAdi } from './src/motor/dosya-adlari.js';
 import { STREMIO_BASE } from './public/js/shared/stream-url.js';
 import { createIndirRouter } from './src/indir.js';
 import { createGecmis } from './src/gecmis.js';
+import { createKutuphane } from './src/kutuphane.js';
+import { createIzlendi } from './src/izlendi.js';
+import { createIndirmeSecenek } from './src/indirme-secenek.js';
 import { createKesif } from './src/kesif.js';
 import { createGiris } from './src/giris.js';
 import { createTercih } from './src/tercih.js';
@@ -83,6 +87,9 @@ let stremioTaklidi = null;
 let onbellek = null;
 // Önbellek boyutu (GB, host oda ayarlarından elle; 0 = kapalı). TorrServer'da bizim önbelleğimiz.
 const onbellekAyar = createOnbellekAyar({ file: path.join(DATA, 'onbellek.json'), varsayilanGb: Number(process.env.ONBELLEK_GB) || 10, log });
+// Önden indirme: kişinin indirttiği bölümler. Motor taklidi tam inmiş dosyayı diskten
+// servis ediyor, böylece oda/relay/mpv/telefon hiç değişmeden indirilenden oynatıyor.
+const indirme = createIndirme({ dataDir: DATA, log });
 let motorAyri = false; // TorrServer çalışıyor (Stremio asıl sunucuyla ortak değil)
 if (MOTOR === 'torrserver') {
   torrServer = createTorrServer({
@@ -109,7 +116,7 @@ if (MOTOR === 'torrserver') {
   setInterval(() => onbellek.temizle(), 10 * 60_000).unref();
   const taklitPort = Number(new URL(STREMIO_BASE).port) || 11470;
   stremioTaklidi = createStremioTaklidi({
-    ts: torrServer, port: taklitPort, log, dosyaAdi, onbellek,
+    ts: torrServer, port: taklitPort, log, dosyaAdi, onbellek, indirme,
     ekTrackerlar: () => torrentHiz.kaynaklar().map((t) => t.slice('tracker:'.length)),
   });
   try {
@@ -172,6 +179,9 @@ let lastAutoRestart = 0;
 const activeChecks = new Map();
 const rooms = createRoomManager();
 const gecmis = createGecmis({ file: path.join(DATA, 'gecmis.json'), log });
+const kutuphane = createKutuphane({ file: path.join(DATA, 'kutuphane.json'), log });
+const izlendi = createIzlendi({ file: path.join(DATA, 'izlendi.json'), log });
+const indirmeSecenek = createIndirmeSecenek({ file: path.join(DATA, 'indirme-secenek.json'), log });
 const kesif = createKesif({ file: path.join(DATA, 'kesif.json'), log });
 const giris = createGiris({ file: path.join(DATA, 'giris.json'), log });
 const tani = createTani({ dir: path.join(DATA, 'tani'), log });
@@ -271,6 +281,17 @@ publicApp.get(['/room', '/room/', '/room/:id'], (req, res) => {
 publicApp.get('/vendor/hls.min.js', (req, res) =>
   res.sendFile(path.join(ROOT, 'node_modules', 'hls.js', 'dist', 'hls.min.js')),
 );
+// Zor kelime sözlüğü (İngilizce → Türkçe, ~200 KB sıkıştırılmış). Dosya diskte
+// gzip duruyor, olduğu gibi gönderiliyor: tarayıcı kendisi açıyor.
+// Kaynak: Wiktionary (CC BY-SA) + SUBTLEX-US sıklık listesi; bkz. scripts/sozluk-uret.mjs.
+publicApp.get('/veri/en-tr.json', (req, res) => {
+  const yol = path.join(ROOT, 'public', 'veri', 'en-tr.json.gz');
+  if (!fs.existsSync(yol)) return res.status(404).json({ error: 'Sözlük yok (scripts/sozluk-uret.mjs)' });
+  res.set('Content-Encoding', 'gzip');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type('application/json');
+  return res.sendFile(yol);
+});
 publicApp.use(express.static(path.join(ROOT, 'public'), { index: false }));
 
 const publicServer = http.createServer(publicApp);
@@ -294,6 +315,9 @@ socketCtl = attachSocket(io, {
       ...yayin.events,
       setHostSubtitle: (room, uid, p) =>
         room.setHostSubtitle(uid, { subId: p.subId ?? null, offset: Number(p.offset ?? 0) }),
+      // İkinci altyazı (alt satır): host'un varsayılanı. Kişisel seçim sunucuya uğramıyor.
+      setHostSubtitle2: (room, uid, p) =>
+        room.setHostSubtitle2(uid, { subId: p.subId ?? null, offset: Number(p.offset ?? 0) }),
       // Stremio'nun yükleme sınırı (host bilgisayarı, Windows QoS; bkz. src/yukleme-siniri.js).
       yuklemeSiniriOku: async (room, uid) => {
         if (uid !== room.hostUserId) return { error: 'notHost' };
@@ -614,6 +638,7 @@ socketCtl = attachSocket(io, {
         const res = room.setContent(uid, { type, contentId: id, meta, streams, hostStreamId: (secilen || streams[0]).streamId });
         if (!res.error) {
           gecmis.ekle({ type, contentId: id, meta });
+          gecmis.akisYaz(type, id, room.streams.find((s) => s.streamId === room.hostStreamId));
           res.msgs.push(...kaldigiYer(room));
           res.after = () => refreshSubtitles(room);
         }
@@ -789,9 +814,25 @@ const konumTimer = setInterval(() => {
     const dur = Number(host?.status?.duration);
     const pos = room.currentPosition();
     if (pos > 30) gecmis.konumYaz(room.type, room.contentId, pos, Number.isFinite(dur) ? dur : null);
+    gecmis.akisYaz(room.type, room.contentId, room.streams.find((s) => s.streamId === room.hostStreamId)); // kaynak odada değiştiyse güncel kalsın
   }
 }, 15_000);
 konumTimer.unref();
+
+// "İzlerken indirmeleri duraklat" (ayar src/indirme.js'te, varsayılan kapalı): dolu bir oda
+// indirilmemiş bir torrent'i izliyorsa indirmeler durur; oda boşalınca ya da inmiş dosyaya geçilince
+// sürer. Duraklatma hemen, sürdürme 2 ardışık yoklamadan sonra (kısa kopmalarda gidip gelmesin).
+let izlemeYok = 0;
+const izlemeTimer = setInterval(() => {
+  const izliyor = rooms.list().some((r) => {
+    if (!r.connectedUsers().length) return false;
+    const s = r.streams.find((x) => x.streamId === r.hostStreamId);
+    return s?.kind === 'torrent' && !indirme.hazirDosya(s.infoHash, s.fileIdx, s.filename);
+  });
+  if (izliyor) { izlemeYok = 0; indirme.izleniyorBildir(true); return; }
+  if (++izlemeYok >= 2) indirme.izleniyorBildir(false);
+}, 3000);
+izlemeTimer.unref();
 
 // Sonraki bölümü ısıt: torrent Stremio'da açılıp ilk 8 MB okunuyor (kapalı aralık).
 const isit = (stream) => isitStremio(stream, 8 * 1024 * 1024);
@@ -804,7 +845,7 @@ const isit = (stream) => isitStremio(stream, 8 * 1024 * 1024);
 const sahipsizTimer = setInterval(async () => {
   let acik = [];
   try { acik = await stremioLocal.openTorrents(); } catch { return; }
-  for (const h of kapatilacaklar({ acik, rooms: rooms.list(), denetlenen: activeChecks.keys() })) {
+  for (const h of kapatilacaklar({ acik, rooms: rooms.list(), denetlenen: [...activeChecks.keys(), ...indirme.inenHashler()] })) {
     await stremioLocal.removeTorrent({ infoHash: h }).catch(() => {});
     log.info('Sahipsiz torrent kapatıldı', { infoHash: h });
   }
@@ -832,7 +873,7 @@ const cleanupTimer = setInterval(async () => {
   if (!all.some((r) => r.settings.stopOtherDownloads && r.connectedUsers().length)) return;
   cleanupBusy = true;
   try {
-    const keep = new Set(activeChecks.keys());
+    const keep = new Set([...activeChecks.keys(), ...indirme.inenHashler()]);
     for (const r of all) if (r.prefetch?.infoHash) keep.add(r.prefetch.infoHash);
     for (const room of all) {
       for (const id of room.statsStreamIds()) {
@@ -920,14 +961,19 @@ const panelServer = http.createServer(
     log,
     motorBilgisi: () => ({ istenen: MOTOR, kullanilan: motorAyri ? 'torrserver' : 'stremio' }),
     motorPanel,
+    indirme,
     onShutdown: shutdown,
     installCloudflared: () => installCloudflared({ log }),
     onRoomCreated: (room) => {
       gecmis.ekle({ type: room.type, contentId: room.contentId, meta: room.meta });
+      gecmis.akisYaz(room.type, room.contentId, room.streams.find((s) => s.streamId === room.hostStreamId));
       kaldigiYer(room);
       refreshSubtitles(room);
     },
     gecmis,
+    kutuphane,
+    izlendi,
+    indirmeSecenek,
     tercih,
     relayStats: (roomId) => relay.stats(roomId),
   }),
@@ -970,6 +1016,7 @@ function uygulamayiKapat() {
 function shutdown() {
   torrServer?.durdur();
   stremioTaklidi?.durdur();
+  indirme.durdur();
   if (shuttingDown) return;
   shuttingDown = true;
   log.info('Sunucu kapatılıyor');

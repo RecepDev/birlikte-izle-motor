@@ -4,6 +4,7 @@
 import express from 'express';
 import { decodeSubtitle, toVtt, sortSubtitles, langLabel, normalizeLang } from '../public/js/shared/subtitle-text.js';
 import { localTorrentUrl } from '../public/js/shared/stream-url.js';
+import { hizalamaPlani, planUygula } from '../public/js/shared/altyazi-hizala.js';
 
 export const MAX_SUBTITLE_BYTES = 2 * 1024 * 1024;
 
@@ -87,6 +88,33 @@ export function createSubtitleService({ addons, getAddons, stremioLocal, log, fe
       return e.vtt;
     },
 
+    // İkinci altyazıyı birincisine göre hizalanmış hâlde verir (bkz. altyazi-hizala.js).
+    // İki dosyanın zamanlaması tutmadığı için (farklı sürüm, farklı kare hızı, araya
+    // giren reklam arası) cue zamanları yeniden yazılıyor. Hesap bir kez yapılıp oda
+    // boyunca saklanıyor; oturmazsa dosya olduğu gibi dönüyor ve sebebi bildiriliyor.
+    async getHizaliVtt(room, subId, refSubId) {
+      const vtt = await this.getVtt(room, subId);
+      if (!vtt || !refSubId || refSubId === subId) return { vtt, plan: null };
+      const s = stateOf(room);
+      s.planlar = s.planlar || new Map();
+      const anahtar = `${refSubId}>${subId}`;
+      if (s.planlar.has(anahtar)) {
+        const kayit = s.planlar.get(anahtar);
+        return { vtt: kayit.vtt || vtt, plan: kayit.plan };
+      }
+      const refVtt = await this.getVtt(room, refSubId).catch(() => null);
+      if (!refVtt) return { vtt, plan: null };
+      const basla = Date.now();
+      const plan = hizalamaPlani(refVtt, vtt);
+      log.info('Altyazı hizalama', {
+        roomId: room.id, ref: refSubId, hedef: subId, ok: plan.ok,
+        mod: plan.mod ?? plan.sebep, guven: plan.guven, ms: Date.now() - basla,
+      });
+      const kayit = { plan, vtt: plan.ok ? planUygula(vtt, plan) : null };
+      s.planlar.set(anahtar, kayit);
+      return { vtt: kayit.vtt || vtt, plan };
+    },
+
     addUpload(room, { name, bytes }) {
       const s = stateOf(room);
       const lang = guessLang(name);
@@ -107,17 +135,42 @@ export function createSubtitleService({ addons, getAddons, stremioLocal, log, fe
 export function createSubtitleRouter({ rooms, service, dispatch, log }) {
   const router = express.Router();
 
+  // ?ref=<subId>: ikinci altyazı, birincisine göre hizalanmış gelir.
   router.get('/sub/:roomId/:subId.vtt', async (req, res) => {
     const room = rooms.get(req.params.roomId);
     if (!room) return res.status(404).end();
     try {
-      const vtt = await service.getVtt(room, req.params.subId);
+      const ref = typeof req.query.ref === 'string' ? req.query.ref : null;
+      const { vtt } = ref
+        ? await service.getHizaliVtt(room, req.params.subId, ref)
+        : { vtt: await service.getVtt(room, req.params.subId) };
       if (!vtt) return res.status(404).end();
       res.set('Cache-Control', 'private, max-age=3600');
       res.type('text/vtt; charset=utf-8').send(vtt);
     } catch (err) {
       log.warn('Altyazı indirilemedi', { roomId: room.id, subId: req.params.subId, error: err.message });
       res.status(502).end();
+    }
+  });
+
+  // Hizalamanın sonucu: sayfa "otomatik hizalandı (+2,4 sn)" ya da "hizalanamadı"
+  // diyebilsin. Hesap getHizaliVtt ile aynı, oda boyunca saklanıyor.
+  router.get('/sub/:roomId/:subId/hiza.json', async (req, res) => {
+    const room = rooms.get(req.params.roomId);
+    if (!room) return res.status(404).json({ error: 'Oda yok' });
+    const ref = typeof req.query.ref === 'string' ? req.query.ref : null;
+    if (!ref) return res.status(400).json({ error: 'ref gerekli' });
+    try {
+      const { plan } = await service.getHizaliVtt(room, req.params.subId, ref);
+      if (!plan) return res.json({ ok: false, sebep: 'yok' });
+      res.set('Cache-Control', 'private, max-age=600');
+      res.json({
+        ok: plan.ok, mod: plan.mod ?? null, sebep: plan.sebep ?? null, guven: plan.guven,
+        kesin: plan.kesin ?? null, kaydirma: plan.kaydirma ?? null, nokta: plan.noktalar?.length ?? 0,
+      });
+    } catch (err) {
+      log.warn('Altyazı hizalanamadı', { roomId: room.id, subId: req.params.subId, error: err.message });
+      res.status(502).json({ error: 'Hizalama yapılamadı' });
     }
   });
 

@@ -20,6 +20,7 @@
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "subtlex-word-frequencies": "^2.0.0"
   }
 }

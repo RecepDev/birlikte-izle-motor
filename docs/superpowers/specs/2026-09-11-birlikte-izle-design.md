@@ -190,6 +190,33 @@ Host ayarları (`locked`, `waitMode`, `relayEnabled`, `relayLimit`) odada anınd
   - Host yüklerse dosya :7000 üzerindeki `POST /room/<roomId>/subtitles` ucuna `X-User-Token` başlığıyla gider. Sunucu token sahibinin o anki host olduğunu kontrol eder. Dosya oda silinene kadar RAM'de kalır ve herkese sunulabilir.
   - Misafir yüklerse dosya sadece kendi tarayıcısında kullanılır.
 
+### 10.1.1 İkinci altyazı (alt satır) — 2026-10-14
+
+- Üstte seçilen altyazının altında ikinci bir dil çiziliyor: İngilizce izlerken altında Türkçesi. Varsayılan kapalı.
+- Oda durumunda `hostSubtitle2` (`{subId, offset}` ya da `null`): host'un varsayılanı, `setHostSubtitle2` ile ayarlanıyor ve `hostSubtitle2` olayıyla yayılıyor. Kişi kendi için başkasını seçerse (ya da kapatırsa) sunucuya uğramıyor, yalnız onda değişiyor — odadaki herkesin İngilizcesi aynı değil.
+- Aynı altyazı iki satırda olmuyor: ikinci satıra üst satırdaki seçilirse `ayniAltyazi` hatası, üst satıra alt satırdaki seçilirse alt satır düşüyor.
+- İki altyazının gecikmesi ayrı (iki dosyanın zamanlaması tutmuyor).
+- Tarayıcı/telefon: ikinci satır sayfanın kendi katmanında, %78 puntoyla (`.sub-line-2`). Masaüstü: mpv'nin ikincil altyazısı (`secondary-sid`, `secondary-sub-delay`, `secondary-sub-pos`); mpv ikinciyi varsayılan olarak ekranın üstüne koyduğu için ikinci satır açıkken asıl altyazı `IKINCI_SATIR_BOSLUK` kadar yukarı alınıyor, çeviri dibe oturuyor. Kapalıyken konum hiç değişmiyor.
+
+### 10.1.2 Otomatik hizalama (`public/js/shared/altyazi-hizala.js`) — 2026-10-14
+
+İki altyazı dosyası aynı filmi anlatıyor ama zamanlaması tutmuyor (farklı sürüm, farklı kare hızı, araya giren reklam arası). Dillerden bağımsız olan şey konuşmaların ritmi: replik başlangıçları.
+
+- **Aşamalar:** (1) kaba tarama — 1 sn'lik "konuşma var/yok" kutularının örtüşmesi, ±180 sn kaydırma × sık kare hızı oranları (23,976/24/25), aday kaydırmalar çıkıyor. (2) ince tarama — adaylar *replik başlangıcı eşleşme oranıyla* puanlanıyor (0,35 sn tolerans); yoğun konuşma sinyali alakasız dosyalara da yüksek puan verdiği için asıl ölçü bu. Eşleşen repliklerin ortanca farkıyla kaydırma düzlüğün ortasına çekiliyor. (3) parçalı düzeltme — film 240 sn'lik dilimlere bölünüp her dilime kendi eki bulunuyor, kırılmanın tam yeri aranıp geçiş dikleştiriliyor (`kirilmalariKeskinlestir`).
+- **Sonuç:** `{ ok, mod: 'sabit'|'oranli'|'parcali', guven, kesin, kaydirma, noktalar }`. Güven, parçalı düzeltmeden *sonraki* uyum; 0,35'in altında plan uygulanmıyor (`oturmadi`), 0,6 altı "şüpheli" olarak işaretleniyor ve kullanıcıya öyle yazılıyor. Yanlış hizalama, hizalamamaktan kötü.
+- **Sunum:** `GET /sub/<roomId>/<subId>.vtt?ref=<birinciSubId>` cue zamanları yeniden yazılmış dosyayı veriyor; `GET /sub/<roomId>/<subId>/hiza.json?ref=…` sonucu söylüyor (sayfa "otomatik hizalandı (+2,4 sn)" ya da "hizalanamadı" yazıyor). Plan ve hizalanmış metin oda boyunca saklanıyor.
+- Ölçüm (gerçek OpenSubtitles dosyaları): doğru çiftlerde ortalama sapma 2,28 → 0,05 sn; alakasız dosyalar (farklı film, farklı kurgu) reddedildi. Yapay testlerde sabit kayma, kare hızı farkı ve film ortasındaki iki kırılma 0,05 sn altında.
+
+### 10.1.3 Zor kelime kutusu — 2026-10-14
+
+İngilizce altyazı izlerken ekranda duran repliğin zor kelimelerinin Türkçesi oynatıcının sağ üst köşesinde. Varsayılan kapalı, kişiye özel.
+
+- **Niye otomatik:** birlikte izlerken kimse durup sözlüğe bakamıyor. Kutu kendiliğinden yazıyor; kutudaki kelimeye dokunulursa öteki anlamları açılıyor.
+- **"Zor" ölçüsü:** SUBTLEX-US sıklık listesinde (film altyazısı derlemi, ISC) ilk N kelimenin dışında kalmak. N kişinin seviyesi: 1000 / 2000 / 5000. Çekim ekleri atılarak bakılıyor (`shared/kelime-kok.js`: düzensiz fiiller, düzensiz çoğullar, İngiliz→Amerikan yazım). Yapım ekleri (-er, -ness, -ment) kasten atılmıyor: "undertaker" için "girişmek" göstermek hiç göstermemekten kötü.
+- **Sözlük:** `scripts/sozluk-uret.mjs` İngilizce Wiktionary'nin çeviri bölümlerinden üretiyor (`{{t|tr|…}}`), büyük maddelerde çeviriler alt sayfada olduğu için ikinci tur `<kelime>/translations` sayfalarını da çekiyor. Çıktı `public/veri/en-tr.json.gz` (~200 KB), `GET /veri/en-tr.json` ile gzip olarak sunuluyor. Lisans: Wiktionary CC BY-SA + GFDL, sıklık listesi SUBTLEX-US — ikisi de arayüzde yazılı.
+- Karşılığı olmayan kelimede kutu sessiz kalıyor. Cue başına en fazla 3 satır.
+- Masaüstünde altyazıyı mpv çizdiği için sayfanın `<track>` ipuçları çalışmıyor: ekranda duran replik `shared/altyazi-hizala.js` `cueListesi()` ile ayrıştırılıp `video.currentTime`'a göre bulunuyor (tarayıcıda da aynı yol).
+
 ### 10.2 Liste ve sunum
 
 - Liste dile göre gruplanır: önce Türkçe, sonra İngilizce, sonra diğer diller (alfabetik).

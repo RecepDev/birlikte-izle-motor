@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>İndirme devam ediyor</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; font-family: "Segoe UI", system-ui, sans-serif; color: #e8e9ee; user-select: none; }
+  .kart { height: 100%; margin: 0; padding: 22px 24px 18px; border-radius: 16px; border: 1px solid #3a3d6b;
+    background: linear-gradient(160deg, #24224e, #14142e); display: flex; flex-direction: column; -webkit-app-region: drag; }
+  h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .nokta { width: 10px; height: 10px; border-radius: 50%; background: #b9a5ff; box-shadow: 0 0 0 0 rgba(185, 165, 255, .8); animation: nabiz 2s ease-out infinite; }
+  @keyframes nabiz { 0% { box-shadow: 0 0 0 0 rgba(185, 165, 255, .8); } 80%, 100% { box-shadow: 0 0 0 8px rgba(185, 165, 255, 0); } }
+  p { margin: 0; font-size: 13.5px; line-height: 1.5; color: #b9bbd8; }
+  .alt { margin-top: auto; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; -webkit-app-region: no-drag; }
+  button { padding: 9px 18px; border-radius: 999px; border: 1px solid #3a3d6b; background: rgba(60, 62, 120, .3); color: #e8e9ee; font: inherit; font-size: 13.5px; cursor: pointer;
+    transition: background .15s, transform .08s, filter .08s; }
+  button:hover { background: rgba(60, 62, 120, .65); }
+  button:active { transform: scale(.95); filter: brightness(.85); }
+  button.birincil { background: linear-gradient(135deg, #7b5cff, #5535e6); border-color: transparent; color: #fff; font-weight: 600; }
+  button.birincil:hover { filter: brightness(1.12); }
+  button.tehlike { border-color: rgba(255, 110, 130, .4); color: #ff9aa8; background: transparent; }
+  button.tehlike:hover { background: rgba(255, 90, 115, .14); }
+  button.hayalet { background: transparent; color: #9a9cc0; }
+</style>
+</head>
+<body>
+<div class="kart">
+  <h1><span class="nokta"></span><span id="baslik">İndirme devam ediyor</span></h1>
+  <p id="aciklama"></p>
+  <div class="alt">
+    <button id="vazgec" class="hayalet" type="button">Vazgeç</button>
+    <button id="kapat" class="tehlike" type="button">Kapat (indirmeler durur)</button>
+    <button id="tepsi" class="birincil" type="button">Tepsiye küçült</button>
+  </div>
+</div>
+</body>
+</html>

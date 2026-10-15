@@ -1,13 +1,13 @@
 {
   "name": "birlikte-izle-motor-masaustu",
-  "version": "0.7.48",
+  "version": "0.7.62",
   "private": true,
   "type": "module",
   "description": "Birlikte Ä°zle masaÃ¼stÃ¼ istemcisi: Electron kabuÄŸu + gÃ¶mÃ¼lÃ¼ mpv",
   "main": "electron/baslat.cjs",
   "scripts": {
     "start": "electron .",
-    "paketle:ortak": "node motor-kopyala.cjs && electron-packager . \"Birlikte Izle Motor\" --platform=win32 --arch=x64 --overwrite --icon=electron/simge.ico --extra-resource=mpv --ignore=\"(^/node_modules$|^/dagitim|^/mpv$|^/electron/gomme-kaniti|^/electron/kanit\\.html|^/electron/onyukleme\\.cjs$)\"",
+    "paketle:ortak": "node motor-kopyala.cjs && node sunucu-hazirla.cjs && electron-packager . \"Birlikte Izle Motor\" --platform=win32 --arch=x64 --overwrite --icon=electron/simge.ico --extra-resource=mpv --extra-resource=sunucu-paket --ignore=\"(^/node_modules$|^/dagitim|^/mpv$|^/sunucu-paket$|^/electron/gomme-kaniti|^/electron/kanit\\.html|^/electron/onyukleme\\.cjs$)\"",
     "paketle": "npm run paketle:ortak -- --out=dagitim",
     "kurulum": "npm run paketle:ortak -- --out=dagitim-kurulum && electron-builder --win nsis --x64 --prepackaged \"dagitim-kurulum/Birlikte Izle Motor-win32-x64\" --config kurulum.config.json"
   },

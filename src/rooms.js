@@ -53,6 +53,9 @@ export class Room {
     this.chatSeq = 0;
     this.subtitles = [];
     this.hostSubtitle = null;
+    // İkinci altyazı (alt satır): İngilizce izlerken altına Türkçesini koymak için.
+    // Host bir varsayılan seçebiliyor, isteyen kendi için değiştiriyor (bkz. subs.js).
+    this.hostSubtitle2 = null;
     this.torrentStats = {}; // streamId -> { peers, downMbps, progress } from the host's Stremio
     this.emptySince = this.createdAt;
   }
@@ -424,6 +427,7 @@ export class Room {
     this.hostStreamId = hostStreamId;
     this.subtitles = [];
     this.hostSubtitle = null;
+    this.hostSubtitle2 = null;
     this.torrentStats = {};
     this.playback = { paused: true, position: 0, updatedAt: this.now() };
     this.autoPaused = false;
@@ -442,6 +446,7 @@ export class Room {
         this.playbackMsg(null),
         { to: 'room', event: 'subtitles', data: { subtitles: [] }, urgent: true },
         { to: 'room', event: 'hostSubtitle', data: null, urgent: true },
+        { to: 'room', event: 'hostSubtitle2', data: null, urgent: true },
         this.usersMsg(true),
       ],
     };
@@ -497,15 +502,19 @@ export class Room {
     this.subtitles = list;
     const msgs = [{ to: 'room', event: 'subtitles', data: { subtitles: this.publicSubtitles() }, urgent: true }];
     // Dosyanın içindeki altyazı listede hiç olmuyor: liste yenilenince seçim düşmesin.
-    const embedded = this.hostSubtitle?.subId?.startsWith('gomulu:');
-    if (this.hostSubtitle && !embedded && !list.some((s) => s.subId === this.hostSubtitle.subId)) {
-      this.hostSubtitle = null;
-      msgs.push({ to: 'room', event: 'hostSubtitle', data: null, urgent: true });
+    for (const alan of ['hostSubtitle', 'hostSubtitle2']) {
+      const secim = this[alan];
+      const embedded = secim?.subId?.startsWith('gomulu:');
+      if (secim && !embedded && !list.some((s) => s.subId === secim.subId)) {
+        this[alan] = null;
+        msgs.push({ to: 'room', event: alan, data: null, urgent: true });
+      }
     }
     return msgs;
   }
 
-  setHostSubtitle(userId, { subId = null, offset = 0 } = {}) {
+  // Host'un altyazı seçimi. alan: 'hostSubtitle' (üst satır) ya da 'hostSubtitle2' (alt satır).
+  #altyaziSec(alan, userId, { subId = null, offset = 0 } = {}) {
     const denied = this.requireHost(userId);
     if (denied) return denied;
     // "gomulu:<dil>:<sıra>": dosyanın içindeki altyazı. Listede yok; her uygulama aynı dili
@@ -516,11 +525,28 @@ export class Room {
     const entry = subId === null ? null : embedded || this.subtitles.find((s) => s.subId === subId);
     if (subId !== null && !entry) return { error: 'badSubtitle' };
     if (!Number.isFinite(offset) || Math.abs(offset) > 600) return { error: 'badOffset' };
-    const changed = (this.hostSubtitle?.subId ?? null) !== subId;
-    this.hostSubtitle = entry ? { subId, offset } : null;
-    const msgs = [{ to: 'room', event: 'hostSubtitle', data: this.hostSubtitle, urgent: true }];
-    if (changed) msgs.push(this.systemChat(entry ? `Host altyazıyı seçti: ${entry.label}` : 'Host altyazıyı kapattı'));
+    // Aynı altyazı iki satırda olmaz: üst satıra seçilen alt satırdan düşer.
+    if (entry && alan === 'hostSubtitle' && this.hostSubtitle2?.subId === subId) this.hostSubtitle2 = null;
+    if (entry && alan === 'hostSubtitle2' && this.hostSubtitle?.subId === subId) return { error: 'ayniAltyazi' };
+    const changed = (this[alan]?.subId ?? null) !== subId;
+    this[alan] = entry ? { subId, offset } : null;
+    const msgs = [{ to: 'room', event: alan, data: this[alan], urgent: true }];
+    if (alan === 'hostSubtitle' && !this.hostSubtitle2) {
+      msgs.push({ to: 'room', event: 'hostSubtitle2', data: null, urgent: true });
+    }
+    if (changed) {
+      const ad = alan === 'hostSubtitle2' ? 'ikinci altyazıyı' : 'altyazıyı';
+      msgs.push(this.systemChat(entry ? `Host ${ad} seçti: ${entry.label}` : `Host ${ad} kapattı`));
+    }
     return { msgs };
+  }
+
+  setHostSubtitle(userId, secim) {
+    return this.#altyaziSec('hostSubtitle', userId, secim);
+  }
+
+  setHostSubtitle2(userId, secim) {
+    return this.#altyaziSec('hostSubtitle2', userId, secim);
   }
 
   // ---- chat --------------------------------------------------------------
@@ -554,6 +580,7 @@ export class Room {
       streams: this.guestStreams(),
       subtitles: this.publicSubtitles(),
       hostSubtitle: this.hostSubtitle,
+      hostSubtitle2: this.hostSubtitle2,
       torrentStats: this.torrentStats,
       playback: { ...this.playback },
       rev: this.rev,

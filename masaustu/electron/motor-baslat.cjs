@@ -76,11 +76,19 @@ async function motoruHazirla({ klasor, gunluk, port = 11470, tsPort = 8098, onbe
   });
   // Önce 11470'i tut (o arada Stremio açılırsa burada hata verir), sonra TorrServer'ı aç.
   await taklit.baslat();
+  // İlk açılışta (yeni indirilen exe'nin virüs taraması, güvenlik duvarı) TorrServer geç açılabiliyor.
+  // Başarısız olunca 11470 kapatılmıyor (oda "Stremio kapalı" derdi); arkada birkaç kez daha denenir.
   try {
     await ts.baslat();
   } catch (err) {
-    taklit.durdur();
-    throw err;
+    log.warn('TorrServer ilk denemede açılmadı, arkada yeniden denenecek', { error: err.message });
+    (async () => {
+      for (let i = 0; i < 4; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try { await ts.baslat(); log.info('TorrServer yeniden denemede açıldı'); return; } catch { /* sonraki deneme */ }
+      }
+      log.error('TorrServer açılamadı (4 yeniden deneme)');
+    })();
   }
   return {
     durum: () => ts.durum(),

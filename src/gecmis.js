@@ -45,6 +45,20 @@ export function createGecmis({ file, log }) {
       yaz();
     },
     liste: () => kayitlar,
+    // En son açılan kaynak (torrent): "İzlemeye devam" oynatma düğmesi odayı bununla doğrudan açıyor.
+    // Dizide son izlenen bölümün kaynağı. Değişmediyse diske yazılmaz.
+    akisYaz(type, contentId, akis) {
+      const id = String(contentId).split(':')[0];
+      const k = kayitlar.find((x) => x.id === id && x.type === type);
+      if (!k || !akis || akis.kind !== 'torrent' || !akis.infoHash) return;
+      const o = k.akis;
+      if (o && o.contentId === contentId && o.stream?.infoHash === akis.infoHash && o.stream?.fileIdx === akis.fileIdx) return;
+      k.akis = { contentId, stream: { ...akis, subtitles: [] }, at: Date.now() };
+      yaz();
+    },
+    akisAl(type, id) {
+      return kayitlar.find((x) => x.id === id && x.type === type)?.akis || null;
+    },
     // Kaldığın yer: film/bölüm başına son konum (sn) ve süre. Bitmek üzereyse siliniyor.
     konumYaz(type, contentId, pos, dur) {
       const id = String(contentId).split(':')[0];
